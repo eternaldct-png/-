@@ -1,0 +1,47 @@
+name: X Auto Post
+
+on:
+  schedule:
+    # 朝 8:00 JST (UTC 23:00 前日)
+    - cron: "0 23 * * *"
+    # 昼 12:00 JST (UTC 3:00)
+    - cron: "0 3 * * *"
+    # 夜 20:00 JST (UTC 11:00)
+    - cron: "0 11 * * *"
+  workflow_dispatch:  # 手動実行も可能
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # 投稿履歴の書き込みに必要
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run auto post
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          X_API_KEY: ${{ secrets.X_API_KEY }}
+          X_API_SECRET: ${{ secrets.X_API_SECRET }}
+          X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+          X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
+        run: python src/main.py
+
+      - name: Commit post history
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add posts/history.json || true
+          git diff --staged --quiet || git commit -m "chore: update post history [skip ci]"
+          git push || true
