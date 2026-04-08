@@ -133,17 +133,25 @@ def generate_post(persona: dict, research_context: dict) -> str:
 
     post_text = message.content[0].text.strip()
 
-    # ハッシュタグを追加（重複チェック）
-    if persona.get("add_hashtags", True) and hashtags:
+    # ハッシュタグを追加（上限を厳守）
+    max_tags = persona.get("max_hashtags", 2)
+    if persona.get("add_hashtags", True):
+        # AIが既に書いたタグを抽出
         existing_tags = [w for w in post_text.split() if w.startswith("#")]
-        new_tags = [t for t in hashtags if t not in existing_tags]
-        if new_tags:
-            post_text = post_text + " " + " ".join(new_tags)
+        # 既存タグが上限を超えていたら末尾から削除して上限に揃える
+        if len(existing_tags) > max_tags:
+            for tag in existing_tags[max_tags:]:
+                post_text = post_text.replace(" " + tag, "").replace(tag, "")
+            post_text = post_text.strip()
+        elif len(existing_tags) < max_tags:
+            # 不足分だけ追加
+            new_tags = [t for t in hashtags if t not in existing_tags]
+            slots = max_tags - len(existing_tags)
+            post_text = post_text + " " + " ".join(new_tags[:slots])
 
-    # 文字数チェック（念のため）
+    # 文字数チェック
     max_len = persona.get("max_length", 140)
     if len(post_text) > max_len:
-        # 超えたらハッシュタグなしで再生成シグナル（簡易処理）
         post_text = post_text[:max_len].rstrip()
 
-    return post_text
+    return post_text.strip()
