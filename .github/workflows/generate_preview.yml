@@ -1,0 +1,46 @@
+name: Generate Post Preview
+
+on:
+  workflow_dispatch:
+    inputs:
+      count:
+        description: '生成する投稿数'
+        required: false
+        default: '3'
+        type: choice
+        options:
+          - '3'
+          - '6'
+          - '9'
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate post queue
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python src/generate_queue.py --count ${{ github.event.inputs.count || '3' }}
+
+      - name: Commit queue to repository
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add posts/queue.json
+          git diff --staged --quiet || git commit -m "chore: 投稿プレビューを生成 (${{ github.event.inputs.count || '3' }}件) [skip ci]"
+          git push || true
