@@ -62,6 +62,13 @@ def post_to_x(text: str, dry_run: bool = False) -> dict:
         result = {"tweet_id": tweet_id, "text": text, "timestamp": timestamp}
         save_post_history(result)
         return result
+    except tweepy.Forbidden as e:
+        # 重複ツイートはスキップ（クラッシュさせない）
+        if "duplicate" in str(e).lower() or "重複" in str(e):
+            print(f"[post] 重複投稿のためスキップ: {text[:40]}...")
+            return {"tweet_id": "skipped_duplicate", "text": text, "timestamp": timestamp}
+        print(f"[post] 投稿エラー (403): {e}")
+        raise
     except tweepy.TweepyException as e:
         print(f"[post] 投稿エラー: {e}")
         raise

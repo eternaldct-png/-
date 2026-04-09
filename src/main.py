@@ -65,6 +65,14 @@ def run(dry_run: bool = False, generate_only: bool = False) -> None:
 
     result = post_to_x(post_text, dry_run=dry_run)
 
+    # 重複スキップ時はフレッシュな文章を生成して再投稿
+    if not dry_run and result.get("tweet_id") == "skipped_duplicate":
+        print("[main] 重複のため新しい投稿文を生成して再試行します...")
+        research_context = build_research_context(persona.get("interests", []))
+        post_text = generate_post(persona, research_context)
+        print(f"[main] 再生成: {post_text}")
+        result = post_to_x(post_text, dry_run=dry_run)
+
     if not dry_run:
         print(f"[main] 完了！ tweet_id: {result.get('tweet_id')}")
     else:
