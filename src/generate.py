@@ -5,7 +5,29 @@ Claude APIを使ってペルソナに合った自然な投稿文を生成する
 import os
 import random
 import anthropic
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Optional
+
+JST = ZoneInfo("Asia/Tokyo")
+
+
+def get_day_context(persona: dict) -> dict:
+    """現在の曜日に応じたムードとハッシュタグを返す"""
+    now = datetime.now(JST)
+    day_names = ["月曜", "火曜", "水曜", "木曜", "金曜", "土曜", "日曜"]
+    day_name = day_names[now.weekday()]
+    date_str = now.strftime("%-m月%-d日")  # 例: 4月9日
+
+    day_specific = persona.get("day_specific", {})
+    day_info = day_specific.get(day_name, {})
+
+    return {
+        "day_name": day_name,
+        "date_str": date_str,
+        "mood": day_info.get("mood", ""),
+        "hashtags": day_info.get("hashtags", []),
+    }
 
 
 def build_system_prompt(persona: dict) -> str:
@@ -61,8 +83,8 @@ def select_post_style(persona: dict) -> str:
     return random.choices(names, weights=weights, k=1)[0]
 
 
-def select_hashtags(persona: dict, topic: Optional[str] = None) -> list[str]:
-    """トピックに合ったハッシュタグを選択する"""
+def select_hashtags(persona: dict, topic: Optional[str] = None, day_tags: Optional[list] = None) -> list[str]:
+    """トピック・曜日に合ったハッシュタグを選択する"""
     hashtags = persona.get("hashtags", {})
     common = hashtags.get("common", [])
     topic_specific = hashtags.get("topic_specific", {})
@@ -70,23 +92,31 @@ def select_hashtags(persona: dict, topic: Optional[str] = None) -> list[str]:
 
     selected = []
 
-    # トピック固有のタグを優先
-    if topic:
+    # 曜日タグを最優先（1個まで）
+    if day_tags:
+        selected.append(day_tags[0])
+
+    # トピック固有のタグ
+    if topic and len(selected) < max_tags:
         for key, tags in topic_specific.items():
             if key in (topic or "").lower():
-                selected.extend(random.sample(tags, min(1, len(tags))))
+                candidates = [t for t in tags if t not in selected]
+                if candidates:
+                    selected.append(random.choice(candidates))
+                break
 
     # 残り枠をcommonタグで埋める
     remaining = max_tags - len(selected)
     if remaining > 0 and common:
-        selected.extend(random.sample(common, min(remaining, len(common))))
+        candidates = [t for t in common if t not in selected]
+        selected.extend(random.sample(candidates, min(remaining, len(candidates))))
 
     return selected[:max_tags]
 
 
 def generate_post(persona: dict, research_context: dict) -> str:
     """
-    Claude APIを使って投稿文を生成する
+    Claude APIを使って投稿文を生成する（曜日・日付対応）
 
     Args:
         persona: ペルソナ設定
@@ -100,6 +130,7 @@ def generate_post(persona: dict, research_context: dict) -> str:
     style = select_post_style(persona)
     seasonal = research_context.get("seasonal_context", "")
     topics = research_context.get("trending_topics", [])
+    day_ctx = get_day_context(persona)
 
     # トピック情報を整形
     topic_text = ""
@@ -111,18 +142,26 @@ def generate_post(persona: dict, research_context: dict) -> str:
 内容: {topic.get('snippet', '')[:200]}
 """
 
+    # 曜日ムードの指示
+    day_mood_text = ""
+    if day_ctx["mood"]:
+        day_mood_text = f"\n曜日の雰囲気: {day_ctx['day_name']}（{day_ctx['date_str']}）— {day_ctx['mood']}"
+
     user_prompt = f"""
-今の状況: {seasonal}
+今の状況: {seasonal}{day_mood_text}
 
 投稿スタイル: 「{style}」
 
 {topic_text}
-
-上記のスタイルで、今の時間帯・季節感を活かした自然なツイートを1つ書いてください。
+上記のスタイルと今日の曜日・雰囲気を活かした自然なツイートを1つ書いてください。
 投稿文だけを返してください（説明文・前置き不要）。
 """
 
-    hashtags = select_hashtags(persona, topics[0].get("topic") if topics else None)
+    hashtags = select_hashtags(
+        persona,
+        topics[0].get("topic") if topics else None,
+        day_ctx["hashtags"],
+    )
 
     message = client.messages.create(
         model="claude-opus-4-6",
@@ -136,15 +175,12 @@ def generate_post(persona: dict, research_context: dict) -> str:
     # ハッシュタグを追加（上限を厳守）
     max_tags = persona.get("max_hashtags", 2)
     if persona.get("add_hashtags", True):
-        # AIが既に書いたタグを抽出
         existing_tags = [w for w in post_text.split() if w.startswith("#")]
-        # 既存タグが上限を超えていたら末尾から削除して上限に揃える
         if len(existing_tags) > max_tags:
             for tag in existing_tags[max_tags:]:
                 post_text = post_text.replace(" " + tag, "").replace(tag, "")
             post_text = post_text.strip()
         elif len(existing_tags) < max_tags:
-            # 不足分だけ追加
             new_tags = [t for t in hashtags if t not in existing_tags]
             slots = max_tags - len(existing_tags)
             post_text = post_text + " " + " ".join(new_tags[:slots])

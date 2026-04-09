@@ -1,0 +1,61 @@
+name: Auto Engage (Like & Repost)
+
+on:
+  schedule:
+    # 朝 9:00 JST・夜 21:00 JSTに実行
+    - cron: "0 0 * * *"   # 9:00 JST
+    - cron: "0 12 * * *"  # 21:00 JST
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'ドライラン（実際にいいね・リポストしない）'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+jobs:
+  engage:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run auto engagement
+        env:
+          X_API_KEY: ${{ secrets.X_API_KEY }}
+          X_API_SECRET: ${{ secrets.X_API_SECRET }}
+          X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+          X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
+        run: |
+          python -c "
+          import sys, yaml
+          sys.path.insert(0, 'src')
+          from engage import run_engagement
+          with open('persona/config.yaml', 'r') as f:
+              persona = yaml.safe_load(f)
+          dry_run = '${{ github.event.inputs.dry_run }}' == 'true'
+          run_engagement(persona, dry_run=dry_run)
+          "
+
+      - name: Commit engage log
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add posts/engage_log.json || true
+          git diff --staged --quiet || git commit -m "chore: update engage log [skip ci]"
+          git push || true
