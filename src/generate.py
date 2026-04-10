@@ -13,12 +13,14 @@ from post import get_recent_posts
 JST = ZoneInfo("Asia/Tokyo")
 
 
-def get_day_context(persona: dict) -> dict:
-    """現在の曜日に応じたムードとハッシュタグを返す"""
-    now = datetime.now(JST)
+def get_day_context(persona: dict, target_dt: Optional[datetime] = None) -> dict:
+    """指定日時（省略時は現在）の曜日に応じたムードとハッシュタグを返す"""
+    dt = target_dt if target_dt else datetime.now(JST)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=JST)
     day_names = ["月曜", "火曜", "水曜", "木曜", "金曜", "土曜", "日曜"]
-    day_name = day_names[now.weekday()]
-    date_str = now.strftime("%-m月%-d日")  # 例: 4月9日
+    day_name = day_names[dt.weekday()]
+    date_str = dt.strftime("%-m月%-d日")  # 例: 4月9日
 
     day_specific = persona.get("day_specific", {})
     day_info = day_specific.get(day_name, {})
@@ -115,13 +117,14 @@ def select_hashtags(persona: dict, topic: Optional[str] = None, day_tags: Option
     return selected[:max_tags]
 
 
-def generate_post(persona: dict, research_context: dict) -> str:
+def generate_post(persona: dict, research_context: dict, target_dt: Optional[datetime] = None) -> str:
     """
     Claude APIを使って投稿文を生成する（曜日・日付対応）
 
     Args:
         persona: ペルソナ設定
         research_context: リサーチ結果（seasonal_context, trending_topics）
+        target_dt: 投稿予定日時（省略時は現在時刻）
 
     Returns:
         生成された投稿文
@@ -131,7 +134,7 @@ def generate_post(persona: dict, research_context: dict) -> str:
     style = select_post_style(persona)
     seasonal = research_context.get("seasonal_context", "")
     topics = research_context.get("trending_topics", [])
-    day_ctx = get_day_context(persona)
+    day_ctx = get_day_context(persona, target_dt)  # ← 投稿予定日の曜日を使う
 
     # トピック情報を整形
     topic_text = ""

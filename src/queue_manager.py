@@ -95,18 +95,36 @@ def has_pending_posts() -> bool:
     return any(item.get("status") == "pending" for item in load_queue())
 
 
+def get_next_scheduled_datetimes(count: int, preferred_hours: list[int]) -> list[datetime]:
+    """次のcount件分のスケジュール時刻をdatetimeで返す（JST）"""
+    now = datetime.now(JST)
+    times = []
+    check = now
+
+    while len(times) < count:
+        for hour in sorted(preferred_hours):
+            candidate = check.replace(hour=hour, minute=0, second=0, microsecond=0)
+            if candidate > now:
+                times.append(candidate)
+            if len(times) >= count:
+                break
+        check = (check + timedelta(days=1)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+
+    return times[:count]
+
+
 def add_to_queue(posts: list[str], preferred_hours: list[int]) -> None:
     """生成した投稿文をキューに追加する"""
     queue = load_queue()
-    # 既存のpending件数
     pending_count = sum(1 for item in queue if item.get("status") == "pending")
-    # スケジュール時刻を計算
-    times = get_next_scheduled_times(len(posts), preferred_hours)
+    times = get_next_scheduled_datetimes(len(posts), preferred_hours)
 
     for text, scheduled_for in zip(posts, times):
         queue.append({
             "text": text,
-            "scheduled_for": scheduled_for,
+            "scheduled_for": scheduled_for.isoformat(),
             "status": "pending",
             "created_at": datetime.now(JST).isoformat(),
         })
