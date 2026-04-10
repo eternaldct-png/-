@@ -52,15 +52,41 @@ def get_next_scheduled_times(count: int, preferred_hours: list[int]) -> list[str
 def pop_next_post() -> dict | None:
     """
     キューから次の投稿を取り出す（statusがpendingの最初の1件）
-    取り出した投稿のstatusをpostedに更新する
+    予定時刻が過去のものは自動的にexpiredにしてスキップする
     """
     queue = load_queue()
+    now = datetime.now(JST)
+    changed = False
+
     for item in queue:
-        if item.get("status") == "pending":
-            item["status"] = "posted"
-            item["posted_at"] = datetime.now(JST).isoformat()
+        if item.get("status") != "pending":
+            continue
+
+        # 予定時刻が2時間以上過去ならexpiredにしてスキップ
+        scheduled_str = item.get("scheduled_for", "")
+        if scheduled_str:
+            try:
+                from datetime import timezone, timedelta
+                scheduled = datetime.fromisoformat(scheduled_str)
+                if scheduled.tzinfo is None:
+                    scheduled = scheduled.replace(tzinfo=JST)
+                if scheduled < now - timedelta(hours=2):
+                    item["status"] = "expired"
+                    changed = True
+                    print(f"[queue] 期限切れのためスキップ: {item['text'][:40]}...")
+                    continue
+            except Exception:
+                pass
+
+        item["status"] = "posted"
+        item["posted_at"] = now.isoformat()
+        if changed:
             save_queue(queue)
-            return item
+        save_queue(queue)
+        return item
+
+    if changed:
+        save_queue(queue)
     return None
 
 
