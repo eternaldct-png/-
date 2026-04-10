@@ -5,7 +5,7 @@ DuckDuckGo検索を使って最新の話題を収集する
 import random
 from datetime import datetime
 from typing import Optional
-from duckduckgo_search import DDGS
+from ddgs import DDGS
 
 
 def get_trending_topics(interests: list[str], max_results: int = 3) -> list[dict]:
