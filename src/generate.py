@@ -8,6 +8,7 @@ import anthropic
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from typing import Optional
+from post import get_recent_posts
 
 JST = ZoneInfo("Asia/Tokyo")
 
@@ -147,13 +148,24 @@ def generate_post(persona: dict, research_context: dict) -> str:
     if day_ctx["mood"]:
         day_mood_text = f"\n曜日の雰囲気: {day_ctx['day_name']}（{day_ctx['date_str']}）— {day_ctx['mood']}"
 
+    # 直近の投稿を取得して重複を避ける
+    recent_posts = get_recent_posts(5)
+    recent_text = ""
+    if recent_posts:
+        recent_list = "\n".join(f"- {p}" for p in recent_posts)
+        recent_text = f"""
+【直近の投稿（これと被らない内容にすること）】
+{recent_list}
+"""
+
     user_prompt = f"""
 今の状況: {seasonal}{day_mood_text}
 
 投稿スタイル: 「{style}」
 
-{topic_text}
+{topic_text}{recent_text}
 上記のスタイルと今日の曜日・雰囲気を活かした自然なツイートを1つ書いてください。
+直近の投稿と話題・表現が被らないよう、新鮮な内容にしてください。
 投稿文だけを返してください（説明文・前置き不要）。
 """
 

@@ -8,6 +8,8 @@ import tweepy
 from datetime import datetime
 from pathlib import Path
 
+HISTORY_PATH = Path("posts/history.json")
+
 
 def get_twitter_client() -> tweepy.Client:
     """環境変数からX APIクライアントを初期化する"""
@@ -32,9 +34,36 @@ def get_twitter_client() -> tweepy.Client:
     )
 
 
+def load_post_history() -> list[dict]:
+    """投稿履歴を読み込む"""
+    if not HISTORY_PATH.exists():
+        return []
+    with open(HISTORY_PATH, "r", encoding="utf-8") as f:
+        try:
+            return json.load(f)
+        except json.JSONDecodeError:
+            return []
+
+
+def is_duplicate(text: str) -> bool:
+    """過去に投稿した文章と完全一致するか確認する"""
+    history = load_post_history()
+    posted_texts = {item.get("text", "") for item in history}
+    if text in posted_texts:
+        print(f"[post] ローカル履歴に同一投稿あり、スキップします: {text[:40]}...")
+        return True
+    return False
+
+
+def get_recent_posts(n: int = 5) -> list[str]:
+    """直近n件の投稿文を返す（生成プロンプトに渡すため）"""
+    history = load_post_history()
+    return [item.get("text", "") for item in history[-n:]]
+
+
 def post_to_x(text: str, dry_run: bool = False) -> dict:
     """
-    X に投稿する
+    X に投稿する（ローカル履歴で重複チェック済み）
 
     Args:
         text: 投稿文
@@ -53,6 +82,10 @@ def post_to_x(text: str, dry_run: bool = False) -> dict:
         print(f"{'='*50}\n")
         return {"tweet_id": "dry_run", "text": text, "timestamp": timestamp}
 
+    # ローカル履歴で重複チェック（X APIに送る前に弾く）
+    if is_duplicate(text):
+        return {"tweet_id": "skipped_duplicate", "text": text, "timestamp": timestamp}
+
     client = get_twitter_client()
 
     try:
@@ -63,9 +96,8 @@ def post_to_x(text: str, dry_run: bool = False) -> dict:
         save_post_history(result)
         return result
     except tweepy.Forbidden as e:
-        # 重複ツイートはスキップ（クラッシュさせない）
         if "duplicate" in str(e).lower() or "重複" in str(e):
-            print(f"[post] 重複投稿のためスキップ: {text[:40]}...")
+            print(f"[post] X APIでも重複検知: {text[:40]}...")
             return {"tweet_id": "skipped_duplicate", "text": text, "timestamp": timestamp}
         print(f"[post] 投稿エラー (403): {e}")
         raise
@@ -74,24 +106,14 @@ def post_to_x(text: str, dry_run: bool = False) -> dict:
         raise
 
 
-def save_post_history(result: dict, path: str = "posts/history.json") -> None:
+def save_post_history(result: dict) -> None:
     """投稿履歴をJSONファイルに保存する"""
-    history_path = Path(path)
-    history_path.parent.mkdir(parents=True, exist_ok=True)
+    HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-    history = []
-    if history_path.exists():
-        with open(history_path, "r", encoding="utf-8") as f:
-            try:
-                history = json.load(f)
-            except json.JSONDecodeError:
-                history = []
-
+    history = load_post_history()
     history.append(result)
+    history = history[-200:]  # 最新200件を保持
 
-    # 最新100件だけ保持
-    history = history[-100:]
-
-    with open(history_path, "w", encoding="utf-8") as f:
+    with open(HISTORY_PATH, "w", encoding="utf-8") as f:
         json.dump(history, f, ensure_ascii=False, indent=2)
-    print(f"[post] 履歴保存: {history_path} ({len(history)}件)")
+    print(f"[post] 履歴保存: {HISTORY_PATH} ({len(history)}件)")

@@ -63,18 +63,24 @@ def run(dry_run: bool = False, generate_only: bool = False) -> None:
         print("[main] --generate モード: 投稿はスキップ")
         return
 
-    result = post_to_x(post_text, dry_run=dry_run)
-
-    # 重複スキップ時はフレッシュな文章を生成して再投稿
-    if not dry_run and result.get("tweet_id") == "skipped_duplicate":
-        print("[main] 重複のため新しい投稿文を生成して再試行します...")
-        research_context = build_research_context(persona.get("interests", []))
-        post_text = generate_post(persona, research_context)
-        print(f"[main] 再生成: {post_text}")
+    # 重複の場合は最大3回まで再生成して投稿
+    max_retries = 3
+    for attempt in range(max_retries):
         result = post_to_x(post_text, dry_run=dry_run)
+        if dry_run or result.get("tweet_id") != "skipped_duplicate":
+            break
+        if attempt < max_retries - 1:
+            print(f"[main] 重複のため再生成します（{attempt + 2}/{max_retries}回目）...")
+            research_context = build_research_context(persona.get("interests", []))
+            post_text = generate_post(persona, research_context)
+            print(f"[main] 再生成: {post_text}")
+        else:
+            print("[main] 再生成を3回試みましたがすべて重複でした。スキップします。")
 
     if not dry_run:
-        print(f"[main] 完了！ tweet_id: {result.get('tweet_id')}")
+        tweet_id = result.get("tweet_id")
+        if tweet_id and tweet_id not in ("skipped_duplicate",):
+            print(f"[main] 完了！ tweet_id: {tweet_id}")
     else:
         print("[main] ドライランが完了しました。")
 
