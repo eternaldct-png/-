@@ -1,0 +1,55 @@
+name: Weekly Monetization Report
+
+on:
+  schedule:
+    # 毎週月曜 7:00 JST (UTC 日曜 22:00) ─ note記事生成と同タイミング
+    - cron: "30 22 * * 0"
+  workflow_dispatch: {}
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate weekly report
+        id: report
+        run: python src/monetization/tracker.py --report
+
+      - name: Create report issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let report = '';
+            if (fs.existsSync('posts/monetization_report.md')) {
+              report = fs.readFileSync('posts/monetization_report.md', 'utf8');
+            } else {
+              report = '## レポート生成に失敗しました';
+            }
+
+            const today = new Date().toLocaleDateString('ja-JP', {
+              year: 'numeric', month: 'long', day: 'numeric'
+            });
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `📊 週次収益レポート (${today})`,
+              body: report,
+              labels: ['monetization', 'weekly-report'],
+            });

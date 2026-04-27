@@ -1,6 +1,7 @@
 """
 投稿キュー管理モジュール
 投稿を事前に生成・保存・確認・編集できる仕組みを提供する
+platform フィールドで X / Instagram / note / TikTok を区別する
 """
 import json
 from datetime import datetime, timedelta
@@ -49,10 +50,15 @@ def get_next_scheduled_times(count: int, preferred_hours: list[int]) -> list[str
     return times[:count]
 
 
-def pop_next_post() -> dict | None:
+def pop_next_post(platform: str = None) -> dict | None:
     """
     キューから次の投稿を取り出す（statusがpendingの最初の1件）
-    予定時刻が過去のものは自動的にexpiredにしてスキップする
+
+    Args:
+        platform: 対象プラットフォーム（None で全プラットフォーム対象）
+
+    Returns:
+        投稿アイテム、または None（キューが空の場合）
     """
     queue = load_queue()
     now = datetime.now(JST)
@@ -62,11 +68,15 @@ def pop_next_post() -> dict | None:
         if item.get("status") != "pending":
             continue
 
+        # platformフィルタ（指定がある場合のみ）
+        item_platform = item.get("platform", "x")
+        if platform and item_platform != platform:
+            continue
+
         # 予定時刻が2時間以上過去ならexpiredにしてスキップ
         scheduled_str = item.get("scheduled_for", "")
         if scheduled_str:
             try:
-                from datetime import timezone, timedelta
                 scheduled = datetime.fromisoformat(scheduled_str)
                 if scheduled.tzinfo is None:
                     scheduled = scheduled.replace(tzinfo=JST)
@@ -80,8 +90,6 @@ def pop_next_post() -> dict | None:
 
         item["status"] = "posted"
         item["posted_at"] = now.isoformat()
-        if changed:
-            save_queue(queue)
         save_queue(queue)
         return item
 
@@ -90,9 +98,20 @@ def pop_next_post() -> dict | None:
     return None
 
 
-def has_pending_posts() -> bool:
-    """pendingな投稿があるかどうか"""
-    return any(item.get("status") == "pending" for item in load_queue())
+def has_pending_posts(platform: str = None) -> bool:
+    """
+    pendingな投稿があるかどうか
+
+    Args:
+        platform: 対象プラットフォーム（None で全プラットフォーム対象）
+    """
+    for item in load_queue():
+        if item.get("status") != "pending":
+            continue
+        item_platform = item.get("platform", "x")
+        if platform is None or item_platform == platform:
+            return True
+    return False
 
 
 def get_next_scheduled_datetimes(count: int, preferred_hours: list[int]) -> list[datetime]:
@@ -115,22 +134,42 @@ def get_next_scheduled_datetimes(count: int, preferred_hours: list[int]) -> list
     return times[:count]
 
 
-def add_to_queue(posts: list[str], preferred_hours: list[int]) -> None:
-    """生成した投稿文をキューに追加する"""
+def add_to_queue(
+    posts: list[str],
+    preferred_hours: list[int],
+    platform: str = "x",
+    media_paths: list[str] = None,
+) -> None:
+    """
+    生成した投稿文をキューに追加する
+
+    Args:
+        posts: 投稿テキストのリスト
+        preferred_hours: 投稿希望時間リスト（例: [8, 12, 20]）
+        platform: 投稿先プラットフォーム（"x" | "instagram" | "note" | "tiktok"）
+        media_paths: 画像/動画パスのリスト（Instagramなど、optional）
+    """
     queue = load_queue()
     pending_count = sum(1 for item in queue if item.get("status") == "pending")
     times = get_next_scheduled_datetimes(len(posts), preferred_hours)
 
-    for text, scheduled_for in zip(posts, times):
-        queue.append({
+    media_paths = media_paths or [None] * len(posts)
+
+    for text, scheduled_for, media_path in zip(posts, times, media_paths):
+        entry = {
             "text": text,
+            "platform": platform,
             "scheduled_for": scheduled_for.isoformat(),
             "status": "pending",
             "created_at": datetime.now(JST).isoformat(),
-        })
+            "posted_at": None,
+        }
+        if media_path:
+            entry["media_path"] = media_path
+        queue.append(entry)
 
     save_queue(queue)
-    print(f"[queue] {len(posts)}件をキューに追加しました（合計pending: {pending_count + len(posts)}件）")
+    print(f"[queue] {len(posts)}件を{platform}キューに追加しました（合計pending: {pending_count + len(posts)}件）")
 
 
 def print_queue_preview() -> None:
@@ -147,8 +186,9 @@ def print_queue_preview() -> None:
     print(f"{'='*60}")
     for i, item in enumerate(pending, 1):
         scheduled = item.get("scheduled_for", "未設定")
+        platform = item.get("platform", "x")
         text = item.get("text", "")
-        print(f"\n【{i}件目】予定: {scheduled}")
+        print(f"\n【{i}件目】[{platform.upper()}] 予定: {scheduled}")
         print(f"{'-'*40}")
         print(text)
         print(f"（{len(text)}文字）")

@@ -18,3 +18,11 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# フォント（初回起動時にダウンロード、リポジトリには含めない）
+media/fonts/*.otf
+media/fonts/*.ttf
+
+# Instagram生成画像（ワークフローで明示的にコミットするため除外）
+posts/media/*.png
+posts/media/*.jpg

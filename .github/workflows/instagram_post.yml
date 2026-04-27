@@ -1,0 +1,98 @@
+name: Instagram Auto Post
+
+on:
+  schedule:
+    # 9:00 JST (UTC 0:00)
+    - cron: "0 0 * * *"
+    # 19:00 JST (UTC 10:00)
+    - cron: "0 10 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'ドライラン（投稿しない）'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  # ジョブ1: キャプション生成 + 画像生成 + コミット
+  generate_and_commit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      image_filename: ${{ steps.generate.outputs.image_filename }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate caption and image
+        id: generate
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          python src/main.py --platform instagram --generate
+
+          # 最新の画像ファイル名を出力
+          LATEST=$(ls -t posts/media/*.png 2>/dev/null | head -1 | xargs basename)
+          echo "image_filename=${LATEST}" >> $GITHUB_OUTPUT
+          echo "生成画像: ${LATEST}"
+
+      - name: Commit generated image
+        if: ${{ inputs.dry_run != 'true' }}
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add posts/media/
+          git diff --staged --quiet || git commit -m "chore: Instagram画像生成 [skip ci]"
+          git push || true
+
+  # ジョブ2: Instagram に投稿（画像がコミットされた後に実行）
+  post_to_instagram:
+    needs: generate_and_commit
+    if: ${{ inputs.dry_run != 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Post to Instagram
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          INSTAGRAM_USER_ID: ${{ secrets.INSTAGRAM_USER_ID }}
+          INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: |
+          # キューにある投稿を消化（なければその場で生成して投稿）
+          python src/main.py --platform instagram
+
+      - name: Commit Instagram history
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add posts/instagram_history.json posts/queue.json || true
+          git diff --staged --quiet || git commit -m "chore: Instagram投稿履歴更新 [skip ci]"
+          git push || true
