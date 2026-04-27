@@ -1,0 +1,111 @@
+name: TikTok Script Generator
+
+on:
+  schedule:
+    # 毎日 14:00 JST (UTC 5:00) ─ 夕方の投稿に備えて午後に生成
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'ドライラン（ファイル保存しない）'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate TikTok script
+        id: generate
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            python src/main.py --platform tiktok --dry-run
+          else
+            python src/main.py --platform tiktok
+          fi
+
+      - name: Commit script files
+        if: ${{ inputs.dry_run != 'true' }}
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add posts/tiktok/
+          git diff --staged --quiet || git commit -m "chore: TikTokスクリプト生成 [skip ci]"
+          git push || true
+
+      - name: Create filming reminder issue
+        if: ${{ inputs.dry_run != 'true' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            // 最新スクリプトを探す
+            const scriptsDir = 'posts/tiktok/scripts';
+            let latestMd = '';
+            let hook = '';
+
+            if (fs.existsSync(scriptsDir)) {
+              const files = fs.readdirSync(scriptsDir)
+                .filter(f => f.endsWith('.md'))
+                .sort()
+                .reverse();
+
+              if (files.length > 0) {
+                latestMd = files[0];
+                const content = fs.readFileSync(`${scriptsDir}/${latestMd}`, 'utf8');
+                const hookMatch = content.match(/##.*?フック.*?\n\n>\s*(.+)/s);
+                hook = hookMatch ? hookMatch[1].split('\n')[0] : '（フック取得失敗）';
+              }
+            }
+
+            const today = new Date().toLocaleDateString('ja-JP', {
+              year: 'numeric', month: 'long', day: 'numeric'
+            });
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🎬 TikTok撮影リマインダー (${today})`,
+              body: `## TikTokスクリプトが生成されました
+
+            **スクリプトファイル**: \`posts/tiktok/scripts/${latestMd}\`
+
+            ### フック（最初の3秒）
+            > ${hook}
+
+            ### 撮影チェックリスト
+            - [ ] スクリプトを確認・調整
+            - [ ] 動画を撮影（推定60秒）
+            - [ ] テロップ・BGMを追加
+            - [ ] ハッシュタグをコピー
+            - [ ] TikTokにアップロード
+            - [ ] 投稿URLをこのIssueにコメントして Close
+
+            ### ヒント
+            - 最初の3秒が命！フックを必ずテロップで表示
+            - 縦向き（9:16）で撮影
+            - 顔出しNG なら手元・テキスト動画でもOK
+            `,
+              labels: ['tiktok', 'filming-needed'],
+            });

@@ -2,3 +2,14 @@ anthropic>=0.40.0
 tweepy>=4.14.0
 ddgs>=0.5.0
 pyyaml>=6.0.1
+
+# Instagram 画像生成
+pillow>=10.0.0
+
+# HTTP API（Instagram Graph API, etc.）
+requests>=2.31.0
+
+# TikTok 音声生成（オプション）
+# gTTS>=2.5.0
+
+# note / TikTok 動画生成は ffmpeg（システムパッケージ）を別途インストール

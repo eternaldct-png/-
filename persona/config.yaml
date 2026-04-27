@@ -155,3 +155,52 @@ avoid:
 max_length: 140
 add_hashtags: true
 max_hashtags: 2
+
+# =============================================
+# プラットフォーム別設定
+# =============================================
+platforms:
+  x:
+    max_length: 140
+    max_hashtags: 2
+    content_format: "text"
+    max_tokens_hint: 300
+    posting_schedule:
+      times_per_day: 3
+      preferred_hours: [8, 12, 20]
+
+  instagram:
+    max_length: 2200
+    max_hashtags: 30
+    content_format: "visual_caption"
+    requires_media: true
+    supports_media: true
+    max_tokens_hint: 600
+    posting_schedule:
+      times_per_day: 2
+      preferred_hours: [9, 19]
+    monetization:
+      affiliate_bio_url: ""     # Linktree URLを記入
+      disclosure_tag: "【PR】"
+
+  note:
+    min_length: 1000
+    max_length: 5000
+    content_format: "markdown"
+    max_tokens_hint: 4096
+    posting_schedule:
+      times_per_week: 1
+      preferred_day: "monday"
+    monetization:
+      membership_price_jpy: 500
+      paid_article_price_jpy: 300
+
+  tiktok:
+    duration_seconds: 60
+    content_format: "video_script"
+    max_tokens_hint: 800
+    posting_schedule:
+      times_per_day: 1
+      preferred_hours: [18]
+    monetization:
+      creator_fund: true

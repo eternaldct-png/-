@@ -1,0 +1,106 @@
+name: note Article Generator
+
+on:
+  schedule:
+    # 毎週月曜 7:00 JST (UTC 日曜 22:00)
+    - cron: "0 22 * * 0"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'ドライラン（ファイル保存しない）'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate note article
+        id: generate
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            python src/main.py --platform note --dry-run
+          else
+            python src/main.py --platform note
+          fi
+
+      - name: Commit article file
+        if: ${{ inputs.dry_run != 'true' }}
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add posts/note/
+          git diff --staged --quiet || git commit -m "chore: note記事生成 [skip ci]"
+          git push || true
+
+      - name: Create publishing reminder issue
+        if: ${{ inputs.dry_run != 'true' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            // 最新の記事ファイルを探す
+            const articlesDir = 'posts/note/articles';
+            let latestFile = '';
+            let latestTitle = '';
+            let latestBody = '';
+
+            if (fs.existsSync(articlesDir)) {
+              const files = fs.readdirSync(articlesDir)
+                .filter(f => f.endsWith('.md'))
+                .sort()
+                .reverse();
+
+              if (files.length > 0) {
+                latestFile = files[0];
+                const content = fs.readFileSync(`${articlesDir}/${latestFile}`, 'utf8');
+                const titleMatch = content.match(/title:\s*"(.+?)"/);
+                latestTitle = titleMatch ? titleMatch[1] : latestFile;
+                latestBody = content.substring(0, 300) + '...';
+              }
+            }
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `📝 note記事 公開待ち: ${latestTitle}`,
+              body: `## note記事が生成されました
+
+            **ファイル**: \`posts/note/articles/${latestFile}\`
+
+            ### 公開手順
+            - [ ] 記事内容を確認・編集
+            - [ ] [note.com](https://note.com) にログイン
+            - [ ] 「記事を書く」→ Markdownモード
+            - [ ] ファイルの本文をコピー&ペースト
+            - [ ] 有料設定（メンバーシップ限定 or 有料記事）を確認
+            - [ ] 公開後、このIssueの \`note_url\` にURLを記入して Close
+
+            ### プレビュー（冒頭300文字）
+            \`\`\`
+            ${latestBody}
+            \`\`\`
+            `,
+              labels: ['note', 'content-ready'],
+            });
