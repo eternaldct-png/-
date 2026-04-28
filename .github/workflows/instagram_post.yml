@@ -43,10 +43,17 @@ jobs:
         run: |
           python src/main.py --platform instagram --generate
 
-          # 最新の画像ファイル名を出力
-          LATEST=$(ls -t posts/media/*.png 2>/dev/null | head -1 | xargs basename)
-          echo "image_filename=${LATEST}" >> $GITHUB_OUTPUT
-          echo "生成画像: ${LATEST}"
+          # 最新の画像ファイル名を出力（ファイルが存在しない場合も安全に処理）
+          LATEST=$(ls -t posts/media/*.png 2>/dev/null | head -1)
+          if [ -n "$LATEST" ]; then
+            FILENAME=$(basename "$LATEST")
+            echo "image_filename=${FILENAME}" >> $GITHUB_OUTPUT
+            echo "生成画像: ${FILENAME}"
+          else
+            echo "image_filename=" >> $GITHUB_OUTPUT
+            echo "警告: 画像ファイルが見つかりませんでした"
+            exit 1
+          fi
 
       - name: Commit generated image
         if: ${{ inputs.dry_run != 'true' }}

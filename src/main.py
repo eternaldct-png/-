@@ -103,6 +103,25 @@ def run(dry_run: bool = False, generate_only: bool = False, platform: str = "x")
         print(f"{'='*50}\n")
 
     if generate_only:
+        # Instagram は --generate モードでも画像ファイルを生成・保存する
+        # （次のジョブでGitHub raw URLを使って投稿するため）
+        if platform == "instagram" and isinstance(content, dict):
+            from media.image_generator import generate_instagram_image
+            from datetime import datetime as _dt
+            from zoneinfo import ZoneInfo as _ZI
+            _jst = _ZI("Asia/Tokyo")
+            ts = _dt.now(_jst).strftime("%Y%m%d_%H%M%S")
+            media_path = Path(f"posts/media/{ts}_instagram.png")
+            caption = content.get("caption", content.get("text", ""))
+            hashtags = content.get("hashtags", [])
+            generate_instagram_image(
+                caption_text=caption,
+                hashtags=hashtags[:8],
+                output_path=media_path,
+            )
+            print(f"[main] 画像生成完了: {media_path}")
+            # ワークフローの outputs に渡すためファイル名を出力
+            print(f"IMAGE_FILENAME={media_path.name}")
         print("[main] --generate モード: 投稿はスキップ")
         return
 
