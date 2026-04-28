@@ -104,13 +104,15 @@ def run(dry_run: bool = False, generate_only: bool = False, platform: str = "x")
 
     if generate_only:
         # Instagram は --generate モードでも画像ファイルを生成・保存する
-        # （次のジョブでGitHub raw URLを使って投稿するため）
+        # かつキャプションをキューに保存して Job2 が同じ内容で投稿できるようにする
         if platform == "instagram" and isinstance(content, dict):
             from media.image_generator import generate_instagram_image
+            from queue_manager import load_queue, save_queue
             from datetime import datetime as _dt
             from zoneinfo import ZoneInfo as _ZI
             _jst = _ZI("Asia/Tokyo")
-            ts = _dt.now(_jst).strftime("%Y%m%d_%H%M%S")
+            now_jst = _dt.now(_jst)
+            ts = now_jst.strftime("%Y%m%d_%H%M%S")
             media_path = Path(f"posts/media/{ts}_instagram.png")
             caption = content.get("caption", content.get("text", ""))
             hashtags = content.get("hashtags", [])
@@ -120,8 +122,21 @@ def run(dry_run: bool = False, generate_only: bool = False, platform: str = "x")
                 output_path=media_path,
             )
             print(f"[main] 画像生成完了: {media_path}")
-            # ワークフローの outputs に渡すためファイル名を出力
-            print(f"IMAGE_FILENAME={media_path.name}")
+
+            # キャプション + 画像パスをキューに保存（Job2 がこれを使って投稿する）
+            full_caption = caption + "\n\n" + " ".join(hashtags) if hashtags else caption
+            queue = load_queue()
+            queue.append({
+                "text": full_caption,
+                "platform": "instagram",
+                "scheduled_for": now_jst.isoformat(),
+                "status": "pending",
+                "created_at": now_jst.isoformat(),
+                "posted_at": None,
+                "media_path": str(media_path),
+            })
+            save_queue(queue)
+            print(f"[main] キャプションをキューに保存しました: {media_path.name}")
         print("[main] --generate モード: 投稿はスキップ")
         return
 
