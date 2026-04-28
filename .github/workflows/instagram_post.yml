@@ -60,7 +60,7 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add posts/media/ posts/queue.json
+          git add -f posts/media/*.png posts/queue.json
           git diff --staged --quiet || git commit -m "chore: Instagram画像生成 [skip ci]"
           git push || true
 
