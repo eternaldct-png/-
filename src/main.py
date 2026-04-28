@@ -124,8 +124,10 @@ def run(dry_run: bool = False, generate_only: bool = False, platform: str = "x")
             print(f"[main] 画像生成完了: {media_path}")
 
             # キャプション + 画像パスをキューに保存（Job2 がこれを使って投稿する）
+            # 古い pending エントリは削除してから追加（重複防止）
             full_caption = caption + "\n\n" + " ".join(hashtags) if hashtags else caption
             queue = load_queue()
+            queue = [q for q in queue if not (q.get("platform") == "instagram" and q.get("status") == "pending")]
             queue.append({
                 "text": full_caption,
                 "platform": "instagram",

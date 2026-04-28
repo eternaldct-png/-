@@ -164,6 +164,14 @@ class InstagramAdapter(PlatformAdapter):
     @staticmethod
     def _create_container(user_id: str, token: str, image_url: str, caption: str) -> str:
         """Instagram メディアコンテナを作成する"""
+        # 画像URLのアクセス確認
+        try:
+            chk = requests.head(image_url, timeout=10, allow_redirects=True)
+            print(f"[instagram] 画像URLチェック: {image_url}")
+            print(f"[instagram] HTTP {chk.status_code} Content-Type={chk.headers.get('Content-Type', '?')}")
+        except Exception as e:
+            print(f"[instagram] 画像URLチェック失敗: {e}")
+
         url = f"{GRAPH_API_BASE}/{user_id}/media"
         params = {
             "image_url": image_url,
@@ -171,6 +179,9 @@ class InstagramAdapter(PlatformAdapter):
             "access_token": token,
         }
         resp = requests.post(url, data=params, timeout=30)
+        if not resp.ok:
+            print(f"[instagram] API エラーレスポンス ({resp.status_code}):")
+            print(resp.text[:1000])
         resp.raise_for_status()
         data = resp.json()
         if "error" in data:
