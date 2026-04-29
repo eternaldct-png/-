@@ -59,9 +59,13 @@ def run(dry_run: bool = False, generate_only: bool = False, platform: str = "x")
     constraints = adapter.get_constraints()
 
     # キューに該当プラットフォームの投稿があればそちらを優先
-    if has_pending_posts(platform=platform):
+    # --generate モードは常に新規生成（キューへの追加が目的のため）
+    item = None
+    if not generate_only and has_pending_posts(platform=platform):
         print(f"[main] [{platform}] キューから次の投稿を取得します...")
         item = pop_next_post(platform=platform)
+
+    if item is not None:
         content = {"text": item.get("text", ""), "platform": platform}
         if item.get("media_path"):
             content["media_path"] = item["media_path"]
@@ -72,7 +76,10 @@ def run(dry_run: bool = False, generate_only: bool = False, platform: str = "x")
         print(post_text)
         print(f"{'='*50}\n")
     else:
-        print(f"[main] [{platform}] キューが空のため、コンテンツをその場で生成します...")
+        if generate_only:
+            print(f"[main] [{platform}] --generate モード: 新規コンテンツを生成します...")
+        else:
+            print(f"[main] [{platform}] キューが空のため、コンテンツをその場で生成します...")
         print("[main] トレンドリサーチ中...")
         research_context = build_research_context(persona.get("interests", []))
         print(f"[main] 季節コンテキスト: {research_context['seasonal_context']}")
