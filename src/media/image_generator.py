@@ -7,12 +7,28 @@ ETERNALd.c.t ブランドカラー:
   テキスト: ウォームクリーム (#F5F0E4)
   アクセント: ゴールド (#D4AF37)
 """
-import os
+import re
 import textwrap
 import urllib.request
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
+
+
+def _normalize_text(text: str) -> str:
+    """リテラル \\n を改行に変換し、絵文字を除去する"""
+    text = text.replace('\\n', '\n')
+    # 絵文字はNoto Sans CJKで□になるため除去（日本語範囲 U+3000+ は除外）
+    emoji_pattern = re.compile(
+        "["
+        "\U0001F300-\U0001F9FF"   # Misc Symbols & Pictographs, Emoticons, Transport
+        "\U0001FA00-\U0001FAFF"   # Chess, Symbols Extended-A/B
+        "\U00002600-\U000027BF"   # Misc Symbols, Dingbats
+        "\U00002B00-\U00002BFF"   # Misc Symbols & Arrows
+        "]+",
+        flags=re.UNICODE,
+    )
+    return emoji_pattern.sub('', text).strip()
 
 JST = ZoneInfo("Asia/Tokyo")
 
@@ -99,8 +115,11 @@ def generate_instagram_image(
             return ImageFont.truetype(str(path), size)
         return ImageFont.load_default()
 
+    # テキスト正規化（\n変換・絵文字除去）
+    caption_text = _normalize_text(caption_text)
+
     font_brand = load_font(font_bold_path, 32)
-    font_main = load_font(font_regular_path, 42)
+    font_main = load_font(font_regular_path, 40)
     font_name = load_font(font_regular_path, 28)
     font_hashtag = load_font(font_regular_path, 22)
 
@@ -149,31 +168,54 @@ def generate_instagram_image(
 
     # メインテキスト（カード中央）
     card_width = card_x2 - card_x1 - 80
-    # 1行あたりの文字数（フォントサイズ42px ≈ 20文字/行）
-    chars_per_line = max(8, card_width // 43)
+    # 1行あたりの文字数（フォントサイズ40px ≈ 21文字/行）
+    chars_per_line = max(8, card_width // 41)
+
+    # 段落ごとに折り返し、空行で段落間を区切る
+    paragraphs = caption_text.split("\n")
     wrapped_lines = []
-    for paragraph in caption_text.split("\n"):
-        wrapped_lines.extend(textwrap.wrap(paragraph, width=chars_per_line) or [""])
+    for para in paragraphs:
+        para = para.strip()
+        if para:
+            wrapped_lines.extend(textwrap.wrap(para, width=chars_per_line) or [para])
+        else:
+            if wrapped_lines and wrapped_lines[-1] != "":
+                wrapped_lines.append("")
 
-    # 最大8行まで表示
-    display_lines = wrapped_lines[:8]
-    line_height = 56
+    # 末尾の空行を除去
+    while wrapped_lines and wrapped_lines[-1] == "":
+        wrapped_lines.pop()
+
+    # 最大10行まで表示（超える場合は末尾を「…」で省略）
+    max_lines = 10
+    if len(wrapped_lines) > max_lines:
+        display_lines = wrapped_lines[:max_lines - 1]
+        display_lines.append("…")
+    else:
+        display_lines = wrapped_lines
+
+    name_y = card_y2 - 40
+    line_height = 54
     total_text_height = len(display_lines) * line_height
-
-    text_start_y = (card_y1 + card_y2) // 2 - total_text_height // 2
+    text_area_top = sep_y + 40
+    text_area_bottom = name_y - 20
+    text_area_center = (text_area_top + text_area_bottom) // 2
+    text_start_y = max(text_area_top, text_area_center - total_text_height // 2)
 
     for i, line in enumerate(display_lines):
         y = text_start_y + i * line_height
+        if y + line_height > text_area_bottom:
+            break
+        color = COLORS["text_secondary"] if line == "" else COLORS["text_primary"]
         draw.text(
             (CANVAS_SIZE[0] // 2, y),
             line,
             font=font_main,
-            fill=COLORS["text_primary"],
+            fill=color,
             anchor="mm",
         )
 
     # ペルソナ名（カード右下）
-    name_y = card_y2 - 40
     draw.text(
         (card_x2 - 40, name_y),
         f"— {persona_name}",
