@@ -108,6 +108,11 @@ jobs:
             export INSTAGRAM_ACCESS_TOKEN="$STORED_TOKEN"
             echo "APP_ID/APP_SECRET未設定。保存済みトークンをそのまま使用します。"
           fi
+          echo "=== 権限チェック ==="
+          curl -s "https://graph.facebook.com/me/permissions?access_token=${INSTAGRAM_ACCESS_TOKEN}" | python3 -m json.tool 2>/dev/null || echo "権限取得失敗"
+          echo "=== Facebookページ確認 ==="
+          curl -s "https://graph.facebook.com/me/accounts?fields=id,name,instagram_business_account&access_token=${INSTAGRAM_ACCESS_TOKEN}" | python3 -m json.tool 2>/dev/null || echo "ページ取得失敗"
+          echo "=== 投稿実行 ==="
           python src/main.py --platform instagram
 
       - name: Commit Instagram history
