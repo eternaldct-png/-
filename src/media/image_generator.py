@@ -121,7 +121,6 @@ def generate_instagram_image(
     font_brand = load_font(font_bold_path, 32)
     font_main = load_font(font_regular_path, 40)
     font_name = load_font(font_regular_path, 28)
-    font_hashtag = load_font(font_regular_path, 22)
 
     img = Image.new("RGB", CANVAS_SIZE, COLORS["background"])
     draw = ImageDraw.Draw(img)
@@ -223,18 +222,6 @@ def generate_instagram_image(
         fill=COLORS["text_secondary"],
         anchor="rm",
     )
-
-    # ハッシュタグ帯（カード外下部）
-    if hashtags:
-        hashtag_text = "  ".join(hashtags[:8])
-        hashtag_y = card_y2 + 20
-        draw.text(
-            (CANVAS_SIZE[0] // 2, hashtag_y),
-            hashtag_text,
-            font=font_hashtag,
-            fill=COLORS["hashtag"],
-            anchor="mm",
-        )
 
     img.save(str(output_path), "PNG", optimize=True)
     print(f"[image] 画像を生成しました: {output_path}")

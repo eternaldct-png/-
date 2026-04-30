@@ -69,6 +69,9 @@ class InstagramAdapter(PlatformAdapter):
             caption = content.get("text", "")
             hashtags = []
 
+        # リテラル \n を実際の改行に正規化（キューに古い形式で保存されていた場合の対策）
+        caption = caption.replace('\\n', '\n')
+
         # フルキャプション（本文 + ハッシュタグ）
         if hashtags:
             hashtag_block = " ".join(hashtags)
