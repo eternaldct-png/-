@@ -265,7 +265,12 @@ def _safe_parse_json(raw: str, content_format: str) -> dict | None:
         caption_match = re.search(r'"caption"\s*:\s*"(.*?)"(?:\s*,|\s*\})', cleaned, re.DOTALL)
         hashtags_match = re.findall(r'#[\w぀-鿿]+', cleaned)
         if caption_match:
-            caption = caption_match.group(1).replace('\\"', '"')
+            # JSON エスケープシーケンスを正しくデコードする
+            raw_caption = caption_match.group(1)
+            try:
+                caption = json.loads(f'"{raw_caption}"')
+            except Exception:
+                caption = raw_caption.replace('\\"', '"').replace('\\n', '\n').replace('\\t', '\t')
             return {"caption": caption[:2200], "hashtags": hashtags_match[:30]}
 
     return None

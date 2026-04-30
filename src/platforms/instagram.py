@@ -36,7 +36,7 @@ class InstagramAdapter(PlatformAdapter):
             "content_format": "visual_caption",
             "requires_media": True,
             "supports_media": True,
-            "max_tokens_hint": 600,
+            "max_tokens_hint": 1500,
         }
 
     def is_duplicate(self, text: str) -> bool:
