@@ -65,6 +65,12 @@ def run(dry_run: bool = False, generate_only: bool = False, platform: str = "x")
         print(f"[main] [{platform}] キューから次の投稿を取得します...")
         item = pop_next_post(platform=platform)
 
+    # Instagram Job2: キューが空の場合はスキップ（未コミット画像を使わないため）
+    if item is None and not generate_only and platform == "instagram":
+        print("[main] [instagram] キューに有効な投稿がありません。スキップします。")
+        print("[main] （Job1 のコミットが反映されていないか、既に投稿済みです）")
+        sys.exit(0)
+
     if item is not None:
         content = {"text": item.get("text", ""), "platform": platform}
         if item.get("media_path"):

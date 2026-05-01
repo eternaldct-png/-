@@ -75,6 +75,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Pull Job1 commits
+        run: |
+          git pull origin ${{ github.ref_name }} || true
+          echo "最新のキュー・画像を取得しました"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -93,6 +98,7 @@ jobs:
           STORED_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_REF_NAME: ${{ github.ref_name }}
+          INSTAGRAM_IMAGE_FILENAME: ${{ needs.generate_and_commit.outputs.image_filename }}
         run: |
           if [ -n "$FACEBOOK_APP_ID" ] && [ -n "$FACEBOOK_APP_SECRET" ] && [ -n "$STORED_TOKEN" ]; then
             RESPONSE=$(curl -sf "https://graph.facebook.com/oauth/access_token?grant_type=fb_exchange_token&client_id=${FACEBOOK_APP_ID}&client_secret=${FACEBOOK_APP_SECRET}&fb_exchange_token=${STORED_TOKEN}" 2>/dev/null || echo "")
@@ -108,11 +114,7 @@ jobs:
             export INSTAGRAM_ACCESS_TOKEN="$STORED_TOKEN"
             echo "APP_ID/APP_SECRET未設定。保存済みトークンをそのまま使用します。"
           fi
-          echo "=== 権限チェック ==="
-          curl -s "https://graph.facebook.com/me/permissions?access_token=${INSTAGRAM_ACCESS_TOKEN}" | python3 -m json.tool 2>/dev/null || echo "権限取得失敗"
-          echo "=== Facebookページ確認 ==="
-          curl -s "https://graph.facebook.com/me/accounts?fields=id,name,instagram_business_account&access_token=${INSTAGRAM_ACCESS_TOKEN}" | python3 -m json.tool 2>/dev/null || echo "ページ取得失敗"
-          echo "=== 投稿実行 ==="
+          echo "使用画像: ${INSTAGRAM_IMAGE_FILENAME}"
           python src/main.py --platform instagram
 
       - name: Commit Instagram history
