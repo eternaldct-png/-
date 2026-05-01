@@ -16,6 +16,22 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 
+def _wrap_japanese(text: str, max_chars: int) -> list[str]:
+    """日本語禁則処理付きテキスト折り返し"""
+    no_start = set('。、！？）』」】…')
+    lines = []
+    while len(text) > max_chars:
+        pos = max_chars
+        # 行頭禁則文字は前の行に引き取る
+        while pos > 1 and text[pos] in no_start:
+            pos -= 1
+        lines.append(text[:pos])
+        text = text[pos:]
+    if text:
+        lines.append(text)
+    return lines
+
+
 def _normalize_text(text: str) -> str:
     """リテラル \\n を改行に変換し、絵文字を除去する"""
     text = text.replace('\\n', '\n')
@@ -52,11 +68,11 @@ OUTPUT_DIR = Path("posts/media")
 FONT_URL_REGULAR = "https://github.com/googlefonts/noto-cjk/raw/main/Sans/OTF/Japanese/NotoSansCJKjp-Regular.otf"
 FONT_URL_BOLD = "https://github.com/googlefonts/noto-cjk/raw/main/Sans/OTF/Japanese/NotoSansCJKjp-Bold.otf"
 
-# POPグラデーション（ホットピンク → パープル → コーラルオレンジ）
+# POPグラデーション（淡めのピンク → パープル → コーラル）
 GRADIENT_COLORS = [
-    (255, 77, 141),   # ホットピンク
-    (168, 85, 247),   # ビビッドパープル
-    (255, 107, 77),   # コーラルオレンジ
+    (255, 140, 180),   # 淡いピンク
+    (200, 145, 255),   # 淡いパープル
+    (255, 165, 140),   # 淡いコーラル
 ]
 
 COLORS = {
@@ -122,7 +138,7 @@ def generate_instagram_image(
     caption_text = _normalize_text(caption_text)
 
     font_brand = load_font(font_bold_path, 34)
-    font_main  = load_font(font_regular_path, 40)
+    font_main  = load_font(font_regular_path, 34)
     font_name  = load_font(font_regular_path, 26)
 
     # ── 背景グラデーション ──────────────────────────────
@@ -173,16 +189,18 @@ def generate_instagram_image(
         fill=(220, 200, 240), width=1,
     )
 
-    # ── メインテキスト ──────────────────────────────────
-    card_width = card_x2 - card_x1 - 80
-    chars_per_line = max(8, card_width // 41)
+    # ── メインテキスト（左揃え） ────────────────────────
+    text_padding = 40
+    text_x = card_x1 + text_padding
+    card_text_width = card_x2 - card_x1 - text_padding * 2
+    chars_per_line = max(8, card_text_width // 34)
 
     paragraphs = caption_text.split("\n")
     wrapped_lines = []
     for para in paragraphs:
         para = para.strip()
         if para:
-            wrapped_lines.extend(textwrap.wrap(para, width=chars_per_line) or [para])
+            wrapped_lines.extend(_wrap_japanese(para, chars_per_line) or [para])
         else:
             if wrapped_lines and wrapped_lines[-1] != "":
                 wrapped_lines.append("")
@@ -211,11 +229,11 @@ def generate_instagram_image(
             break
         color = (200, 180, 220) if line == "" else COLORS["text_primary"]
         draw.text(
-            (CANVAS_SIZE[0] // 2, y),
+            (text_x, y),
             line,
             font=font_main,
             fill=color,
-            anchor="mm",
+            anchor="lm",
         )
 
     # ── ペルソナ名 ──────────────────────────────────────
