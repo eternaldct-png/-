@@ -217,24 +217,34 @@ def generate_instagram_image(
 
     name_y = card_y2 - 44
     line_height = 54
-    total_text_height = len(display_lines) * line_height
+    para_gap = 28   # 段落間の空白行の高さ（通常行の半分）
     text_area_top = sep_y + 40
     text_area_bottom = name_y - 20
-    text_area_center = (text_area_top + text_area_bottom) // 2
-    text_start_y = max(text_area_top, text_area_center - total_text_height // 2)
 
-    for i, line in enumerate(display_lines):
-        y = text_start_y + i * line_height
+    # 合計高さを計算（空白行は para_gap 分だけ）
+    total_text_height = sum(para_gap if l == "" else line_height for l in display_lines)
+
+    # テキストを上寄り気味に配置（短文でも上半分に収まるよう上限を設ける）
+    text_area_h = text_area_bottom - text_area_top
+    centered_y = text_area_top + (text_area_h - total_text_height) // 2
+    max_start_y = text_area_top + int(text_area_h * 0.28)
+    text_start_y = max(text_area_top, min(centered_y, max_start_y))
+
+    y = text_start_y
+    for line in display_lines:
+        if line == "":
+            y += para_gap
+            continue
         if y + line_height > text_area_bottom:
             break
-        color = (200, 180, 220) if line == "" else COLORS["text_primary"]
         draw.text(
-            (text_x, y),
+            (text_x, y + line_height // 2),
             line,
             font=font_main,
-            fill=color,
+            fill=COLORS["text_primary"],
             anchor="lm",
         )
+        y += line_height
 
     # ── ペルソナ名 ──────────────────────────────────────
     draw.text(
