@@ -193,22 +193,26 @@ class InstagramAdapter(PlatformAdapter):
 
     @staticmethod
     def _publish_container(user_id: str, token: str, container_id: str) -> str:
-        """コンテナを公開する（最大10秒待機して状態確認）"""
-        # コンテナが ready になるまで待機（最大30秒）
+        """コンテナを公開する（最大60秒待機して状態確認）"""
         status_url = f"{GRAPH_API_BASE}/{container_id}"
-        for _ in range(6):
+        last_status = ""
+        for i in range(10):
             resp = requests.get(
                 status_url,
-                params={"fields": "status_code", "access_token": token},
+                params={"fields": "status_code,id", "access_token": token},
                 timeout=15,
             )
             resp.raise_for_status()
-            status = resp.json().get("status_code", "")
-            if status == "FINISHED":
+            data = resp.json()
+            last_status = data.get("status_code", "")
+            print(f"[instagram] コンテナ状態確認 ({i+1}/10): {last_status}")
+            if last_status == "FINISHED":
                 break
-            if status == "ERROR":
-                raise RuntimeError(f"[instagram] メディア処理エラー: {resp.json()}")
-            time.sleep(5)
+            if last_status == "ERROR":
+                raise RuntimeError(f"[instagram] メディア処理エラー: {data}")
+            time.sleep(6)
+        else:
+            print(f"[instagram] 警告: コンテナがFINISHEDにならなかった (最終状態: {last_status})。公開を試みます。")
 
         publish_url = f"{GRAPH_API_BASE}/{user_id}/media_publish"
         resp = requests.post(
@@ -216,6 +220,9 @@ class InstagramAdapter(PlatformAdapter):
             data={"creation_id": container_id, "access_token": token},
             timeout=30,
         )
+        if not resp.ok:
+            print(f"[instagram] 公開エラーレスポンス ({resp.status_code}):")
+            print(resp.text[:1000])
         resp.raise_for_status()
         data = resp.json()
         if "error" in data:
