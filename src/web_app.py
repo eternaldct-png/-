@@ -24,8 +24,9 @@ from flask import Flask, request, jsonify, Response
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+from github_storage import storage as _storage
+
 JST = ZoneInfo("Asia/Tokyo")
-QUEUE_PATH = Path("posts/queue.json")
 WEB_PASSWORD = os.environ.get("WEB_PASSWORD", "kazuto")
 
 app = Flask(__name__)
@@ -58,22 +59,14 @@ def require_auth(f):
     return decorated
 
 
-# ── キュー操作 ────────────────────────────────────────────────
+# ── キュー操作（GitHub API 経由で永続化）─────────────────────
 
 def _load_queue() -> list[dict]:
-    if not QUEUE_PATH.exists():
-        return []
-    with open(QUEUE_PATH, "r", encoding="utf-8") as f:
-        try:
-            return json.load(f)
-        except json.JSONDecodeError:
-            return []
+    return _storage.read()
 
 
 def _save_queue(queue: list[dict]) -> None:
-    QUEUE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(QUEUE_PATH, "w", encoding="utf-8") as f:
-        json.dump(queue, f, ensure_ascii=False, indent=2)
+    _storage.write(queue)
 
 
 def _find_index(queue: list[dict], item_id: str) -> int:
