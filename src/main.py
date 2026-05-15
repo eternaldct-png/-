@@ -8,6 +8,9 @@
   python src/main.py --platform tiktok        # TikTok スクリプトを生成
   python src/main.py --dry-run                # プレビューのみ（投稿しない）
   python src/main.py --generate               # 生成のみ表示（投稿しない）
+  python src/main.py --benchmark              # ベンチマーク分析を実行
+  python src/main.py --update-persona         # ペルソナ更新案を生成・確認
+  python src/main.py --update-persona --auto  # ペルソナを確認なしで自動更新
   python src/main.py --platform note --dry-run
 """
 import sys
@@ -197,6 +200,16 @@ if __name__ == "__main__":
     )
     parser.add_argument("--dry-run", action="store_true", help="プレビューのみ（実際には投稿しない）")
     parser.add_argument("--generate", action="store_true", help="生成のみ表示（投稿しない）")
+    parser.add_argument("--benchmark", action="store_true", help="ベンチマーク分析を実行")
+    parser.add_argument("--update-persona", action="store_true", help="ペルソナ更新案を生成・適用")
+    parser.add_argument("--auto", action="store_true", help="--update-persona と併用: 確認なしで自動適用")
     args = parser.parse_args()
 
-    run(dry_run=args.dry_run, generate_only=args.generate, platform=args.platform)
+    if args.benchmark:
+        from benchmark_analyzer import run_benchmark
+        run_benchmark()
+    elif args.update_persona:
+        from persona_updater import run_update
+        run_update(auto=args.auto)
+    else:
+        run(dry_run=args.dry_run, generate_only=args.generate, platform=args.platform)

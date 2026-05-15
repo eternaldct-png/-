@@ -1,0 +1,129 @@
+name: ベンチマーク分析 & ペルソナ自動更新
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_per_tag:
+        description: '1ハッシュタグあたりの収集ツイート数'
+        required: false
+        default: '20'
+        type: choice
+        options:
+          - '10'
+          - '20'
+          - '50'
+      skip_update:
+        description: '分析のみ実行（ペルソナ更新をスキップ）'
+        required: false
+        default: 'false'
+        type: boolean
+  schedule:
+    # 毎週日曜 22:00 JST (13:00 UTC) に自動実行
+    - cron: "0 13 * * 0"
+
+jobs:
+  benchmark-and-update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # ペルソナ更新をコミットするために書き込み権限が必要
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # Step 1: 自分の投稿パフォーマンス分析（analyze.pyを流用）
+      - name: Step1 - 自己投稿パフォーマンス分析
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          X_API_KEY: ${{ secrets.X_API_KEY }}
+          X_API_SECRET: ${{ secrets.X_API_SECRET }}
+          X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+          X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, 'src')
+          from analyze import run_analysis
+          # kazuto_config.yaml を使うよう一時的に上書き
+          import yaml
+          from pathlib import Path
+          kazuto_cfg = Path('persona/kazuto_config.yaml')
+          if kazuto_cfg.exists():
+              import shutil
+              shutil.copy('persona/config.yaml', 'persona/config.yaml.bak')
+              shutil.copy(str(kazuto_cfg), 'persona/config.yaml')
+          run_analysis(max_tweets=50)
+          # 元に戻す
+          bak = Path('persona/config.yaml.bak')
+          if bak.exists():
+              shutil.copy(str(bak), 'persona/config.yaml')
+              bak.unlink()
+          print('[workflow] Step1 完了')
+          "
+
+      # Step 2: ベンチマーク分析（高エンゲージメント外部アカウント）
+      - name: Step2 - ベンチマーク分析（外部高エンゲージメントアカウント）
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          X_API_KEY: ${{ secrets.X_API_KEY }}
+          X_API_SECRET: ${{ secrets.X_API_SECRET }}
+          X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+          X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, 'src')
+          from benchmark_analyzer import run_benchmark
+          run_benchmark(max_per_tag=int('${{ github.event.inputs.max_per_tag || 20 }}'))
+          print('[workflow] Step2 完了')
+          "
+
+      # Step 3: ペルソナ自動更新
+      - name: Step3 - ペルソナ更新案を生成・適用
+        if: ${{ github.event.inputs.skip_update != 'true' }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, 'src')
+          from persona_updater import run_update
+          updated = run_update(auto=True)
+          print(f'[workflow] ペルソナ更新: {\"適用済み\" if updated else \"変更なし\"}')
+          "
+
+      # Step 4: 分析レポート＆更新されたペルソナをコミット
+      - name: Step4 - 変更をコミット＆プッシュ
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action (benchmark)"
+          git add analysis/ persona/kazuto_config.yaml persona/backups/ || true
+          git diff --staged --quiet || git commit -m "chore: ベンチマーク分析 & ペルソナ自動更新 [skip ci]"
+          git push || true
+
+      # Step 5: 分析サマリーをワークフローのサマリーに出力
+      - name: Step5 - 分析サマリー表示
+        run: |
+          echo "## ベンチマーク分析 & ペルソナ更新 完了" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f analysis/benchmark_latest.md ]; then
+            echo "### ベンチマーク分析レポート（抜粋）" >> $GITHUB_STEP_SUMMARY
+            head -40 analysis/benchmark_latest.md >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -f analysis/persona_update_log.jsonl ]; then
+            echo "### ペルソナ更新ログ（最新）" >> $GITHUB_STEP_SUMMARY
+            tail -1 analysis/persona_update_log.jsonl >> $GITHUB_STEP_SUMMARY
+          fi
