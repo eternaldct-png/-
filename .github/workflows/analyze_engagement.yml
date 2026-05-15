@@ -1,0 +1,58 @@
+name: Analyze Engagement
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_tweets:
+        description: '分析するツイート数（最大100）'
+        required: false
+        default: '100'
+        type: choice
+        options:
+          - '50'
+          - '100'
+  schedule:
+    # 毎週月曜 9:00 JST に自動実行
+    - cron: "0 0 * * 1"
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run engagement analysis
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          X_API_KEY: ${{ secrets.X_API_KEY }}
+          X_API_SECRET: ${{ secrets.X_API_SECRET }}
+          X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+          X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, 'src')
+          from analyze import run_analysis
+          run_analysis(max_tweets=int('${{ github.event.inputs.max_tweets || 100 }}'))
+          "
+
+      - name: Commit analysis report
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add analysis/ || true
+          git diff --staged --quiet || git commit -m "chore: エンゲージメント分析レポートを更新 [skip ci]"
+          git push || true
