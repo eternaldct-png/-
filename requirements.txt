@@ -13,3 +13,7 @@ requests>=2.31.0
 # gTTS>=2.5.0
 
 # note / TikTok 動画生成は ffmpeg（システムパッケージ）を別途インストール
+
+# 投稿管理ダッシュボード (Web UI)
+flask>=3.0.0
+gunicorn>=21.2.0
