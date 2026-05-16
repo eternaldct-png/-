@@ -9,6 +9,9 @@ from pathlib import Path
 class PlatformAdapter(ABC):
     """全投稿プラットフォームの共通インターフェース"""
 
+    def __init__(self, persona: dict = None):
+        self._persona = persona or {}
+
     @abstractmethod
     def post(self, content: dict, dry_run: bool = False) -> dict:
         """

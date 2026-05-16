@@ -18,7 +18,12 @@ HISTORY_PATH = Path("posts/x_history.json")
 class XAdapter(PlatformAdapter):
     """X（Twitter）投稿アダプター"""
 
+    def __init__(self, persona: dict = None):
+        self._persona = persona or {}
+
     def get_history_path(self) -> Path:
+        if self._persona.get("history_file"):
+            return Path(self._persona["history_file"])
         return HISTORY_PATH
 
     def get_constraints(self) -> dict:

@@ -188,6 +188,7 @@ avoid:
 max_length: 140
 add_hashtags: true
 max_hashtags: 2
+history_file: "posts/kazuto_history.json"
 
 # =============================================
 # プラットフォーム設定
