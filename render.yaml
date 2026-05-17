@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: kazuto-post-manager
+    name: kazuto-post-generator
     runtime: python
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn src.web_app:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120
@@ -8,19 +8,5 @@ services:
     envVars:
       - key: WEB_PASSWORD
         sync: false          # ログインパスワード（任意の文字列を設定）
-      - key: GITHUB_TOKEN
-        sync: false          # GitHub PAT (Settings→Developer settings→PAT→contents:write)
-      - key: GITHUB_REPO
-        value: "eternaldct-png/-"
-      - key: GITHUB_BRANCH
-        value: "main"
       - key: ANTHROPIC_API_KEY
-        sync: false          # 投稿生成に必要
-      - key: X_API_KEY
-        sync: false          # X への投稿に必要
-      - key: X_API_SECRET
-        sync: false
-      - key: X_ACCESS_TOKEN
-        sync: false
-      - key: X_ACCESS_SECRET
-        sync: false
+        sync: false          # 投稿文生成に必要

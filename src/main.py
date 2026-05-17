@@ -2,15 +2,16 @@
 マルチプラットフォーム自動投稿 メインオーケストレーター
 
 使い方:
-  python src/main.py                          # X に投稿（デフォルト）
-  python src/main.py --platform instagram     # Instagram に投稿
-  python src/main.py --platform note          # note 記事を生成
-  python src/main.py --platform tiktok        # TikTok スクリプトを生成
-  python src/main.py --dry-run                # プレビューのみ（投稿しない）
-  python src/main.py --generate               # 生成のみ表示（投稿しない）
-  python src/main.py --benchmark              # ベンチマーク分析を実行
-  python src/main.py --update-persona         # ペルソナ更新案を生成・確認
-  python src/main.py --update-persona --auto  # ペルソナを確認なしで自動更新
+  python src/main.py                                      # X に投稿（デフォルト）
+  python src/main.py --persona persona/kazuto_config.yaml # kazuto ペルソナで投稿
+  python src/main.py --platform instagram                 # Instagram に投稿
+  python src/main.py --platform note                      # note 記事を生成
+  python src/main.py --platform tiktok                    # TikTok スクリプトを生成
+  python src/main.py --dry-run                            # プレビューのみ（投稿しない）
+  python src/main.py --generate                           # 生成のみ表示（投稿しない）
+  python src/main.py --benchmark                          # ベンチマーク分析を実行
+  python src/main.py --update-persona                     # ペルソナ更新案を生成・確認
+  python src/main.py --update-persona --auto              # ペルソナを確認なしで自動更新
   python src/main.py --platform note --dry-run
 """
 import sys
@@ -47,10 +48,10 @@ def load_persona(config_path: str = "persona/config.yaml") -> dict:
         return yaml.safe_load(f)
 
 
-def run(dry_run: bool = False, generate_only: bool = False, platform: str = "x") -> None:
+def run(dry_run: bool = False, generate_only: bool = False, platform: str = "x", persona_path: str = "persona/config.yaml") -> None:
     """メイン処理"""
     print(f"[main] ペルソナ設定を読み込み中...")
-    persona = load_persona()
+    persona = load_persona(persona_path)
     print(f"[main] ペルソナ: {persona['name']} | プラットフォーム: {platform.upper()}")
 
     adapters = _get_platform_adapters()
@@ -58,7 +59,7 @@ def run(dry_run: bool = False, generate_only: bool = False, platform: str = "x")
         print(f"[main] エラー: 未対応のプラットフォーム '{platform}'。対応: {list(adapters.keys())}")
         sys.exit(1)
 
-    adapter = adapters[platform]()
+    adapter = adapters[platform](persona=persona)
     constraints = adapter.get_constraints()
 
     # キューに該当プラットフォームの投稿があればそちらを優先
@@ -198,6 +199,11 @@ if __name__ == "__main__":
         default="x",
         help="投稿先プラットフォーム（デフォルト: x）",
     )
+    parser.add_argument(
+        "--persona",
+        default="persona/config.yaml",
+        help="ペルソナ設定ファイルのパス（デフォルト: persona/config.yaml）",
+    )
     parser.add_argument("--dry-run", action="store_true", help="プレビューのみ（実際には投稿しない）")
     parser.add_argument("--generate", action="store_true", help="生成のみ表示（投稿しない）")
     parser.add_argument("--benchmark", action="store_true", help="ベンチマーク分析を実行")
@@ -212,4 +218,4 @@ if __name__ == "__main__":
         from persona_updater import run_update
         run_update(auto=args.auto)
     else:
-        run(dry_run=args.dry_run, generate_only=args.generate, platform=args.platform)
+        run(dry_run=args.dry_run, generate_only=args.generate, platform=args.platform, persona_path=args.persona)
