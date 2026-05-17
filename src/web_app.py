@@ -56,10 +56,14 @@ def api_generate():
         if slot_hint:
             research["slot_hint"] = slot_hint
 
+        max_length = max(50, min(2000, int(data.get("max_length", 140))))
+        max_hashtags = 2 if max_length <= 140 else 3 if max_length <= 280 else 5
+        max_tokens = 150 if max_length <= 140 else 300 if max_length <= 280 else 800
+
         constraints = {
-            "max_length": 140,
-            "max_hashtags": 2,
-            "max_tokens_hint": 300,
+            "max_length": max_length,
+            "max_hashtags": max_hashtags,
+            "max_tokens_hint": max_tokens,
             "content_format": "text",
         }
 
@@ -339,6 +343,48 @@ body {
 .toast.ok { border-color: var(--green); color: var(--green); }
 .toast.err { border-color: #ef4444; color: #ef4444; }
 
+/* ── テーマチップ ── */
+.theme-chips {
+  display: flex; flex-wrap: wrap; gap: 7px;
+  margin-bottom: 4px;
+}
+.theme-chip {
+  padding: 7px 13px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted); font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all 0.15s; white-space: nowrap;
+}
+.theme-chip.active {
+  background: var(--accent-glow);
+  border-color: var(--accent);
+  color: var(--accent-light);
+}
+
+/* ── 投稿先ボタン ── */
+.platform-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px; margin-bottom: 4px;
+}
+.plat-btn {
+  padding: 9px 4px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  color: var(--muted); font-size: 13px; font-weight: 700;
+  cursor: pointer; transition: all 0.15s;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+}
+.plat-btn span { font-size: 10px; font-weight: 400; color: var(--muted); }
+.plat-btn.active {
+  background: var(--accent-glow);
+  border-color: var(--accent);
+  color: var(--accent-light);
+}
+.plat-btn.active span { color: var(--accent-light); opacity: 0.8; }
+
 @keyframes spin { to { transform: rotate(360deg); } }
 </style>
 </head>
@@ -365,21 +411,37 @@ body {
   </div>
 
   <!-- テーマ -->
-  <div class="theme-wrap">
-    <div class="section-label">テーマ（任意）</div>
-    <input id="theme" class="theme-input" type="text"
-      placeholder="例：新曲に挑戦、ライバー募集、コーヒー…"
-      maxlength="50">
+  <div class="section-label">テーマ（任意）</div>
+  <div class="theme-chips">
+    <button class="theme-chip" data-theme="" onclick="selectTheme(this)">なんでも</button>
+    <button class="theme-chip" data-theme="ColorSing配信・歌ってみた" onclick="selectTheme(this)">🎵 ColorSing配信</button>
+    <button class="theme-chip" data-theme="音楽・好きな曲・歌い方のtips" onclick="selectTheme(this)">🎶 音楽・歌</button>
+    <button class="theme-chip" data-theme="ライバー事務所・所属ライバー紹介" onclick="selectTheme(this)">🏢 ライバー事務所</button>
+    <button class="theme-chip" data-theme="フォロワーへの問いかけ・アンケート" onclick="selectTheme(this)">💬 問いかけ</button>
+    <button class="theme-chip" data-theme="コラボ募集・デュエット" onclick="selectTheme(this)">🤝 コラボ募集</button>
+    <button class="theme-chip" data-theme="経営・起業・ライバー事務所代表としての考え" onclick="selectTheme(this)">💼 経営・起業</button>
+    <button class="theme-chip" data-theme="今週の振り返り・来週の予告" onclick="selectTheme(this)">📅 振り返り</button>
+    <button class="theme-chip" id="customChip" data-theme="custom" onclick="selectTheme(this)">✏️ カスタム</button>
+  </div>
+  <input id="theme" class="theme-input" type="text"
+    placeholder="テーマを自由に入力…" maxlength="50"
+    style="display:none; margin-top:8px;">
+
+  <!-- 文字数 -->
+  <div class="section-label" style="margin-top:18px;">文字数・投稿先</div>
+  <div class="platform-row">
+    <button class="plat-btn active" data-len="140"  onclick="selectPlatform(this)">X<span>140文字</span></button>
+    <button class="plat-btn" data-len="280"  onclick="selectPlatform(this)">X Premium<span>280文字</span></button>
+    <button class="plat-btn" data-len="500"  onclick="selectPlatform(this)">Instagram<span>500文字</span></button>
+    <button class="plat-btn" data-len="1000" onclick="selectPlatform(this)">note<span>1000文字</span></button>
   </div>
 
   <!-- 件数 -->
-  <div class="count-wrap">
-    <div class="section-label">生成件数</div>
-    <div class="count-row">
-      <button class="count-btn active" data-count="1" onclick="selectCount(this)">1件</button>
-      <button class="count-btn" data-count="3" onclick="selectCount(this)">3件</button>
-      <button class="count-btn" data-count="5" onclick="selectCount(this)">5件</button>
-    </div>
+  <div class="section-label" style="margin-top:18px;">生成件数</div>
+  <div class="count-row" style="margin-bottom:20px;">
+    <button class="count-btn active" data-count="1" onclick="selectCount(this)">1件</button>
+    <button class="count-btn" data-count="3" onclick="selectCount(this)">3件</button>
+    <button class="count-btn" data-count="5" onclick="selectCount(this)">5件</button>
   </div>
 
   <!-- 生成ボタン -->
@@ -404,12 +466,36 @@ body {
 <script>
 let selectedSlot = '';
 let selectedCount = 1;
+let selectedTheme = '';
+let selectedMaxLength = 140;
 
 // 時間帯選択
 function selectSlot(btn) {
   document.querySelectorAll('.slot-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   selectedSlot = btn.dataset.slot;
+}
+
+// テーマ選択
+function selectTheme(btn) {
+  document.querySelectorAll('.theme-chip').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const customInput = document.getElementById('theme');
+  if (btn.dataset.theme === 'custom') {
+    customInput.style.display = 'block';
+    customInput.focus();
+    selectedTheme = '';
+  } else {
+    customInput.style.display = 'none';
+    selectedTheme = btn.dataset.theme;
+  }
+}
+
+// 投稿先・文字数選択
+function selectPlatform(btn) {
+  document.querySelectorAll('.plat-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  selectedMaxLength = parseInt(btn.dataset.len);
 }
 
 // 件数選択
@@ -425,18 +511,19 @@ async function generate() {
   btn.disabled = true;
   btn.classList.add('loading');
 
-  const theme = document.getElementById('theme').value.trim();
+  const customInput = document.getElementById('theme');
+  const theme = selectedTheme || customInput.value.trim();
 
   try {
     const res = await fetch('/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ count: selectedCount, slot: selectedSlot, theme }),
+      body: JSON.stringify({ count: selectedCount, slot: selectedSlot, theme, max_length: selectedMaxLength }),
     });
     const data = await res.json();
 
     if (data.ok && data.posts && data.posts.length) {
-      renderPosts(data.posts);
+      renderPosts(data.posts, selectedMaxLength);
     } else {
       toast(data.error || '生成に失敗しました', 'err');
     }
@@ -462,7 +549,7 @@ async function regenerateOne(idx) {
     const res = await fetch('/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ count: 1, slot: selectedSlot, theme }),
+      body: JSON.stringify({ count: 1, slot: selectedSlot, theme, max_length: selectedMaxLength }),
     });
     const data = await res.json();
     if (data.ok && data.posts && data.posts[0]) {
@@ -482,16 +569,18 @@ async function regenerateOne(idx) {
 }
 
 // 結果表示
-function renderPosts(posts) {
+function renderPosts(posts, maxLen) {
+  maxLen = maxLen || selectedMaxLength;
   const el = document.getElementById('results');
   el.innerHTML = '';
   posts.forEach((text, i) => {
     const card = document.createElement('div');
     card.className = 'post-card';
+    card.dataset.maxlen = maxLen;
     card.innerHTML = `
       <div class="post-card-header">
         <span class="post-num">投稿 ${i + 1}</span>
-        <span class="char-badge" id="badge-${i}">${text.length} / 140文字</span>
+        <span class="char-badge" id="badge-${i}">${text.length} / ${maxLen}文字</span>
       </div>
       <textarea class="post-text" id="text-${i}" oninput="onTextInput(this, ${i})">${escHtml(text)}</textarea>
       <div class="post-actions">
@@ -516,8 +605,9 @@ function updateCharBadge(card) {
   const ta = card.querySelector('.post-text');
   const badge = card.querySelector('.char-badge');
   const n = ta.value.length;
-  badge.textContent = `${n} / 140文字`;
-  badge.className = 'char-badge' + (n > 140 ? ' over' : n > 126 ? ' warn' : '');
+  const max = parseInt(card.dataset.maxlen) || selectedMaxLength;
+  badge.textContent = `${n} / ${max}文字`;
+  badge.className = 'char-badge' + (n > max ? ' over' : n > max * 0.9 ? ' warn' : '');
 }
 
 function autoResize(ta) {
@@ -559,6 +649,10 @@ function toast(msg, type) {
 function escHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
+
+// 初期選択
+document.querySelector('.theme-chip').classList.add('active');
+document.querySelector('.plat-btn').classList.add('active');
 
 // 現在時刻から時間帯を自動選択
 (function autoSelectSlot() {
