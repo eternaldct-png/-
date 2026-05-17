@@ -313,6 +313,15 @@ def generate_post(
     topics = research_context.get("trending_topics", [])
     day_ctx = get_day_context(persona, target_dt)
 
+    # テーマ・時間帯ヒント
+    theme_hint = research_context.get("theme_hint", "")
+    slot_hint = research_context.get("slot_hint", "")
+    theme_text = ""
+    if theme_hint:
+        theme_text = f"\n【テーマ（必ずこの内容を中心に書くこと）】\n{theme_hint}\n"
+    elif slot_hint:
+        theme_text = f"\n【この投稿の方向性】\n{slot_hint}\n"
+
     # トピック情報
     topic_text = ""
     if topics:
@@ -343,39 +352,37 @@ def generate_post(
     if content_format == "markdown":
         user_prompt = f"""
 今の状況: {seasonal}{day_mood_text}
-
+{theme_text}
 投稿スタイル（参考）: 「{style}」
 {topic_text}{recent_text}
-ETERNALd.c.tの広報担当として、読者の役に立つnote記事を1本書いてください。
+kazutoペルソナとして、読者の役に立つnote記事を1本書いてください。
 指定のJSON形式で返してください。
 """
     elif content_format == "video_script":
         user_prompt = f"""
 今の状況: {seasonal}{day_mood_text}
-
+{theme_text}
 参考スタイル: 「{style}」
 {topic_text}
-ETERNALd.c.tの広報担当として、TikTok用60秒スクリプトを作成してください。
+kazutoペルソナとして、TikTok用60秒スクリプトを作成してください。
 指定のJSON形式で返してください。
 """
     elif content_format == "visual_caption":
         user_prompt = f"""
 今の状況: {seasonal}{day_mood_text}
-
+{theme_text}
 投稿スタイル: 「{style}」
 {topic_text}{recent_text}
-ETERNALd.c.tの広報担当として、Instagram投稿のキャプションを書いてください。
+kazutoペルソナとして、Instagram投稿のキャプションを書いてください。
 指定のJSON形式で返してください。
 """
     else:
         # X（デフォルト）
         user_prompt = f"""
 今の状況: {seasonal}{day_mood_text}
-
-投稿スタイル: 「{style}」
-
+{theme_text}
 {topic_text}{recent_text}
-上記のスタイルと今日の曜日・雰囲気を活かした自然なツイートを1つ書いてください。
+上記のテーマ・方向性を必ず守り、kazutoらしい自然な投稿文を1つ書いてください。
 直近の投稿と話題・表現が被らないよう、新鮮な内容にしてください。
 投稿文だけを返してください（説明文・前置き不要）。
 """
