@@ -6,49 +6,17 @@ kazuto 投稿文ジェネレーター — スマホ対応Webアプリ
 """
 import os
 import sys
-import base64
 from pathlib import Path
-from functools import wraps
-from flask import Flask, request, jsonify, Response
+from flask import Flask, request, jsonify
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-WEB_PASSWORD = os.environ.get("WEB_PASSWORD", "kazuto")
-
 app = Flask(__name__)
-
-
-# ── 認証 ──────────────────────────────────────────────────────────
-
-def _check_auth() -> bool:
-    auth = request.headers.get("Authorization", "")
-    if not auth.startswith("Basic "):
-        return False
-    try:
-        decoded = base64.b64decode(auth[6:]).decode("utf-8")
-        _, pwd = decoded.split(":", 1)
-        return pwd == WEB_PASSWORD
-    except Exception:
-        return False
-
-
-def require_auth(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        if not _check_auth():
-            return Response(
-                "Unauthorized",
-                401,
-                {"WWW-Authenticate": 'Basic realm="kazuto-post-generator"'},
-            )
-        return f(*args, **kwargs)
-    return decorated
 
 
 # ── 生成 API ──────────────────────────────────────────────────────
 
 @app.route("/api/generate", methods=["POST"])
-@require_auth
 def api_generate():
     """投稿文を生成して返す（キュー保存・投稿なし）"""
     import yaml
@@ -462,10 +430,7 @@ async function generate() {
   try {
     const res = await fetch('/api/generate', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Basic ' + btoa(':' + getPassword()),
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ count: selectedCount, slot: selectedSlot, theme }),
     });
     const data = await res.json();
@@ -496,10 +461,7 @@ async function regenerateOne(idx) {
   try {
     const res = await fetch('/api/generate', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Basic ' + btoa(':' + getPassword()),
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ count: 1, slot: selectedSlot, theme }),
     });
     const data = await res.json();
@@ -594,16 +556,6 @@ function toast(msg, type) {
   setTimeout(() => { el.className = 'toast'; }, 2200);
 }
 
-// パスワード（Basic Auth用）
-function getPassword() {
-  let p = sessionStorage.getItem('pwd') || '';
-  if (!p) {
-    p = prompt('パスワードを入力してください') || '';
-    sessionStorage.setItem('pwd', p);
-  }
-  return p;
-}
-
 function escHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
@@ -629,7 +581,6 @@ function escHtml(s) {
 # ── ルーティング ──────────────────────────────────────────────────
 
 @app.route("/")
-@require_auth
 def index():
     return HTML, 200, {"Content-Type": "text/html; charset=utf-8"}
 
