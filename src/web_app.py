@@ -37,9 +37,9 @@ def require_auth(f):
     def decorated(*args, **kwargs):
         if not _check_auth():
             return Response(
-                "認証が必要です",
+                "Unauthorized",
                 401,
-                {"WWW-Authenticate": 'Basic realm="kazuto投稿ジェネレーター"'},
+                {"WWW-Authenticate": 'Basic realm="kazuto-post-generator"'},
             )
         return f(*args, **kwargs)
     return decorated
