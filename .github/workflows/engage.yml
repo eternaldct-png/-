@@ -3,8 +3,8 @@ name: Auto Engage (Like & Repost)
 on:
   schedule:
     # 朝 9:00 JST・夜 21:00 JSTに実行
-    - cron: "0 0 * * *"   # 9:00 JST
-    - cron: "0 12 * * *"  # 21:00 JST
+    - cron: "30 0 * * *"   # 9:30 JST ※Instagram(9:00)と衝突回避
+    - cron: "0 12 * * *"   # 21:00 JST ※kazuto X は 21:20 にずらし済み
   workflow_dispatch:
     inputs:
       dry_run:
