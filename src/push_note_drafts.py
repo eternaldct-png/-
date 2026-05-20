@@ -118,15 +118,16 @@ def main():
         print("\n[push_note_drafts] --dry-run モード: 実際には投稿しません")
         return
 
-    # ログイン
+    # ログイン（APIクライアント → ブラウザ自動化 の順で試行）
+    use_browser = False
     client = NoteAPIClient()
     if session_token:
         client.login_with_session(session_token)
     else:
         print(f"\n[push_note_drafts] ログイン中: {email}")
         if not client.login(email, password):
-            print("[push_note_drafts] ログイン失敗。認証情報を確認してください")
-            sys.exit(1)
+            print("[push_note_drafts] API ログイン失敗 → ブラウザ自動化に切り替え")
+            use_browser = True
 
     # アップロード
     success = 0
@@ -139,13 +140,22 @@ def main():
         tags = meta.get("tags", [])
 
         print(f"\n→ アップロード中: 「{title}」")
-        result = client.create_draft(title, body, tags)
+
+        if use_browser:
+            from note_browser_client import create_draft_via_browser
+            result = create_draft_via_browser(email, password, title, body, tags)
+        else:
+            result = client.create_draft(title, body, tags)
+            if result is None and email:
+                print("  API 失敗 → ブラウザ自動化で再試行")
+                from note_browser_client import create_draft_via_browser
+                result = create_draft_via_browser(email, password, title, body, tags)
 
         if result:
             mark_uploaded(fp, result)
             update_history(fp, result)
             success += 1
-            print(f"  ✓ 下書き保存完了: {result.get('edit_url', '')}")
+            print(f"  ✓ 下書き保存完了: {result.get('edit_url', result.get('url', ''))}")
         else:
             failed.append(title)
             print(f"  ✗ 失敗: 「{title}」")
