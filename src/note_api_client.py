@@ -26,8 +26,15 @@ class NoteAPIClient:
             ),
             "Accept": "application/json, text/plain, */*",
             "Accept-Language": "ja,en-US;q=0.9,en;q=0.8",
-            "Referer": "https://note.com/",
+            "Referer": "https://note.com/notes/new",
             "Origin": "https://note.com",
+            "Sec-Fetch-Dest": "empty",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "same-origin",
+            "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+            "Sec-Ch-Ua-Mobile": "?0",
+            "Sec-Ch-Ua-Platform": '"macOS"',
+            "X-Requested-With": "XMLHttpRequest",
         })
         self._authenticated = False
         self._urlname: Optional[str] = None
