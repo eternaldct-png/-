@@ -44,31 +44,40 @@ class NoteAPIClient:
     def login(self, email: str, password: str) -> bool:
         """email/password でログインしてセッションを取得する"""
         # トップページにアクセスしてセッション Cookie を初期化
-        self.session.get(self.BASE_URL, timeout=10)
+        top = self.session.get(self.BASE_URL, timeout=10)
+        print(f"[note_api] トップページ: HTTP {top.status_code}")
 
         # CSRF トークン取得
         csrf = self._get_csrf_token()
+        print(f"[note_api] CSRFトークン: {'取得済み' if csrf else '未取得'}")
         if csrf:
             self.session.headers["X-CSRF-Token"] = csrf
 
-        # v2 → v1 の順で試行
-        for endpoint in ["/api/v2/sessions", "/api/v1/sessions"]:
+        # 複数エンドポイント・パラメータ形式で試行
+        candidates = [
+            ("/api/v2/sessions", {"login": email, "password": password}),
+            ("/api/v2/sessions", {"email": email, "password": password}),
+            ("/api/v1/sessions", {"login": email, "password": password}),
+            ("/api/v1/sessions", {"email": email, "password": password}),
+            ("/api/v2/users/sign_in", {"user": {"email": email, "password": password}}),
+        ]
+
+        for endpoint, payload in candidates:
             resp = self.session.post(
                 f"{self.BASE_URL}{endpoint}",
-                json={"login": email, "password": password},
+                json=payload,
                 headers={"Content-Type": "application/json"},
                 timeout=15,
             )
+            print(f"[note_api] {endpoint} → HTTP {resp.status_code}: {resp.text[:100]}")
             if resp.status_code == 200:
                 data = resp.json().get("data", {})
                 self._urlname = data.get("urlname") or data.get("id")
                 self._authenticated = True
                 print(f"[note_api] ログイン成功: @{self._urlname}")
                 return True
-            if resp.status_code != 404:
-                break
 
-        print(f"[note_api] ログイン失敗 (HTTP {resp.status_code}): {resp.text[:300]}")
+        print(f"[note_api] ログイン失敗: 全エンドポイントで認証できませんでした")
         return False
 
     def login_with_session(self, session_token: str) -> None:
