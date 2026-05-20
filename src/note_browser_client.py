@@ -25,7 +25,14 @@ def create_draft_via_browser(
     tags = tags or []
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=headless)
+        browser = p.chromium.launch(
+            headless=headless,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+            ],
+        )
         context = browser.new_context(
             user_agent=(
                 "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -33,7 +40,15 @@ def create_draft_via_browser(
                 "Chrome/124.0.0.0 Safari/537.36"
             ),
             locale="ja-JP",
+            extra_http_headers={
+                "Accept-Language": "ja,en-US;q=0.9,en;q=0.8",
+            },
         )
+        # ボット検出回避
+        context.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+            Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3]});
+        """)
         page = context.new_page()
 
         try:
@@ -108,9 +123,22 @@ def create_draft_via_browser(
                     continue
 
             print("[note_browser] ログイン後リダイレクト待機...")
-            page.wait_for_timeout(5000)
+            try:
+                page.wait_for_url(lambda url: "login" not in url, timeout=15000)
+            except PWTimeout:
+                pass
+            page.wait_for_timeout(2000)
             page.screenshot(path="/tmp/note_after_login.png")
             print(f"[note_browser] ログイン後URL: {page.url}")
+
+            # エラーメッセージを確認
+            for err_sel in ['[class*="error"]', '[class*="Error"]', '.alert', '[role="alert"]']:
+                try:
+                    el = page.locator(err_sel).first
+                    if el.is_visible():
+                        print(f"[note_browser] エラーメッセージ: {el.inner_text()[:100]}")
+                except Exception:
+                    pass
 
             # ── 新規記事ページへ ──────────────────────────────────
             print("[note_browser] 新規記事ページへ移動...")
