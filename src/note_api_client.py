@@ -57,9 +57,12 @@ class NoteAPIClient:
         candidates = [
             ("/api/v2/sessions", {"login": email, "password": password}),
             ("/api/v2/sessions", {"email": email, "password": password}),
+            ("/api/v3/sessions", {"login": email, "password": password}),
+            ("/api/v3/sessions", {"email": email, "password": password}),
             ("/api/v1/sessions", {"login": email, "password": password}),
             ("/api/v1/sessions", {"email": email, "password": password}),
             ("/api/v2/users/sign_in", {"user": {"email": email, "password": password}}),
+            ("/api/v1/login", {"login": email, "password": password}),
         ]
 
         for endpoint, payload in candidates:
@@ -154,13 +157,40 @@ class NoteAPIClient:
     # ── 内部ユーティリティ ────────────────────────────────────────
 
     def _get_csrf_token(self) -> str:
+        # 方法1: 専用エンドポイント
+        for path in ["/api/v1/sessions/csrf_token", "/api/v2/sessions/csrf_token"]:
+            try:
+                resp = self.session.get(f"{self.BASE_URL}{path}", timeout=10)
+                print(f"[note_api] csrf endpoint {path}: HTTP {resp.status_code}")
+                if resp.status_code == 200:
+                    token = resp.json().get("csrf_token", "")
+                    if token:
+                        return token
+            except Exception:
+                pass
+
+        # 方法2: ログインページのHTML meta タグから抽出
         try:
-            resp = self.session.get(
-                f"{self.BASE_URL}/api/v1/sessions/csrf_token",
-                timeout=10,
-            )
-            if resp.status_code == 200:
-                return resp.json().get("csrf_token", "")
-        except Exception:
-            pass
+            import re
+            resp = self.session.get(f"{self.BASE_URL}/login", timeout=10)
+            print(f"[note_api] /login page: HTTP {resp.status_code}")
+            m = re.search(r'<meta[^>]+name=["\']csrf-token["\'][^>]+content=["\']([^"\']+)["\']', resp.text)
+            if m:
+                print(f"[note_api] CSRFトークン(meta): 取得")
+                return m.group(1)
+            # Nuxt.js 形式: window.__NUXT__ やカスタムデータ属性
+            m = re.search(r'"csrf_token"\s*:\s*"([^"]+)"', resp.text)
+            if m:
+                print(f"[note_api] CSRFトークン(json): 取得")
+                return m.group(1)
+        except Exception as e:
+            print(f"[note_api] ログインページ取得エラー: {e}")
+
+        # 方法3: Cookie から取得
+        for cookie in self.session.cookies:
+            if "csrf" in cookie.name.lower() or "token" in cookie.name.lower():
+                print(f"[note_api] Cookie {cookie.name}: {cookie.value[:20]}...")
+                return cookie.value
+
+        print(f"[note_api] 利用可能Cookie: {[c.name for c in self.session.cookies]}")
         return ""
