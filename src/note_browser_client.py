@@ -76,7 +76,9 @@ def create_draft_via_browser(
             for sel in email_selectors:
                 try:
                     page.wait_for_selector(sel, timeout=3000)
-                    page.fill(sel, email)
+                    page.click(sel)
+                    page.wait_for_timeout(300)
+                    page.keyboard.type(email, delay=80)  # 人間らしいキー入力
                     print(f"[note_browser] メール入力 ({sel})")
                     email_filled = True
                     break
@@ -101,11 +103,15 @@ def create_draft_via_browser(
             for sel in pwd_selectors:
                 try:
                     page.wait_for_selector(sel, timeout=3000)
-                    page.fill(sel, password)
+                    page.click(sel)
+                    page.wait_for_timeout(300)
+                    page.keyboard.type(password, delay=80)
                     print(f"[note_browser] パスワード入力 ({sel})")
                     break
                 except Exception:
                     continue
+
+            page.wait_for_timeout(500)
 
             # ログインボタン押下
             btn_selectors = [
