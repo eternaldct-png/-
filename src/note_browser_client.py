@@ -39,25 +39,78 @@ def create_draft_via_browser(
         try:
             # ── ログイン ──────────────────────────────────────────
             print("[note_browser] ログインページへ移動...")
-            page.goto("https://note.com/login", wait_until="networkidle", timeout=30000)
+            page.goto("https://note.com/login", wait_until="domcontentloaded", timeout=30000)
+            page.wait_for_timeout(3000)  # SPA レンダリング待ち
 
-            page.fill('input[type="email"]', email)
-            page.fill('input[type="password"]', password)
-            page.click('button[type="submit"]')
+            # スクリーンショットでデバッグ
+            page.screenshot(path="/tmp/note_login_page.png")
+            print(f"[note_browser] ログインページURL: {page.url}")
+            print(f"[note_browser] フォーム要素: {page.locator('input').count()} 個")
 
-            print("[note_browser] ログイン送信...ホームへ待機")
-            try:
-                page.wait_for_url("https://note.com/**", timeout=20000)
-            except PWTimeout:
-                print("[note_browser] ログイン後リダイレクト待ちタイムアウト")
-                page.screenshot(path="/tmp/note_login_error.png")
+            # メールアドレス入力（複数セレクタ試行）
+            email_selectors = [
+                'input[type="email"]',
+                'input[name="email"]',
+                'input[autocomplete="email"]',
+                'input[placeholder*="メール"]',
+                'input[placeholder*="mail"]',
+                'input[type="text"]:first-of-type',
+                'form input:nth-child(1)',
+            ]
+            email_filled = False
+            for sel in email_selectors:
+                try:
+                    page.wait_for_selector(sel, timeout=3000)
+                    page.fill(sel, email)
+                    print(f"[note_browser] メール入力 ({sel})")
+                    email_filled = True
+                    break
+                except Exception:
+                    continue
 
-            if "login" in page.url:
-                print(f"[note_browser] ログイン失敗: {page.url}")
+            if not email_filled:
+                # 全 input の情報を出力してデバッグ
+                inputs = page.locator("input").all()
+                for i, inp in enumerate(inputs):
+                    print(f"[note_browser] input[{i}]: type={inp.get_attribute('type')} name={inp.get_attribute('name')} placeholder={inp.get_attribute('placeholder')}")
+                page.screenshot(path="/tmp/note_login_debug.png")
                 browser.close()
                 return None
 
-            print(f"[note_browser] ログイン成功: {page.url}")
+            # パスワード入力
+            pwd_selectors = [
+                'input[type="password"]',
+                'input[name="password"]',
+                'input[autocomplete="current-password"]',
+            ]
+            for sel in pwd_selectors:
+                try:
+                    page.wait_for_selector(sel, timeout=3000)
+                    page.fill(sel, password)
+                    print(f"[note_browser] パスワード入力 ({sel})")
+                    break
+                except Exception:
+                    continue
+
+            # ログインボタン押下
+            btn_selectors = [
+                'button[type="submit"]',
+                'button:has-text("ログイン")',
+                'input[type="submit"]',
+                'button:has-text("サインイン")',
+            ]
+            for sel in btn_selectors:
+                try:
+                    page.click(sel, timeout=5000)
+                    print(f"[note_browser] ログインボタン押下 ({sel})")
+                    break
+                except Exception:
+                    continue
+
+            print("[note_browser] ログイン後リダイレクト待機...")
+            page.wait_for_timeout(5000)
+            page.screenshot(path="/tmp/note_after_login.png")
+            print(f"[note_browser] ログイン後URL: {page.url}")
 
             # ── 新規記事ページへ ──────────────────────────────────
             print("[note_browser] 新規記事ページへ移動...")
