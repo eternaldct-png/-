@@ -679,6 +679,326 @@ def index():
     return HTML, 200, {"Content-Type": "text/html; charset=utf-8"}
 
 
+# ── note 下書き閲覧ページ ─────────────────────────────────────────
+
+NOTE_DRAFTS_HTML = r"""<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>note 下書き</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
+    background: #f5f5f0;
+    color: #1a1a1a;
+    min-height: 100vh;
+  }
+  header {
+    background: #41C9B4;
+    color: white;
+    padding: 16px 20px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  header h1 { font-size: 18px; font-weight: 700; }
+  header .count {
+    background: rgba(255,255,255,0.3);
+    border-radius: 12px;
+    padding: 2px 10px;
+    font-size: 13px;
+  }
+  .list-view { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .article-card {
+    background: white;
+    border-radius: 16px;
+    padding: 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    cursor: pointer;
+    transition: transform 0.1s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .article-card:active { transform: scale(0.98); }
+  .article-card h2 { font-size: 15px; font-weight: 600; line-height: 1.4; margin-bottom: 8px; }
+  .article-card .meta { font-size: 12px; color: #888; display: flex; gap: 8px; flex-wrap: wrap; }
+  .article-card .tag {
+    background: #e8f8f5;
+    color: #41C9B4;
+    border-radius: 8px;
+    padding: 2px 8px;
+  }
+  .article-card .status-draft { color: #f39c12; font-weight: 600; }
+  .article-card .status-uploaded { color: #41C9B4; font-weight: 600; }
+  .empty { text-align: center; padding: 60px 20px; color: #888; }
+  .empty p { margin-top: 8px; font-size: 14px; }
+
+  /* 詳細パネル */
+  .detail-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 200;
+    animation: fadeIn 0.2s;
+  }
+  .detail-overlay.open { display: block; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .detail-panel {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: white;
+    border-radius: 24px 24px 0 0;
+    max-height: 92vh;
+    display: flex;
+    flex-direction: column;
+    animation: slideUp 0.3s ease;
+    z-index: 201;
+  }
+  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  .detail-handle {
+    width: 40px;
+    height: 4px;
+    background: #ddd;
+    border-radius: 2px;
+    margin: 12px auto 0;
+    flex-shrink: 0;
+  }
+  .detail-header {
+    padding: 16px 20px 12px;
+    border-bottom: 1px solid #f0f0f0;
+    flex-shrink: 0;
+  }
+  .detail-header h2 { font-size: 16px; font-weight: 700; line-height: 1.4; }
+  .detail-header .close-btn {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: #f0f0f0;
+    border: none;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .detail-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px;
+    -webkit-overflow-scrolling: touch;
+    white-space: pre-wrap;
+    font-size: 14px;
+    line-height: 1.8;
+    color: #333;
+  }
+  .detail-footer {
+    padding: 16px 20px;
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+    border-top: 1px solid #f0f0f0;
+    flex-shrink: 0;
+  }
+  .copy-btn {
+    width: 100%;
+    background: #41C9B4;
+    color: white;
+    border: none;
+    border-radius: 14px;
+    padding: 16px;
+    font-size: 17px;
+    font-weight: 700;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.2s;
+  }
+  .copy-btn:active { background: #35b09c; }
+  .copy-btn.copied { background: #27ae60; }
+  .toast {
+    position: fixed;
+    bottom: 100px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.8);
+    color: white;
+    padding: 10px 20px;
+    border-radius: 20px;
+    font-size: 14px;
+    z-index: 300;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>note 下書き</h1>
+  <span class="count" id="count">0件</span>
+</header>
+
+<div class="list-view" id="list"></div>
+
+<div class="detail-overlay" id="overlay" onclick="closeDetail()">
+  <div class="detail-panel" onclick="event.stopPropagation()">
+    <div class="detail-handle"></div>
+    <div class="detail-header">
+      <h2 id="detail-title"></h2>
+      <button class="close-btn" onclick="closeDetail()">×</button>
+    </div>
+    <div class="detail-body" id="detail-body"></div>
+    <div class="detail-footer">
+      <button class="copy-btn" id="copy-btn" onclick="copyContent()">コピーして note に貼り付け</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let articles = [];
+let currentContent = '';
+
+async function load() {
+  const res = await fetch('/api/note-drafts');
+  const data = await res.json();
+  articles = data.articles || [];
+  render();
+}
+
+function render() {
+  const list = document.getElementById('list');
+  document.getElementById('count').textContent = articles.length + '件';
+  if (!articles.length) {
+    list.innerHTML = '<div class="empty"><div style="font-size:48px">📝</div><p>下書き記事がありません</p></div>';
+    return;
+  }
+  list.innerHTML = articles.map((a, i) => `
+    <div class="article-card" onclick="openDetail(${i})">
+      <h2>${a.title}</h2>
+      <div class="meta">
+        <span>${a.date}</span>
+        <span class="${a.status === 'draft' ? 'status-draft' : 'status-uploaded'}">
+          ${a.status === 'draft' ? '● 未投稿' : '✓ 投稿済'}
+        </span>
+        ${a.tags.map(t => `<span class="tag">${t}</span>`).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+function openDetail(i) {
+  const a = articles[i];
+  document.getElementById('detail-title').textContent = a.title;
+  document.getElementById('detail-body').textContent = a.body;
+  document.getElementById('copy-btn').textContent = 'コピーして note に貼り付け';
+  document.getElementById('copy-btn').classList.remove('copied');
+  currentContent = a.copy_text;
+  document.getElementById('overlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeDetail() {
+  document.getElementById('overlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+function copyContent() {
+  navigator.clipboard.writeText(currentContent).then(() => {
+    const btn = document.getElementById('copy-btn');
+    btn.textContent = 'コピーしました！';
+    btn.classList.add('copied');
+    showToast('クリップボードにコピーしました');
+  }).catch(() => {
+    // fallback
+    const ta = document.createElement('textarea');
+    ta.value = currentContent;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('コピーしました');
+  });
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+load();
+</script>
+</body>
+</html>
+"""
+
+
+@app.route("/note-drafts")
+def note_drafts():
+    return NOTE_DRAFTS_HTML, 200, {"Content-Type": "text/html; charset=utf-8"}
+
+
+@app.route("/api/note-drafts")
+def api_note_drafts():
+    import yaml
+    import re
+
+    articles_dir = Path("posts/note/articles")
+    result = []
+
+    if not articles_dir.exists():
+        return jsonify({"articles": []})
+
+    for fp in sorted(articles_dir.glob("*.md"), reverse=True):
+        content = fp.read_text(encoding="utf-8")
+
+        # frontmatter パース
+        meta, body = {}, content
+        if content.startswith("---"):
+            parts = content.split("---", 2)
+            if len(parts) >= 3:
+                try:
+                    meta = yaml.safe_load(parts[1]) or {}
+                    body = parts[2].strip()
+                except Exception:
+                    pass
+
+        title = meta.get("title", fp.stem)
+        date = meta.get("date", "")
+        tags = meta.get("tags", [])
+        status = meta.get("note_status", "draft")
+
+        # コピー用テキスト（タイトル＋本文）
+        copy_text = f"{title}\n\n{body}"
+
+        result.append({
+            "title": title,
+            "date": str(date)[:10] if date else "",
+            "tags": [str(t) for t in tags],
+            "status": status,
+            "body": body,
+            "copy_text": copy_text,
+            "filename": fp.name,
+        })
+
+    return jsonify({"articles": result})
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
