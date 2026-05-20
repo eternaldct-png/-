@@ -825,6 +825,55 @@ NOTE_DRAFTS_HTML = r"""<!DOCTYPE html>
   }
   .copy-btn:active { background: #35b09c; }
   .copy-btn.copied { background: #27ae60; }
+  .delete-btn {
+    width: 100%;
+    background: none;
+    color: #e74c3c;
+    border: 2px solid #e74c3c;
+    border-radius: 14px;
+    padding: 12px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    margin-top: 10px;
+    transition: background 0.2s, color 0.2s;
+  }
+  .delete-btn:active { background: #e74c3c; color: white; }
+  /* 確認ダイアログ */
+  .confirm-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 400;
+    align-items: center;
+    justify-content: center;
+  }
+  .confirm-overlay.open { display: flex; }
+  .confirm-box {
+    background: white;
+    border-radius: 20px;
+    padding: 24px 20px;
+    margin: 20px;
+    max-width: 320px;
+    width: 100%;
+    text-align: center;
+  }
+  .confirm-box h3 { font-size: 17px; margin-bottom: 8px; }
+  .confirm-box p { font-size: 14px; color: #666; margin-bottom: 20px; line-height: 1.5; }
+  .confirm-actions { display: flex; gap: 10px; }
+  .confirm-actions button {
+    flex: 1;
+    padding: 12px;
+    border-radius: 12px;
+    border: none;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .btn-cancel { background: #f0f0f0; color: #333; }
+  .btn-delete { background: #e74c3c; color: white; }
   .toast {
     position: fixed;
     bottom: 100px;
@@ -862,6 +911,18 @@ NOTE_DRAFTS_HTML = r"""<!DOCTYPE html>
     <div class="detail-body" id="detail-body"></div>
     <div class="detail-footer">
       <button class="copy-btn" id="copy-btn" onclick="copyContent()">コピーして note に貼り付け</button>
+      <button class="delete-btn" onclick="confirmDelete()">この記事を削除</button>
+    </div>
+  </div>
+</div>
+
+<div class="confirm-overlay" id="confirm-overlay">
+  <div class="confirm-box">
+    <h3>記事を削除しますか？</h3>
+    <p id="confirm-title-text"></p>
+    <div class="confirm-actions">
+      <button class="btn-cancel" onclick="closeConfirm()">キャンセル</button>
+      <button class="btn-delete" onclick="deleteArticle()">削除する</button>
     </div>
   </div>
 </div>
@@ -871,6 +932,8 @@ NOTE_DRAFTS_HTML = r"""<!DOCTYPE html>
 <script>
 let articles = [];
 let currentContent = '';
+let currentFilename = '';
+let currentIndex = -1;
 
 async function load() {
   const res = await fetch('/api/note-drafts');
@@ -902,13 +965,42 @@ function render() {
 
 function openDetail(i) {
   const a = articles[i];
+  currentIndex = i;
+  currentContent = a.copy_text;
+  currentFilename = a.filename;
   document.getElementById('detail-title').textContent = a.title;
   document.getElementById('detail-body').textContent = a.body;
   document.getElementById('copy-btn').textContent = 'コピーして note に貼り付け';
   document.getElementById('copy-btn').classList.remove('copied');
-  currentContent = a.copy_text;
   document.getElementById('overlay').classList.add('open');
   document.body.style.overflow = 'hidden';
+}
+
+function confirmDelete() {
+  const a = articles[currentIndex];
+  document.getElementById('confirm-title-text').textContent = '「' + a.title + '」';
+  document.getElementById('confirm-overlay').classList.add('open');
+}
+
+function closeConfirm() {
+  document.getElementById('confirm-overlay').classList.remove('open');
+}
+
+async function deleteArticle() {
+  closeConfirm();
+  const res = await fetch('/api/note-drafts/delete', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({filename: currentFilename}),
+  });
+  const data = await res.json();
+  if (data.ok) {
+    showToast('削除しました');
+    closeDetail();
+    await load();
+  } else {
+    showToast('削除に失敗しました: ' + (data.error || ''));
+  }
 }
 
 function closeDetail() {
@@ -997,6 +1089,22 @@ def api_note_drafts():
         })
 
     return jsonify({"articles": result})
+
+
+@app.route("/api/note-drafts/delete", methods=["POST"])
+def api_note_drafts_delete():
+    data = request.get_json(force=True)
+    filename = data.get("filename", "").strip()
+
+    if not filename or "/" in filename or "\\" in filename or not filename.endswith(".md"):
+        return jsonify({"ok": False, "error": "invalid filename"})
+
+    fp = Path("posts/note/articles") / filename
+    if not fp.exists():
+        return jsonify({"ok": False, "error": "file not found"})
+
+    fp.unlink()
+    return jsonify({"ok": True})
 
 
 if __name__ == "__main__":
