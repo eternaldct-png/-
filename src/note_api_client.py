@@ -51,19 +51,22 @@ class NoteAPIClient:
         if csrf:
             self.session.headers["X-CSRF-Token"] = csrf
 
-        resp = self.session.post(
-            f"{self.BASE_URL}/api/v1/sessions",
-            json={"login": email, "password": password},
-            headers={"Content-Type": "application/json"},
-            timeout=15,
-        )
-
-        if resp.status_code == 200:
-            data = resp.json().get("data", {})
-            self._urlname = data.get("urlname") or data.get("id")
-            self._authenticated = True
-            print(f"[note_api] ログイン成功: @{self._urlname}")
-            return True
+        # v2 → v1 の順で試行
+        for endpoint in ["/api/v2/sessions", "/api/v1/sessions"]:
+            resp = self.session.post(
+                f"{self.BASE_URL}{endpoint}",
+                json={"login": email, "password": password},
+                headers={"Content-Type": "application/json"},
+                timeout=15,
+            )
+            if resp.status_code == 200:
+                data = resp.json().get("data", {})
+                self._urlname = data.get("urlname") or data.get("id")
+                self._authenticated = True
+                print(f"[note_api] ログイン成功: @{self._urlname}")
+                return True
+            if resp.status_code != 404:
+                break
 
         print(f"[note_api] ログイン失敗 (HTTP {resp.status_code}): {resp.text[:300]}")
         return False
