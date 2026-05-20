@@ -1,9 +1,17 @@
-name: note Article Generator
+name: note 下書き自動生成 (kazuto)
 
 on:
   schedule:
-    # 毎週月曜 7:00 JST (UTC 日曜 22:00)
+    # 月曜 7:00 JST (UTC 日曜 22:00)
     - cron: "0 22 * * 0"
+    # 火曜 7:00 JST (UTC 月曜 22:00)
+    - cron: "0 22 * * 1"
+    # 水曜 7:00 JST (UTC 火曜 22:00)
+    - cron: "0 22 * * 2"
+    # 木曜 7:00 JST (UTC 水曜 22:00)
+    - cron: "0 22 * * 3"
+    # 金曜 7:00 JST (UTC 木曜 22:00)
+    - cron: "0 22 * * 4"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -11,13 +19,17 @@ on:
         required: false
         default: 'false'
         type: boolean
+      count:
+        description: '生成本数（1〜5）'
+        required: false
+        default: '1'
+        type: string
 
 jobs:
   generate:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      issues: write
 
     steps:
       - name: Checkout repository
@@ -32,75 +44,27 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Generate note article
+      - name: Generate kazuto note article
         id: generate
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          if [ "${{ inputs.dry_run }}" = "true" ]; then
-            python src/main.py --platform note --dry-run
-          else
-            python src/main.py --platform note
-          fi
+          COUNT="${{ inputs.count || '1' }}"
+          DRY_RUN="${{ inputs.dry_run || 'false' }}"
+          for i in $(seq 1 $COUNT); do
+            echo "=== 記事生成 ${i}/${COUNT} ==="
+            if [ "$DRY_RUN" = "true" ]; then
+              python src/main.py --platform note --persona persona/kazuto_config.yaml --dry-run
+            else
+              python src/main.py --platform note --persona persona/kazuto_config.yaml
+            fi
+          done
 
-      - name: Commit article file
+      - name: Commit article files
         if: ${{ inputs.dry_run != 'true' }}
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add posts/note/
-          git diff --staged --quiet || git commit -m "chore: note記事生成 [skip ci]"
+          git diff --staged --quiet || git commit -m "chore: note記事生成 (kazuto) [skip ci]"
           git push || true
-
-      - name: Create publishing reminder issue
-        if: ${{ inputs.dry_run != 'true' }}
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const path = require('path');
-
-            // 最新の記事ファイルを探す
-            const articlesDir = 'posts/note/articles';
-            let latestFile = '';
-            let latestTitle = '';
-            let latestBody = '';
-
-            if (fs.existsSync(articlesDir)) {
-              const files = fs.readdirSync(articlesDir)
-                .filter(f => f.endsWith('.md'))
-                .sort()
-                .reverse();
-
-              if (files.length > 0) {
-                latestFile = files[0];
-                const content = fs.readFileSync(`${articlesDir}/${latestFile}`, 'utf8');
-                const titleMatch = content.match(/title:\s*"(.+?)"/);
-                latestTitle = titleMatch ? titleMatch[1] : latestFile;
-                latestBody = content.substring(0, 300) + '...';
-              }
-            }
-
-            await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: `📝 note記事 公開待ち: ${latestTitle}`,
-              body: `## note記事が生成されました
-
-            **ファイル**: \`posts/note/articles/${latestFile}\`
-
-            ### 公開手順
-            - [ ] 記事内容を確認・編集
-            - [ ] [note.com](https://note.com) にログイン
-            - [ ] 「記事を書く」→ Markdownモード
-            - [ ] ファイルの本文をコピー&ペースト
-            - [ ] 有料設定（メンバーシップ限定 or 有料記事）を確認
-            - [ ] 公開後、このIssueの \`note_url\` にURLを記入して Close
-
-            ### プレビュー（冒頭300文字）
-            \`\`\`
-            ${latestBody}
-            \`\`\`
-            `,
-              labels: ['note', 'content-ready'],
-            });

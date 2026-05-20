@@ -1,0 +1,39 @@
+name: note 下書きアップロード
+
+on:
+  workflow_dispatch:       # 手動実行
+  push:
+    paths:
+      - "posts/note/articles/*.md"   # 記事追加時に自動実行
+
+jobs:
+  push-drafts:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python セットアップ
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 依存パッケージインストール
+        run: pip install -r requirements.txt
+
+      - name: note.com に下書きをアップロード
+        env:
+          NOTE_EMAIL: ${{ secrets.NOTE_EMAIL }}
+          NOTE_PASSWORD: ${{ secrets.NOTE_PASSWORD }}
+          NOTE_SESSION_TOKEN: ${{ secrets.NOTE_SESSION_TOKEN }}
+        run: python src/push_note_drafts.py
+
+      - name: アップロード済み記事をコミット
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add posts/note/articles/ posts/note/history.json
+          git diff --staged --quiet || git commit -m "chore: note下書きアップロード済みに更新 [skip ci]"
+          git push

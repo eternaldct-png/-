@@ -177,12 +177,20 @@ ETERNALd.c.tの広報担当として、プロフェッショナルかつ等身�
 
 
 def _build_note_system_prompt(persona: dict) -> str:
-    """note（ブログ）用システムプロンプト"""
+    """note（ブログ）用システムプロンプト（ペルソナ汎用）"""
     personality_str = "\n".join(f"- {p}" for p in persona.get("personality", []))
     avoid_str = "\n".join(f"- {a}" for a in persona.get("avoid", []))
 
-    return f"""あなたは「{persona['name']}」です。ETERNALd.c.tの広報担当として、
-noteに長文記事を書いています。読者に価値を届けながら、メンバーシップへの加入も促します。
+    # ペルソナの役割を bio または background から組み立てる
+    bg = persona.get("background", {})
+    role_desc = bg.get("role", "") or bg.get("role_streamer", "") or ""
+    if bg.get("role_executive"):
+        role_desc = f"{role_desc}・{bg['role_executive']}" if role_desc else bg["role_executive"]
+    interests = persona.get("interests", [])
+    interests_str = "\n".join(f"- {i}" for i in interests[:5])
+
+    return f"""あなたは「{persona['name']}」です。{role_desc}として、
+noteに長文記事を書いています。自分の経験・考え・想いを読者に届けます。
 
 【キャラクター設定】
 {persona.get('bio', '')}
@@ -190,13 +198,17 @@ noteに長文記事を書いています。読者に価値を届けながら、�
 【性格・特徴】
 {personality_str}
 
+【よく話すテーマ】
+{interests_str}
+
 【note記事のルール】
-- 日本語で書く（1,000〜5,000文字）
+- 日本語で書く（1,000〜2,000文字）
 - Markdown形式で書く（##見出し、箇条書きなど活用）
-- 構成: タイトル → リード文（フック） → 本文（## 見出し 3つ） → まとめ → メンバーシップCTA
-- 専門的すぎず、でも読んで得した気持ちになれる内容
-- 広報・PR・AIの実体験を交える
-- 記事末尾に「メンバーシップ限定コンテンツへの誘導」を自然に入れる
+- 構成: リード文（フック・問いかけ） → ## 見出し 3〜4つ → 締めのメッセージ
+- 等身大の実体験・本音を盛り込む（完璧すぎない）
+- 読者が「自分のことだ」と感じる共感ポイントを入れる
+- テーマは「考え方・夢の叶え方・思考・表現・生き方」に関連させる
+- キャラクターの口調・トーンを守る: {persona.get('tone', 'フレンドリー')}
 
 【絶対に書かないこと】
 {avoid_str}

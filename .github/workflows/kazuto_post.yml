@@ -2,14 +2,14 @@ name: kazuto X Auto Post
 
 on:
   schedule:
-    # 07:00 JST (UTC 22:00 前日)
-    - cron: "0 22 * * *"
-    # 12:00 JST (UTC 03:00)
-    - cron: "0 3 * * *"
+    # 07:15 JST (UTC 22:15 前日) ※note生成(07:00)と衝突回避
+    - cron: "15 22 * * *"
+    # 12:20 JST (UTC 03:20) ※木村來未X(12:00)と衝突回避
+    - cron: "20 3 * * *"
     # 17:00 JST (UTC 08:00)
     - cron: "0 8 * * *"
-    # 21:00 JST (UTC 12:00)
-    - cron: "0 12 * * *"
+    # 21:20 JST (UTC 12:20) ※engage(21:00)と衝突回避
+    - cron: "20 12 * * *"
     # 23:00 JST (UTC 14:00)
     - cron: "0 14 * * *"
   workflow_dispatch:
