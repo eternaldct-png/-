@@ -7,6 +7,10 @@ services:
     plan: free
     envVars:
       - key: WEB_PASSWORD
-        sync: false          # ログインパスワード（任意の文字列を設定）
+        sync: false          # ログインパスワード（任意の文字列を設定、/goods/admin にも使用）
       - key: ANTHROPIC_API_KEY
         sync: false          # 投稿文生成に必要
+      - key: STRIPE_SECRET_KEY
+        sync: false          # 商品購入ページ /goods の決済に必要（https://dashboard.stripe.com/apikeys）
+      - key: FLASK_SECRET_KEY
+        sync: false          # /goods/admin のログインセッション用（任意の文字列を設定）
