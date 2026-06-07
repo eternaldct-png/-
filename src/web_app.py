@@ -1129,12 +1129,14 @@ GOODS_HTML = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>商品のご注文・お支払い</title>
+<title>商品のご注文・お支払い | ETERNALd.c.t</title>
 <style>
 :root {
-  --bg: #0d0d1f; --surface: #181830; --surface2: #21213d;
-  --accent: #7c3aed; --accent-light: #a78bfa; --accent-glow: rgba(124,58,237,0.25);
-  --text: #e2e8f0; --muted: #8892a4; --border: #2a2a4a;
+  --bg: #f7f7fb; --surface: #ffffff; --surface2: #f1f0fa;
+  --grad: linear-gradient(135deg, #7c3aed, #d946ef, #ec4899);
+  --accent-text: #9333ea; --accent-glow: rgba(124,58,237,0.10);
+  --text: #1f2333; --muted: #6b7280; --border: #eceaf5;
+  --shadow: 0 6px 24px rgba(124,58,237,0.08);
 }
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 body {
@@ -1144,30 +1146,40 @@ body {
 }
 .header {
   background: var(--surface); border-bottom: 1px solid var(--border);
-  padding: 20px 18px; text-align: center;
+  padding: 28px 18px 24px; text-align: center;
 }
-.header h1 { font-size: 18px; font-weight: 700; }
-.header p { font-size: 12px; color: var(--muted); margin-top: 4px; }
-.main { padding: 18px 16px; max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.header .badge {
+  display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+  color: white; background: var(--grad); padding: 4px 14px; border-radius: 999px; margin-bottom: 10px;
+}
+.header h1 { font-size: 19px; font-weight: 800; }
+.header p { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.6; }
+.main { padding: 22px 16px; max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
 .product-card {
-  background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 20px;
+  box-shadow: var(--shadow);
 }
-.product-name { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
-.product-desc { font-size: 13px; color: var(--muted); line-height: 1.6; margin-bottom: 12px; white-space: pre-wrap; }
-.product-price { font-size: 20px; font-weight: 800; color: var(--accent-light); margin-bottom: 14px; }
+.product-icon {
+  width: 52px; height: 52px; border-radius: 14px; background: var(--grad);
+  display: flex; align-items: center; justify-content: center; font-size: 24px; margin-bottom: 14px;
+}
+.product-name { font-size: 17px; font-weight: 800; margin-bottom: 6px; }
+.product-desc { font-size: 13px; color: var(--muted); line-height: 1.7; margin-bottom: 14px; white-space: pre-wrap; }
+.product-price { font-size: 22px; font-weight: 800; color: var(--accent-text); margin-bottom: 16px; }
 .buy-btn {
-  width: 100%; padding: 14px; border: none; border-radius: 12px;
-  background: linear-gradient(135deg, var(--accent), #5b21b6); color: white;
+  width: 100%; padding: 15px; border: none; border-radius: 12px;
+  background: var(--grad); color: white;
   font-size: 15px; font-weight: 800; cursor: pointer; letter-spacing: 0.02em;
   transition: opacity 0.2s, transform 0.1s;
+  box-shadow: 0 6px 18px rgba(217,70,239,0.28);
 }
 .buy-btn:active { opacity: 0.85; transform: scale(0.98); }
-.buy-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.note { font-size: 12px; color: var(--muted); text-align: center; line-height: 1.7; margin-top: 4px; }
+.buy-btn:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+.note { font-size: 12px; color: var(--muted); text-align: center; line-height: 1.8; margin-top: 4px; }
 .empty { text-align: center; padding: 48px 24px; color: var(--muted); font-size: 14px; }
 .toast {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(10px);
-  background: var(--surface2); border: 1px solid #ef4444; color: #ef4444;
+  background: var(--surface); border: 1px solid #ef4444; color: #ef4444; box-shadow: var(--shadow);
   padding: 10px 20px; border-radius: 999px; font-size: 13px; font-weight: 600;
   white-space: nowrap; opacity: 0; transition: all 0.2s; pointer-events: none; z-index: 999;
 }
@@ -1176,8 +1188,9 @@ body {
 </head>
 <body>
 <div class="header">
+  <span class="badge">ETERNAL d.c.t</span>
   <h1>🛍 商品のご注文</h1>
-  <p>商品を選んでお手続きください。お支払いは安全な決済画面（Stripe）で行われます。</p>
+  <p>商品を選んでお手続きください。<br>お支払いは安全な決済画面（Stripe）で行われます。</p>
 </div>
 <div class="main">
   <div id="products"></div>
@@ -1199,6 +1212,7 @@ function render() {
   }
   el.innerHTML = PRODUCTS.map(p => `
     <div class="product-card">
+      <div class="product-icon">🛍</div>
       <div class="product-name">${escHtml(p.name)}</div>
       ${p.description ? `<div class="product-desc">${escHtml(p.description)}</div>` : ''}
       <div class="product-price">¥${p.price.toLocaleString()}</div>
@@ -1247,9 +1261,14 @@ GOODS_RESULT_HTML = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>__TITLE__</title>
+<title>__TITLE__ | ETERNALd.c.t</title>
 <style>
-:root { --bg: #0d0d1f; --surface: #181830; --accent-light: #a78bfa; --text: #e2e8f0; --muted: #8892a4; --border: #2a2a4a; }
+:root {
+  --bg: #f7f7fb; --surface: #ffffff;
+  --grad: linear-gradient(135deg, #7c3aed, #d946ef, #ec4899);
+  --text: #1f2333; --muted: #6b7280; --border: #eceaf5;
+  --shadow: 0 6px 24px rgba(124,58,237,0.08);
+}
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
   background: var(--bg); color: var(--text); min-height: 100vh;
@@ -1257,22 +1276,27 @@ body {
   display: flex; align-items: center; justify-content: center; padding: 24px;
 }
 .card {
-  background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
-  padding: 36px 28px; max-width: 380px; text-align: center;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 20px;
+  box-shadow: var(--shadow);
+  padding: 40px 30px; max-width: 380px; text-align: center;
 }
-.icon { font-size: 44px; margin-bottom: 14px; }
-h1 { font-size: 18px; margin-bottom: 10px; }
-p { font-size: 14px; color: var(--muted); line-height: 1.7; margin-bottom: 20px; }
+.icon-badge {
+  width: 64px; height: 64px; border-radius: 50%; background: var(--grad);
+  display: flex; align-items: center; justify-content: center; font-size: 30px;
+  margin: 0 auto 18px;
+}
+h1 { font-size: 18px; margin-bottom: 10px; font-weight: 800; }
+p { font-size: 14px; color: var(--muted); line-height: 1.8; margin-bottom: 24px; }
 a {
-  display: inline-block; padding: 12px 28px; border-radius: 10px;
-  background: var(--accent-light); color: #181830; font-weight: 700; font-size: 14px;
-  text-decoration: none;
+  display: inline-block; padding: 13px 30px; border-radius: 10px;
+  background: var(--grad); color: white; font-weight: 700; font-size: 14px;
+  text-decoration: none; box-shadow: 0 6px 18px rgba(217,70,239,0.28);
 }
 </style>
 </head>
 <body>
 <div class="card">
-  <div class="icon">__ICON__</div>
+  <div class="icon-badge">__ICON__</div>
   <h1>__HEADLINE__</h1>
   <p>__MESSAGE__</p>
   <a href="/goods">商品一覧に戻る</a>
@@ -1286,29 +1310,35 @@ GOODS_ADMIN_LOGIN_HTML = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>注文管理ログイン</title>
+<title>注文管理ログイン | ETERNALd.c.t</title>
 <style>
-:root { --bg: #0d0d1f; --surface: #181830; --accent: #7c3aed; --accent-light: #a78bfa; --text: #e2e8f0; --muted: #8892a4; --border: #2a2a4a; }
+:root {
+  --bg: #f7f7fb; --surface: #ffffff;
+  --grad: linear-gradient(135deg, #7c3aed, #d946ef, #ec4899);
+  --accent: #9333ea; --text: #1f2333; --muted: #6b7280; --border: #eceaf5;
+  --shadow: 0 6px 24px rgba(124,58,237,0.08);
+}
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
   background: var(--bg); color: var(--text); min-height: 100vh;
   font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
   display: flex; align-items: center; justify-content: center; padding: 24px;
 }
-.card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 32px 28px; max-width: 340px; width: 100%; }
-h1 { font-size: 17px; margin-bottom: 18px; text-align: center; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; box-shadow: var(--shadow); padding: 36px 28px; max-width: 340px; width: 100%; }
+h1 { font-size: 17px; margin-bottom: 20px; text-align: center; font-weight: 800; }
 input {
-  width: 100%; padding: 12px 14px; margin-bottom: 14px;
+  width: 100%; padding: 13px 14px; margin-bottom: 14px;
   background: var(--bg); border: 1.5px solid var(--border); border-radius: 10px;
   color: var(--text); font-size: 15px; outline: none;
 }
 input:focus { border-color: var(--accent); }
 button {
-  width: 100%; padding: 13px; border: none; border-radius: 10px;
-  background: linear-gradient(135deg, var(--accent), #5b21b6); color: white;
+  width: 100%; padding: 14px; border: none; border-radius: 10px;
+  background: var(--grad); color: white;
   font-size: 15px; font-weight: 700; cursor: pointer;
+  box-shadow: 0 6px 18px rgba(217,70,239,0.28);
 }
-.error { color: #ef4444; font-size: 13px; text-align: center; margin-top: 12px; }
+.error { color: #ef4444; font-size: 13px; text-align: center; margin-top: 14px; }
 </style>
 </head>
 <body>
@@ -1329,28 +1359,38 @@ GOODS_ADMIN_HTML = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>注文一覧</title>
+<title>注文一覧 | ETERNALd.c.t</title>
 <style>
-:root { --bg: #0d0d1f; --surface: #181830; --accent-light: #a78bfa; --text: #e2e8f0; --muted: #8892a4; --border: #2a2a4a; }
+:root {
+  --bg: #f7f7fb; --surface: #ffffff;
+  --grad: linear-gradient(135deg, #7c3aed, #d946ef, #ec4899);
+  --accent-text: #9333ea; --text: #1f2333; --muted: #6b7280; --border: #eceaf5;
+  --shadow: 0 6px 24px rgba(124,58,237,0.08);
+}
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
   background: var(--bg); color: var(--text); min-height: 100vh;
   font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
-  padding: 18px;
+  padding: 22px;
 }
-.header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
-.header h1 { font-size: 18px; }
+.header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; flex-wrap: wrap; gap: 10px; }
+.header h1 { font-size: 19px; font-weight: 800; }
 .header .count { font-size: 13px; color: var(--muted); }
-.header a { font-size: 13px; color: var(--accent-light); text-decoration: none; }
-.table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; }
+.header a {
+  font-size: 13px; font-weight: 700; color: white; text-decoration: none;
+  background: var(--grad); padding: 8px 16px; border-radius: 999px;
+  box-shadow: 0 6px 18px rgba(217,70,239,0.22);
+}
+.table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); }
 table { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 13px; }
-th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
-th { background: var(--surface); color: var(--muted); font-weight: 700; position: sticky; top: 0; }
-td { background: var(--bg); }
+th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+th { background: var(--surface2, #f7f5fc); color: var(--muted); font-weight: 700; position: sticky; top: 0; }
+td { background: var(--surface); }
 tr:last-child td { border-bottom: none; }
 td.address, td.contact, td.product { white-space: normal; min-width: 160px; }
-.empty-row { text-align: center; color: var(--muted); padding: 40px 16px; white-space: normal; }
-.note { font-size: 12px; color: var(--muted); margin-top: 14px; line-height: 1.7; }
+.empty-row { text-align: center; color: var(--muted); padding: 48px 16px; white-space: normal; }
+.note { font-size: 12px; color: var(--muted); margin-top: 16px; line-height: 1.8; }
+.note a { color: var(--accent-text); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -1373,7 +1413,7 @@ td.address, td.contact, td.product { white-space: normal; min-width: 160px; }
 </div>
 <p class="note">
   この一覧は Stripe に保存された注文情報をもとに表示しています（このサイト側ではお客様の個人情報を保存していません）。<br>
-  より詳しい情報や返金などの操作は <a href="https://dashboard.stripe.com/payments" style="color: var(--accent-light);">Stripe ダッシュボード</a> から行えます。
+  より詳しい情報や返金などの操作は <a href="https://dashboard.stripe.com/payments">Stripe ダッシュボード</a> から行えます。
 </p>
 </body>
 </html>"""
