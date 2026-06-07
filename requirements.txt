@@ -17,3 +17,6 @@ requests>=2.31.0
 # 投稿管理ダッシュボード (Web UI)
 flask>=3.0.0
 gunicorn>=21.2.0
+
+# 商品購入・決済 (Stripe)
+stripe>=10.0.0

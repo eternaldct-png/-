@@ -7,11 +7,13 @@ kazuto 投稿文ジェネレーター — スマホ対応Webアプリ
 import os
 import sys
 from pathlib import Path
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, session, redirect
+from markupsafe import escape
 
 sys.path.insert(0, str(Path(__file__).parent))
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(24))
 
 
 # ── 生成 API ──────────────────────────────────────────────────────
@@ -1105,6 +1107,437 @@ def api_note_drafts_delete():
 
     fp.unlink()
     return jsonify({"ok": True})
+
+
+# ── 商品購入ページ /goods（Stripe決済 + 注文一覧）──────────────────
+
+def _load_goods_products():
+    """persona/goods_config.yaml から販売商品の一覧を読み込む"""
+    import yaml
+
+    path = Path("persona/goods_config.yaml")
+    if not path.exists():
+        return []
+    with open(path, "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+    products = data.get("products", [])
+    return [p for p in products if p.get("id") and p.get("name") and p.get("price")]
+
+
+GOODS_HTML = r"""<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>商品のご注文・お支払い</title>
+<style>
+:root {
+  --bg: #0d0d1f; --surface: #181830; --surface2: #21213d;
+  --accent: #7c3aed; --accent-light: #a78bfa; --accent-glow: rgba(124,58,237,0.25);
+  --text: #e2e8f0; --muted: #8892a4; --border: #2a2a4a;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body {
+  background: var(--bg); color: var(--text); min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
+  padding-bottom: 40px;
+}
+.header {
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 20px 18px; text-align: center;
+}
+.header h1 { font-size: 18px; font-weight: 700; }
+.header p { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.main { padding: 18px 16px; max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.product-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px;
+}
+.product-name { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+.product-desc { font-size: 13px; color: var(--muted); line-height: 1.6; margin-bottom: 12px; white-space: pre-wrap; }
+.product-price { font-size: 20px; font-weight: 800; color: var(--accent-light); margin-bottom: 14px; }
+.buy-btn {
+  width: 100%; padding: 14px; border: none; border-radius: 12px;
+  background: linear-gradient(135deg, var(--accent), #5b21b6); color: white;
+  font-size: 15px; font-weight: 800; cursor: pointer; letter-spacing: 0.02em;
+  transition: opacity 0.2s, transform 0.1s;
+}
+.buy-btn:active { opacity: 0.85; transform: scale(0.98); }
+.buy-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.note { font-size: 12px; color: var(--muted); text-align: center; line-height: 1.7; margin-top: 4px; }
+.empty { text-align: center; padding: 48px 24px; color: var(--muted); font-size: 14px; }
+.toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(10px);
+  background: var(--surface2); border: 1px solid #ef4444; color: #ef4444;
+  padding: 10px 20px; border-radius: 999px; font-size: 13px; font-weight: 600;
+  white-space: nowrap; opacity: 0; transition: all 0.2s; pointer-events: none; z-index: 999;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>🛍 商品のご注文</h1>
+  <p>商品を選んでお手続きください。お支払いは安全な決済画面（Stripe）で行われます。</p>
+</div>
+<div class="main">
+  <div id="products"></div>
+  <p class="note">「購入手続きへ進む」を押すと決済画面に移動します。<br>お届け先のご住所・お名前・ご連絡先は決済画面でご入力いただきます。</p>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const PRODUCTS = __PRODUCTS_JSON__;
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function render() {
+  const el = document.getElementById('products');
+  if (!PRODUCTS.length) {
+    el.innerHTML = '<div class="empty">現在販売中の商品はありません。</div>';
+    return;
+  }
+  el.innerHTML = PRODUCTS.map(p => `
+    <div class="product-card">
+      <div class="product-name">${escHtml(p.name)}</div>
+      ${p.description ? `<div class="product-desc">${escHtml(p.description)}</div>` : ''}
+      <div class="product-price">¥${p.price.toLocaleString()}</div>
+      <button class="buy-btn" onclick="checkout('${p.id}', this)">購入手続きへ進む</button>
+    </div>
+  `).join('');
+}
+
+async function checkout(productId, btn) {
+  btn.disabled = true;
+  btn.textContent = '処理中…';
+  try {
+    const res = await fetch('/api/goods/checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ product_id: productId }),
+    });
+    const data = await res.json();
+    if (data.ok && data.url) {
+      window.location.href = data.url;
+      return;
+    }
+    toast(data.error || '決済画面の準備に失敗しました');
+  } catch (e) {
+    toast('通信エラーが発生しました');
+  }
+  btn.disabled = false;
+  btn.textContent = '購入手続きへ進む';
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+render();
+</script>
+</body>
+</html>"""
+
+
+GOODS_RESULT_HTML = r"""<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>__TITLE__</title>
+<style>
+:root { --bg: #0d0d1f; --surface: #181830; --accent-light: #a78bfa; --text: #e2e8f0; --muted: #8892a4; --border: #2a2a4a; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg); color: var(--text); min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+.card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+  padding: 36px 28px; max-width: 380px; text-align: center;
+}
+.icon { font-size: 44px; margin-bottom: 14px; }
+h1 { font-size: 18px; margin-bottom: 10px; }
+p { font-size: 14px; color: var(--muted); line-height: 1.7; margin-bottom: 20px; }
+a {
+  display: inline-block; padding: 12px 28px; border-radius: 10px;
+  background: var(--accent-light); color: #181830; font-weight: 700; font-size: 14px;
+  text-decoration: none;
+}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="icon">__ICON__</div>
+  <h1>__HEADLINE__</h1>
+  <p>__MESSAGE__</p>
+  <a href="/goods">商品一覧に戻る</a>
+</div>
+</body>
+</html>"""
+
+
+GOODS_ADMIN_LOGIN_HTML = r"""<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>注文管理ログイン</title>
+<style>
+:root { --bg: #0d0d1f; --surface: #181830; --accent: #7c3aed; --accent-light: #a78bfa; --text: #e2e8f0; --muted: #8892a4; --border: #2a2a4a; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg); color: var(--text); min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 32px 28px; max-width: 340px; width: 100%; }
+h1 { font-size: 17px; margin-bottom: 18px; text-align: center; }
+input {
+  width: 100%; padding: 12px 14px; margin-bottom: 14px;
+  background: var(--bg); border: 1.5px solid var(--border); border-radius: 10px;
+  color: var(--text); font-size: 15px; outline: none;
+}
+input:focus { border-color: var(--accent); }
+button {
+  width: 100%; padding: 13px; border: none; border-radius: 10px;
+  background: linear-gradient(135deg, var(--accent), #5b21b6); color: white;
+  font-size: 15px; font-weight: 700; cursor: pointer;
+}
+.error { color: #ef4444; font-size: 13px; text-align: center; margin-top: 12px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🔒 注文管理ログイン</h1>
+  <form method="POST">
+    <input type="password" name="password" placeholder="パスワード" autofocus required>
+    <button type="submit">ログイン</button>
+  </form>
+  __ERROR__
+</div>
+</body>
+</html>"""
+
+
+GOODS_ADMIN_HTML = r"""<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>注文一覧</title>
+<style>
+:root { --bg: #0d0d1f; --surface: #181830; --accent-light: #a78bfa; --text: #e2e8f0; --muted: #8892a4; --border: #2a2a4a; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg); color: var(--text); min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
+  padding: 18px;
+}
+.header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 8px; }
+.header h1 { font-size: 18px; }
+.header .count { font-size: 13px; color: var(--muted); }
+.header a { font-size: 13px; color: var(--accent-light); text-decoration: none; }
+.table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; }
+table { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 13px; }
+th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+th { background: var(--surface); color: var(--muted); font-weight: 700; position: sticky; top: 0; }
+td { background: var(--bg); }
+tr:last-child td { border-bottom: none; }
+td.address, td.contact, td.product { white-space: normal; min-width: 160px; }
+.empty-row { text-align: center; color: var(--muted); padding: 40px 16px; white-space: normal; }
+.note { font-size: 12px; color: var(--muted); margin-top: 14px; line-height: 1.7; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>📋 注文一覧</h1>
+  <span class="count">__COUNT__ 件（お支払い完了分）</span>
+  <a href="/goods/admin/logout">ログアウト</a>
+</div>
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr>
+      <th>日時</th><th>商品</th><th>金額</th><th>お名前</th><th>お届け先住所</th><th>連絡先</th>
+    </tr>
+  </thead>
+  <tbody>
+    __ROWS__
+  </tbody>
+</table>
+</div>
+<p class="note">
+  この一覧は Stripe に保存された注文情報をもとに表示しています（このサイト側ではお客様の個人情報を保存していません）。<br>
+  より詳しい情報や返金などの操作は <a href="https://dashboard.stripe.com/payments" style="color: var(--accent-light);">Stripe ダッシュボード</a> から行えます。
+</p>
+</body>
+</html>"""
+
+
+def _fetch_goods_orders(limit=100):
+    """Stripe から /goods 経由の支払い完了済みセッションを取得し、一覧用データに整形する"""
+    import stripe
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    secret_key = os.environ.get("STRIPE_SECRET_KEY", "")
+    if not secret_key:
+        return []
+    stripe.api_key = secret_key
+
+    JST = ZoneInfo("Asia/Tokyo")
+    orders = []
+    try:
+        result = stripe.checkout.Session.list(limit=limit)
+        for s in result.auto_paging_iter():
+            if s.get("payment_status") != "paid":
+                continue
+            metadata = s.get("metadata") or {}
+            if "product_id" not in metadata:
+                continue  # /goods 以外で作られたセッションは除外
+
+            shipping = s.get("shipping_details") or s.get("shipping") or {}
+            address = shipping.get("address") or {}
+            customer = s.get("customer_details") or {}
+
+            address_str = "".join(part for part in [
+                address.get("postal_code", ""),
+                address.get("state", ""),
+                address.get("city", ""),
+                address.get("line1", ""),
+                address.get("line2", ""),
+            ] if part)
+            contact_str = " / ".join(part for part in [
+                customer.get("email", ""),
+                customer.get("phone", ""),
+            ] if part)
+
+            orders.append({
+                "date": datetime.fromtimestamp(s["created"], JST).strftime("%Y-%m-%d %H:%M"),
+                "product": metadata.get("product_name", ""),
+                "amount": s.get("amount_total") or 0,
+                "name": shipping.get("name") or customer.get("name") or "",
+                "address": address_str,
+                "contact": contact_str,
+            })
+    except Exception as e:
+        print(f"[goods] Stripe fetch error: {e}")
+
+    return orders
+
+
+@app.route("/goods")
+def goods_index():
+    import json
+
+    products = _load_goods_products()
+    products_json = json.dumps(products, ensure_ascii=False).replace("</", "<\\/")
+    html = GOODS_HTML.replace("__PRODUCTS_JSON__", products_json)
+    return html, 200, {"Content-Type": "text/html; charset=utf-8"}
+
+
+@app.route("/api/goods/checkout", methods=["POST"])
+def api_goods_checkout():
+    import stripe
+
+    secret_key = os.environ.get("STRIPE_SECRET_KEY", "")
+    if not secret_key:
+        return jsonify({"error": "決済機能が設定されていません（管理者にお問い合わせください）"}), 500
+    stripe.api_key = secret_key
+
+    data = request.get_json(force=True)
+    product_id = str(data.get("product_id", "")).strip()
+    product = next((p for p in _load_goods_products() if p["id"] == product_id), None)
+    if not product:
+        return jsonify({"error": "商品が見つかりませんでした"}), 404
+
+    base_url = request.url_root.rstrip("/")
+    try:
+        checkout_session = stripe.checkout.Session.create(
+            mode="payment",
+            line_items=[{
+                "price_data": {
+                    "currency": "jpy",
+                    "product_data": {"name": product["name"]},
+                    "unit_amount": int(product["price"]),
+                },
+                "quantity": 1,
+            }],
+            shipping_address_collection={"allowed_countries": ["JP"]},
+            phone_number_collection={"enabled": True},
+            metadata={"product_id": product["id"], "product_name": product["name"]},
+            success_url=f"{base_url}/goods/success",
+            cancel_url=f"{base_url}/goods/cancel",
+        )
+        return jsonify({"ok": True, "url": checkout_session.url})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/goods/success")
+def goods_success():
+    html = (GOODS_RESULT_HTML
+            .replace("__TITLE__", "ご注文ありがとうございます")
+            .replace("__ICON__", "✅")
+            .replace("__HEADLINE__", "ご注文ありがとうございます")
+            .replace("__MESSAGE__", "決済が完了しました。ご入力いただいた内容を確認のうえ、発送のご連絡をいたします。"))
+    return html, 200, {"Content-Type": "text/html; charset=utf-8"}
+
+
+@app.route("/goods/cancel")
+def goods_cancel():
+    html = (GOODS_RESULT_HTML
+            .replace("__TITLE__", "お手続きがキャンセルされました")
+            .replace("__ICON__", "↩️")
+            .replace("__HEADLINE__", "お手続きがキャンセルされました")
+            .replace("__MESSAGE__", "決済は行われていません。引き続き商品をご検討の場合は商品一覧からもう一度お手続きください。"))
+    return html, 200, {"Content-Type": "text/html; charset=utf-8"}
+
+
+@app.route("/goods/admin", methods=["GET", "POST"])
+def goods_admin():
+    web_password = os.environ.get("WEB_PASSWORD", "")
+    error_html = ""
+
+    if request.method == "POST":
+        if web_password and request.form.get("password", "") == web_password:
+            session["goods_admin_ok"] = True
+        else:
+            error_html = '<p class="error">パスワードが違います</p>'
+
+    if not session.get("goods_admin_ok"):
+        html = GOODS_ADMIN_LOGIN_HTML.replace("__ERROR__", error_html)
+        return html, (200 if not error_html else 401), {"Content-Type": "text/html; charset=utf-8"}
+
+    orders = _fetch_goods_orders()
+    if orders:
+        rows = "".join(
+            "<tr>"
+            f"<td>{escape(o['date'])}</td>"
+            f"<td class='product'>{escape(o['product'])}</td>"
+            f"<td>¥{o['amount']:,}</td>"
+            f"<td>{escape(o['name'])}</td>"
+            f"<td class='address'>{escape(o['address'])}</td>"
+            f"<td class='contact'>{escape(o['contact'])}</td>"
+            "</tr>"
+            for o in orders
+        )
+    else:
+        rows = '<tr><td colspan="6" class="empty-row">注文はまだありません</td></tr>'
+
+    html = GOODS_ADMIN_HTML.replace("__ROWS__", rows).replace("__COUNT__", str(len(orders)))
+    return html, 200, {"Content-Type": "text/html; charset=utf-8"}
+
+
+@app.route("/goods/admin/logout")
+def goods_admin_logout():
+    session.pop("goods_admin_ok", None)
+    return redirect("/goods/admin")
 
 
 if __name__ == "__main__":
