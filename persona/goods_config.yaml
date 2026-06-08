@@ -7,7 +7,7 @@
 # description : 商品の説明文（任意、購入ページに表示）
 
 products:
-  - id: "sample-001"
-    name: "サンプル商品"
-    price: 3000
-    description: "ここに商品の説明を書いてください。販売したい商品に合わせて自由に編集・追加できます。"
+  - id: "chaco-mug-001"
+    name: "chacoデザインマグカップ"
+    price: 2190
+    description: "chacoデザインのオリジナルマグカップです（送料込み）。"
