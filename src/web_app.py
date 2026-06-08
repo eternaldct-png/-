@@ -1163,6 +1163,10 @@ body {
   width: 52px; height: 52px; border-radius: 14px; background: var(--grad);
   display: flex; align-items: center; justify-content: center; font-size: 24px; margin-bottom: 14px;
 }
+.product-photo {
+  width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 14px;
+  margin-bottom: 14px; border: 1px solid var(--border); background: var(--surface2);
+}
 .product-name { font-size: 17px; font-weight: 800; margin-bottom: 6px; }
 .product-desc { font-size: 13px; color: var(--muted); line-height: 1.7; margin-bottom: 14px; white-space: pre-wrap; }
 .product-price { font-size: 22px; font-weight: 800; color: var(--accent-text); margin-bottom: 16px; }
@@ -1212,7 +1216,7 @@ function render() {
   }
   el.innerHTML = PRODUCTS.map(p => `
     <div class="product-card">
-      <div class="product-icon">🛍</div>
+      ${p.image ? `<img class="product-photo" src="${escHtml(p.image)}" alt="${escHtml(p.name)}">` : `<div class="product-icon">🛍</div>`}
       <div class="product-name">${escHtml(p.name)}</div>
       ${p.description ? `<div class="product-desc">${escHtml(p.description)}</div>` : ''}
       <div class="product-price">¥${p.price.toLocaleString()}</div>
