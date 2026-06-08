@@ -5,9 +5,11 @@
 # name        : 商品名（購入ページ・決済画面・管理画面に表示される）
 # price       : 価格（円・税込の整数で指定）
 # description : 商品の説明文（任意、購入ページに表示）
+# image       : 商品写真のパス（任意、省略時はアイコン表示。src/static/ 以下に画像を置き "/static/..." で指定）
 
 products:
   - id: "chaco-mug-001"
     name: "chacoデザインマグカップ"
     price: 2190
     description: "chacoデザインのオリジナルマグカップです（送料込み）。"
+    image: "/static/goods/chaco-mug.jpg"
