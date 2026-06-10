@@ -1121,7 +1121,7 @@ def _load_goods_products():
     with open(path, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f) or {}
     products = data.get("products", [])
-    return [p for p in products if p.get("id") and p.get("name") and p.get("price")]
+    return [p for p in products if p.get("id") and p.get("name") and (p.get("price") or p.get("variants"))]
 
 
 GOODS_HTML = r"""<!DOCTYPE html>
@@ -1169,6 +1169,14 @@ body {
 }
 .product-name { font-size: 17px; font-weight: 800; margin-bottom: 6px; }
 .product-desc { font-size: 13px; color: var(--muted); line-height: 1.7; margin-bottom: 14px; white-space: pre-wrap; }
+.variant-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.variant-label { font-size: 12px; font-weight: 700; color: var(--muted); min-width: 52px; flex-shrink: 0; }
+.variant-select {
+  flex: 1; padding: 9px 12px; border: 1.5px solid var(--border); border-radius: 10px;
+  font-size: 14px; background: var(--surface2); color: var(--text); cursor: pointer;
+  -webkit-appearance: none; appearance: none;
+}
+.variant-select:focus { outline: none; border-color: var(--accent-text); }
 .product-price { font-size: 22px; font-weight: 800; color: var(--accent-text); margin-bottom: 16px; }
 .buy-btn {
   width: 100%; padding: 15px; border: none; border-radius: 12px;
@@ -1203,42 +1211,86 @@ body {
 <div class="toast" id="toast"></div>
 <script>
 const PRODUCTS = __PRODUCTS_JSON__;
+const _IMG_MAP = {};
+PRODUCTS.forEach(p => { if (p.images) _IMG_MAP[p.id] = p.images; });
 
 function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function selOpts(items) {
+  return items.map(item => {
+    const val = item.label || item;
+    const extra = item.price ? ` — ¥${item.price.toLocaleString()}` : '';
+    const pa = item.price ? ` data-price="${item.price}"` : '';
+    return `<option value="${escHtml(val)}"${pa}>${escHtml(val)}${extra}</option>`;
+  }).join('');
+}
+
+function renderCard(p) {
+  const v = p.variants && p.variants.size ? p.variants : null;
+  const initPrice = v ? v.size[0].price : p.price;
+  const initImg = p.images ? p.images[0].path : (p.image || null);
+  const imgHtml = initImg
+    ? `<img class="product-photo" id="img-${p.id}" src="${escHtml(initImg)}" alt="${escHtml(p.name)}">`
+    : `<div class="product-icon">🛍</div>`;
+  const varHtml = v ? `
+    <div class="variant-row"><span class="variant-label">サイズ</span>
+      <select class="variant-select" id="size-${p.id}" onchange="updatePrice('${p.id}',this)">${selOpts(v.size)}</select></div>
+    ${v.color ? `<div class="variant-row"><span class="variant-label">カラー</span>
+      <select class="variant-select" id="color-${p.id}" onchange="updateImage('${p.id}')">${selOpts(v.color)}</select></div>` : ''}
+    ${v.design ? `<div class="variant-row"><span class="variant-label">デザイン</span>
+      <select class="variant-select" id="design-${p.id}" onchange="updateImage('${p.id}')">${selOpts(v.design)}</select></div>` : ''}
+  ` : '';
+  return `<div class="product-card">
+    ${imgHtml}
+    <div class="product-name">${escHtml(p.name)}</div>
+    ${p.description ? `<div class="product-desc">${escHtml(p.description)}</div>` : ''}
+    ${varHtml}
+    <div class="product-price" id="price-${p.id}">¥${initPrice.toLocaleString()}</div>
+    <button class="buy-btn" onclick="checkout('${p.id}',this)">購入手続きへ進む</button>
+  </div>`;
 }
 
 function render() {
   const el = document.getElementById('products');
-  if (!PRODUCTS.length) {
-    el.innerHTML = '<div class="empty">現在販売中の商品はありません。</div>';
-    return;
-  }
-  el.innerHTML = PRODUCTS.map(p => `
-    <div class="product-card">
-      ${p.image ? `<img class="product-photo" src="${escHtml(p.image)}" alt="${escHtml(p.name)}">` : `<div class="product-icon">🛍</div>`}
-      <div class="product-name">${escHtml(p.name)}</div>
-      ${p.description ? `<div class="product-desc">${escHtml(p.description)}</div>` : ''}
-      <div class="product-price">¥${p.price.toLocaleString()}</div>
-      <button class="buy-btn" onclick="checkout('${p.id}', this)">購入手続きへ進む</button>
-    </div>
-  `).join('');
+  el.innerHTML = PRODUCTS.length ? PRODUCTS.map(renderCard).join('') : '<div class="empty">現在販売中の商品はありません。</div>';
+}
+
+function updatePrice(pid, sel) {
+  const price = parseInt(sel.options[sel.selectedIndex].dataset.price || '0');
+  if (price) document.getElementById('price-' + pid).textContent = '¥' + price.toLocaleString('ja-JP');
+}
+
+function updateImage(pid) {
+  const imgs = _IMG_MAP[pid];
+  if (!imgs) return;
+  const colorEl = document.getElementById('color-' + pid);
+  const designEl = document.getElementById('design-' + pid);
+  const color = colorEl ? colorEl.value : null;
+  const design = designEl ? designEl.value : null;
+  const match = imgs.find(img => (!color || img.color === color) && (!design || img.design === design));
+  if (match) document.getElementById('img-' + pid).src = match.path;
 }
 
 async function checkout(productId, btn) {
   btn.disabled = true;
   btn.textContent = '処理中…';
+  const sizeEl = document.getElementById('size-' + productId);
+  const colorEl = document.getElementById('color-' + productId);
+  const designEl = document.getElementById('design-' + productId);
+  const payload = { product_id: productId };
+  if (sizeEl) payload.size = sizeEl.value;
+  if (colorEl) payload.color = colorEl.value;
+  if (designEl) payload.design = designEl.value;
   try {
     const res = await fetch('/api/goods/checkout', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ product_id: productId }),
+      body: JSON.stringify(payload),
     });
     const data = await res.json();
-    if (data.ok && data.url) {
-      window.location.href = data.url;
-      return;
-    }
+    if (data.ok && data.url) { window.location.href = data.url; return; }
     toast(data.error || '決済画面の準備に失敗しました');
   } catch (e) {
     toast('通信エラーが発生しました');
@@ -1407,7 +1459,7 @@ td.address, td.contact, td.product { white-space: normal; min-width: 160px; }
 <table>
   <thead>
     <tr>
-      <th>日時</th><th>商品</th><th>金額</th><th>お名前</th><th>お届け先住所</th><th>連絡先</th>
+      <th>日時</th><th>商品</th><th>オプション</th><th>金額</th><th>お名前</th><th>お届け先住所</th><th>連絡先</th>
     </tr>
   </thead>
   <tbody>
@@ -1461,9 +1513,13 @@ def _fetch_goods_orders(limit=100):
                 customer.get("phone", ""),
             ] if part)
 
+            options_str = " / ".join(p for p in [
+                metadata.get("color", ""), metadata.get("design", ""), metadata.get("size", ""),
+            ] if p)
             orders.append({
                 "date": datetime.fromtimestamp(s["created"], JST).strftime("%Y-%m-%d %H:%M"),
                 "product": metadata.get("product_name", ""),
+                "options": options_str,
                 "amount": s.get("amount_total") or 0,
                 "name": shipping.get("name") or customer.get("name") or "",
                 "address": address_str,
@@ -1500,6 +1556,27 @@ def api_goods_checkout():
     if not product:
         return jsonify({"error": "商品が見つかりませんでした"}), 404
 
+    selected_size = str(data.get("size", "")).strip()
+    selected_color = str(data.get("color", "")).strip()
+    selected_design = str(data.get("design", "")).strip()
+
+    size_variants = (product.get("variants") or {}).get("size") or []
+    if size_variants:
+        matched = next((s for s in size_variants if s.get("label") == selected_size), None)
+        if not matched:
+            return jsonify({"error": "サイズを選択してください"}), 400
+        unit_price = int(matched["price"])
+    else:
+        unit_price = int(product["price"])
+
+    option_parts = [p for p in [selected_color, selected_design, selected_size] if p]
+    display_name = f"{product['name']} [{' / '.join(option_parts)}]" if option_parts else product["name"]
+
+    metadata = {"product_id": product["id"], "product_name": product["name"]}
+    if selected_size:   metadata["size"] = selected_size
+    if selected_color:  metadata["color"] = selected_color
+    if selected_design: metadata["design"] = selected_design
+
     base_url = request.url_root.rstrip("/")
     try:
         checkout_session = stripe.checkout.Session.create(
@@ -1507,14 +1584,14 @@ def api_goods_checkout():
             line_items=[{
                 "price_data": {
                     "currency": "jpy",
-                    "product_data": {"name": product["name"]},
-                    "unit_amount": int(product["price"]),
+                    "product_data": {"name": display_name},
+                    "unit_amount": unit_price,
                 },
                 "quantity": 1,
             }],
             shipping_address_collection={"allowed_countries": ["JP"]},
             phone_number_collection={"enabled": True},
-            metadata={"product_id": product["id"], "product_name": product["name"]},
+            metadata=metadata,
             success_url=f"{base_url}/goods/success",
             cancel_url=f"{base_url}/goods/cancel",
         )
@@ -1564,6 +1641,7 @@ def goods_admin():
             "<tr>"
             f"<td>{escape(o['date'])}</td>"
             f"<td class='product'>{escape(o['product'])}</td>"
+            f"<td>{escape(o.get('options',''))}</td>"
             f"<td>¥{o['amount']:,}</td>"
             f"<td>{escape(o['name'])}</td>"
             f"<td class='address'>{escape(o['address'])}</td>"
@@ -1572,7 +1650,7 @@ def goods_admin():
             for o in orders
         )
     else:
-        rows = '<tr><td colspan="6" class="empty-row">注文はまだありません</td></tr>'
+        rows = '<tr><td colspan="7" class="empty-row">注文はまだありません</td></tr>'
 
     html = GOODS_ADMIN_HTML.replace("__ROWS__", rows).replace("__COUNT__", str(len(orders)))
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
