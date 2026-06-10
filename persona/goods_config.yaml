@@ -48,3 +48,23 @@ products:
       - path: "/static/goods/tshirt-white-small.webp"
         color: "ホワイト"
         design: "スモール"
+
+  - id: "chaco-tshirt-56-001"
+    name: "chacoデザインTシャツ 5.6oz"
+    description: "chacoオリジナルデザインの5.6ozTシャツ（送料込み）。\nカラー・デザイン・サイズをお選びください。"
+    variants:
+      size:
+        - label: "S"
+          price: 3590
+        - label: "M"
+          price: 3590
+        - label: "L"
+          price: 3590
+        - label: "XL"
+          price: 3590
+      color:
+        - label: "ホワイト"
+        - label: "黒"
+      design:
+        - label: "センター"
+        - label: "スモール"
