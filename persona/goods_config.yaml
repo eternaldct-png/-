@@ -20,15 +20,15 @@ products:
     variants:
       size:
         - label: "S"
-          price: 3500
+          price: 4590
         - label: "M"
-          price: 3500
+          price: 4590
         - label: "L"
-          price: 3500
+          price: 4590
         - label: "XL"
-          price: 3500
+          price: 4590
         - label: "XXL"
-          price: 4500
+          price: 5590
       color:
         - label: "チャコール"
         - label: "ホワイト"
