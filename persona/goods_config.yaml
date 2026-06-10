@@ -13,3 +13,38 @@ products:
     price: 2190
     description: "chacoデザインのオリジナルマグカップです（送料込み）。"
     image: "/static/goods/chaco-mug.jpg"
+
+  - id: "chaco-tshirt-001"
+    name: "chacoデザインTシャツ 6.6oz"
+    description: "chacoオリジナルデザインの6.6ozヘビーウェイトTシャツ（送料込み）。\nカラー・デザイン・サイズをお選びください。"
+    variants:
+      size:
+        - label: "S"
+          price: 3500
+        - label: "M"
+          price: 3500
+        - label: "L"
+          price: 3500
+        - label: "XL"
+          price: 3500
+        - label: "XXL"
+          price: 4500
+      color:
+        - label: "チャコール"
+        - label: "ホワイト"
+      design:
+        - label: "センター"
+        - label: "スモール"
+    images:
+      - path: "/static/goods/tshirt-charcoal-center.webp"
+        color: "チャコール"
+        design: "センター"
+      - path: "/static/goods/tshirt-charcoal-small.webp"
+        color: "チャコール"
+        design: "スモール"
+      - path: "/static/goods/tshirt-white-center.webp"
+        color: "ホワイト"
+        design: "センター"
+      - path: "/static/goods/tshirt-white-small.webp"
+        color: "ホワイト"
+        design: "スモール"
