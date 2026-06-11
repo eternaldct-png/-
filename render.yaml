@@ -14,3 +14,19 @@ services:
         sync: false          # 商品購入ページ /goods の決済に必要（https://dashboard.stripe.com/apikeys）
       - key: FLASK_SECRET_KEY
         sync: false          # /goods/admin のログインセッション用（任意の文字列を設定）
+
+  - type: web
+    name: eternal-schedule
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn src.schedule_app:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120
+    plan: free
+    envVars:
+      - key: SCHEDULE_PASSWORD
+        sync: false          # スケジュールアプリのログインパスワード（任意の文字列）
+      - key: FLASK_SECRET_KEY
+        sync: false          # セッション用秘密鍵（任意の文字列）
+      - key: GOOGLE_SERVICE_ACCOUNT_JSON
+        sync: false          # Google サービスアカウントの JSON キー（Google Calendar 同期用）
+      - key: GOOGLE_CALENDAR_ID
+        sync: false          # 同期先カレンダー ID（省略時: primary）

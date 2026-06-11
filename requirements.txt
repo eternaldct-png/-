@@ -20,3 +20,7 @@ gunicorn>=21.2.0
 
 # 商品購入・決済 (Stripe)
 stripe>=10.0.0
+
+# Google Calendar 同期
+google-auth>=2.27.0
+google-api-python-client>=2.118.0
