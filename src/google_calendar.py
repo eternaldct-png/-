@@ -47,9 +47,13 @@ def _gcal_dt(dt_str, all_day=False):
 
 
 _COLOR_MAP = {
-    "live": "11",     # Tomato (赤)
-    "goods": "5",     # Banana (黄)
-    "general": "9",   # Blueberry (青)
+    "live": "11",        # Tomato (赤)
+    "goods": "5",        # Banana (黄)
+    "general": "9",      # Blueberry (青)
+    "interview": "6",    # Tangerine (オレンジ)
+    "recreation": "2",   # Sage (緑)
+    "study": "7",        # Peacock (シアン)
+    "allmeeting": "4",   # Flamingo (ピンク)
 }
 
 

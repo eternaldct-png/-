@@ -180,6 +180,10 @@ HTML = r"""<!DOCTYPE html>
   --live: #ef4444;
   --goods: #f59e0b;
   --general: #818cf8;
+  --interview: #f97316;
+  --recreation: #22c55e;
+  --study: #06b6d4;
+  --allmeeting: #ec4899;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 html, body { height: 100%; }
@@ -278,9 +282,13 @@ body {
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   cursor: pointer; color: white;
 }
-.ev-chip.live    { background: var(--live); }
-.ev-chip.goods   { background: var(--goods); color: #1a0a00; }
-.ev-chip.general { background: var(--general); }
+.ev-chip.live       { background: var(--live); }
+.ev-chip.goods      { background: var(--goods); color: #1a0a00; }
+.ev-chip.general    { background: var(--general); }
+.ev-chip.interview  { background: var(--interview); }
+.ev-chip.recreation { background: var(--recreation); }
+.ev-chip.study      { background: var(--study); }
+.ev-chip.allmeeting { background: var(--allmeeting); }
 .ev-more { font-size: 9px; color: var(--muted); padding-left: 2px; }
 
 /* FAB */
@@ -326,7 +334,7 @@ body {
 textarea.fi { min-height: 68px; resize: vertical; }
 select.fi { appearance: none; }
 
-.type-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.type-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .ty-btn {
   padding: 10px 4px; background: var(--surface2); border: 1.5px solid var(--border);
   border-radius: 10px; color: var(--muted); font-size: 12px; font-weight: 600;
@@ -334,9 +342,13 @@ select.fi { appearance: none; }
   align-items: center; gap: 3px; transition: all 0.13s;
 }
 .ty-btn .ico { font-size: 18px; }
-.ty-btn.sel-live    { border-color: var(--live);    color: var(--live);    background: rgba(239,68,68,0.1); }
-.ty-btn.sel-goods   { border-color: var(--goods);   color: #d97706; background: rgba(245,158,11,0.1); }
-.ty-btn.sel-general { border-color: var(--general); color: var(--general); background: rgba(129,140,248,0.1); }
+.ty-btn.sel-live       { border-color: var(--live);       color: var(--live);       background: rgba(239,68,68,0.1); }
+.ty-btn.sel-goods      { border-color: var(--goods);      color: #d97706;           background: rgba(245,158,11,0.1); }
+.ty-btn.sel-general    { border-color: var(--general);    color: var(--general);    background: rgba(129,140,248,0.1); }
+.ty-btn.sel-interview  { border-color: var(--interview);  color: var(--interview);  background: rgba(249,115,22,0.1); }
+.ty-btn.sel-recreation { border-color: var(--recreation); color: var(--recreation); background: rgba(34,197,94,0.1); }
+.ty-btn.sel-study      { border-color: var(--study);      color: var(--study);      background: rgba(6,182,212,0.1); }
+.ty-btn.sel-allmeeting { border-color: var(--allmeeting); color: var(--allmeeting); background: rgba(236,72,153,0.1); }
 
 .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .tog-row {
@@ -415,6 +427,10 @@ select.fi { appearance: none; }
   <div class="legend-item"><div class="legend-dot" style="background:var(--live)"></div>配信/ライブ</div>
   <div class="legend-item"><div class="legend-dot" style="background:var(--goods)"></div>グッズ/販売</div>
   <div class="legend-item"><div class="legend-dot" style="background:var(--general)"></div>汎用メモ</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--interview)"></div>面談</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--recreation)"></div>レクリエーション</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--study)"></div>勉強会</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--allmeeting)"></div>全体ミーティング</div>
 </div>
 
 <div class="cal-wrap">
@@ -441,9 +457,13 @@ select.fi { appearance: none; }
     <div class="fg">
       <label class="fl">種類</label>
       <div class="type-row">
-        <button class="ty-btn" id="btn-live"    onclick="setType('live')"><span class="ico">🔴</span>配信/ライブ</button>
-        <button class="ty-btn" id="btn-goods"   onclick="setType('goods')"><span class="ico">🛍️</span>グッズ/販売</button>
-        <button class="ty-btn" id="btn-general" onclick="setType('general')"><span class="ico">📝</span>汎用メモ</button>
+        <button class="ty-btn" id="btn-live"       onclick="setType('live')"><span class="ico">🔴</span>配信/ライブ</button>
+        <button class="ty-btn" id="btn-goods"      onclick="setType('goods')"><span class="ico">🛍️</span>グッズ/販売</button>
+        <button class="ty-btn" id="btn-general"    onclick="setType('general')"><span class="ico">📝</span>汎用メモ</button>
+        <button class="ty-btn" id="btn-interview"  onclick="setType('interview')"><span class="ico">🤝</span>面談</button>
+        <button class="ty-btn" id="btn-recreation" onclick="setType('recreation')"><span class="ico">🎉</span>レクリエーション</button>
+        <button class="ty-btn" id="btn-study"      onclick="setType('study')"><span class="ico">📚</span>勉強会</button>
+        <button class="ty-btn" id="btn-allmeeting" onclick="setType('allmeeting')"><span class="ico">📢</span>全体ミーティング</button>
       </div>
     </div>
 
@@ -672,7 +692,7 @@ function renderCal() {
 /* ── 予定モーダル ───────────────────────────────────────────────── */
 function setType(t) {
   selType = t;
-  ['live','goods','general'].forEach(x => {
+  ['live','goods','general','interview','recreation','study','allmeeting'].forEach(x => {
     document.getElementById(`btn-${x}`).className = 'ty-btn' + (x===t ? ` sel-${x}` : '');
   });
   document.getElementById('pf-group').style.display = t==='live' ? 'block' : 'none';
