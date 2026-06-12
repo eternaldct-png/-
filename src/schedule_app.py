@@ -1,1 +1,811 @@
-"""\nスケジュールカレンダーアプリ — 独立した Flask アプリ\n\n機能:\n  - 月次カレンダー表示（配信/ライブ・グッズ/販売・汎用メモ）\n  - 予定の追加・編集・削除（パスワード認証必須）\n  - Google カレンダーへの一方向同期（サービスアカウント経由）\n\n環境変数（Render などで設定）:\n  SCHEDULE_PASSWORD        ログインパスワード（必須）\n  FLASK_SECRET_KEY         セッション用秘密鍵\n  GOOGLE_SERVICE_ACCOUNT_JSON  Google サービスアカウントの JSON キー\n  GOOGLE_CALENDAR_ID       同期先カレンダー ID（省略時: primary）\n"""\nimport os\nimport sys\nimport json\nimport uuid\nfrom pathlib import Path\nfrom datetime import datetime, timezone\n\nfrom flask import Flask, request, jsonify, session, redirect\n\nsys.path.insert(0, str(Path(__file__).parent))\n\napp = Flask(__name__)\napp.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(24))\n\nEVENTS_FILE = Path("posts/schedule_events.json")\n\n\n# ── データ管理 ────────────────────────────────────────────────────\n\ndef load_events():\n    if EVENTS_FILE.exists():\n        with open(EVENTS_FILE, "r", encoding="utf-8") as f:\n            return json.load(f)\n    return []\n\n\ndef save_events(events):\n    EVENTS_FILE.parent.mkdir(parents=True, exist_ok=True)\n    with open(EVENTS_FILE, "w", encoding="utf-8") as f:\n        json.dump(events, f, ensure_ascii=False, indent=2)\n\n\n# ── 認証 ─────────────────────────────────────────────────────────\n\ndef is_authed():\n    return bool(session.get("schedule_ok"))\n\n\n@app.route("/api/me")\ndef api_me():\n    return jsonify({"authed": is_authed()})\n\n\n@app.route("/login", methods=["POST"])\ndef login():\n    data = request.get_json(force=True)\n    pw = os.environ.get("SCHEDULE_PASSWORD", "")\n    if pw and data.get("password") == pw:\n        session["schedule_ok"] = True\n        return jsonify({"ok": True})\n    return jsonify({"error": "パスワードが違います"}), 401\n\n\n@app.route("/logout")\ndef logout():\n    session.pop("schedule_ok", None)\n    return redirect("/")\n\n\n# ── イベント CRUD API ─────────────────────────────────────────────\n\n@app.route("/api/events", methods=["GET"])\ndef api_list():\n    return jsonify({"ok": True, "events": load_events()})\n\n\n@app.route("/api/events", methods=["POST"])\ndef api_create():\n    if not is_authed():\n        return jsonify({"error": "unauthorized"}), 401\n    data = request.get_json(force=True)\n    event = {\n        "id": str(uuid.uuid4()),\n        "title": str(data.get("title", "")).strip(),\n        "description": str(data.get("description", "")).strip(),\n        "event_type": data.get("event_type", "general"),\n        "platform": data.get("platform", ""),\n        "start_datetime": data.get("start_datetime", ""),\n        "end_datetime": data.get("end_datetime", ""),\n        "all_day": bool(data.get("all_day", False)),\n        "google_calendar_event_id": None,\n        "created_at": datetime.now(timezone.utc).isoformat(),\n        "updated_at": datetime.now(timezone.utc).isoformat(),\n    }\n    try:\n        from google_calendar import sync_create\n        event["google_calendar_event_id"] = sync_create(event)\n    except Exception:\n        pass\n    events = load_events()\n    events.append(event)\n    save_events(events)\n    return jsonify({"ok": True, "event": event})\n\n\n@app.route("/api/events/<event_id>", methods=["PUT"])\ndef api_update(event_id):\n    if not is_authed():\n        return jsonify({"error": "unauthorized"}), 401\n    data = request.get_json(force=True)\n    events = load_events()\n    for i, ev in enumerate(events):\n        if ev["id"] == event_id:\n            events[i].update({\n                "title": str(data.get("title", ev["title"])).strip(),\n                "description": str(data.get("description", ev.get("description", ""))).strip(),\n                "event_type": data.get("event_type", ev["event_type"]),\n                "platform": data.get("platform", ev.get("platform", "")),\n                "start_datetime": data.get("start_datetime", ev["start_datetime"]),\n                "end_datetime": data.get("end_datetime", ev.get("end_datetime", "")),\n                "all_day": bool(data.get("all_day", ev.get("all_day", False))),\n                "updated_at": datetime.now(timezone.utc).isoformat(),\n            })\n            try:\n                from google_calendar import sync_update\n                sync_update(ev.get("google_calendar_event_id"), events[i])\n            except Exception:\n                pass\n            save_events(events)\n            return jsonify({"ok": True, "event": events[i]})\n    return jsonify({"error": "not found"}), 404\n\n\n@app.route("/api/events/<event_id>", methods=["DELETE"])\ndef api_delete(event_id):\n    if not is_authed():\n        return jsonify({"error": "unauthorized"}), 401\n    events = load_events()\n    for i, ev in enumerate(events):\n        if ev["id"] == event_id:\n            try:\n                from google_calendar import sync_delete\n                sync_delete(ev.get("google_calendar_event_id"))\n            except Exception:\n                pass\n            events.pop(i)\n            save_events(events)\n            return jsonify({"ok": True})\n    return jsonify({"error": "not found"}), 404\n\n\n# ── フロントエンド ────────────────────────────────────────────────\n\nHTML = r"""<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n<meta charset=\"UTF-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no\">\n<meta name=\"apple-mobile-web-app-capable\" content=\"yes\">\n<meta name=\"apple-mobile-web-app-status-bar-style\" content=\"black-translucent\">\n<meta name=\"theme-color\" content=\"#0a0a1a\">\n<title>エターナルディクト イベントカレンダー</title>\n<style>\n:root {\n  --bg: #0a0a1a;\n  --surface: #13132a;\n  --surface2: #1c1c38;\n  --surface3: #252548;\n  --accent: #6d28d9;\n  --accent2: #7c3aed;\n  --accent-light: #a78bfa;\n  --text: #e2e8f0;\n  --muted: #7a859a;\n  --border: #252548;\n  --safe-bottom: env(safe-area-inset-bottom, 0px);\n  --live: #ef4444;\n  --goods: #f59e0b;\n  --general: #818cf8;\n}\n* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }\nhtml, body { height: 100%; }\nbody {\n  background: var(--bg);\n  color: var(--text);\n  font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic UI', sans-serif;\n  min-height: 100vh;\n  padding-bottom: calc(86px + var(--safe-bottom));\n}\n\n/* Header */\n.header {\n  background: var(--surface);\n  border-bottom: 1px solid var(--border);\n  padding: 16px 18px 14px;\n  display: flex; align-items: center; gap: 12px;\n  position: sticky; top: 0; z-index: 100;\n}\n.header-icon {\n  width: 40px; height: 40px;\n  background: linear-gradient(135deg, var(--accent2), #4c1d95);\n  border-radius: 12px;\n  display: flex; align-items: center; justify-content: center;\n  font-size: 22px; flex-shrink: 0;\n}\n.header-info { flex: 1; min-width: 0; }\n.header-title { font-size: 17px; font-weight: 700; }\n.header-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }\n.auth-btn {\n  background: var(--surface2); border: 1.5px solid var(--border);\n  border-radius: 10px; padding: 7px 12px;\n  color: var(--muted); font-size: 12px; font-weight: 600;\n  cursor: pointer; flex-shrink: 0; transition: all 0.15s;\n  white-space: nowrap;\n}\n.auth-btn.authed { color: var(--accent-light); border-color: var(--accent2); }\n\n/* Month nav */\n.month-nav {\n  display: flex; align-items: center; justify-content: space-between;\n  padding: 14px 16px 10px; max-width: 560px; margin: 0 auto;\n}\n.month-btn {\n  background: var(--surface); border: 1.5px solid var(--border);\n  color: var(--text); width: 38px; height: 38px; border-radius: 10px;\n  font-size: 20px; cursor: pointer;\n  display: flex; align-items: center; justify-content: center;\n  transition: background 0.15s;\n}\n.month-btn:active { background: var(--surface2); }\n.month-label { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }\n\n/* Legend */\n.legend {\n  display: flex; gap: 14px; flex-wrap: wrap;\n  padding: 2px 16px 12px; max-width: 560px; margin: 0 auto;\n}\n.legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); }\n.legend-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }\n\n/* Calendar */\n.cal-wrap { max-width: 560px; margin: 0 auto; padding: 0 12px; }\n.cal-head {\n  display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; margin-bottom: 4px;\n}\n.cal-head > div {\n  text-align: center; font-size: 11px; font-weight: 600;\n  color: var(--muted); padding: 4px 0;\n}\n.cal-head > .sat { color: #60a5fa; }\n.cal-head > .sun { color: #f87171; }\n.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }\n.cal-cell {\n  min-height: 66px; background: var(--surface);\n  border: 1px solid var(--border); border-radius: 8px;\n  padding: 5px 4px 3px; cursor: pointer; overflow: hidden;\n  transition: background 0.12s;\n}\n.cal-cell:active { background: var(--surface2); }\n.cal-cell.other-month { opacity: 0.28; }\n.day-num {\n  font-size: 12px; font-weight: 600;\n  width: 22px; height: 22px;\n  display: flex; align-items: center; justify-content: center;\n  border-radius: 50%; margin-bottom: 3px;\n}\n.cal-cell.today .day-num { background: var(--accent2); color: white; }\n.cal-cell.sat .day-num { color: #60a5fa; }\n.cal-cell.sun .day-num { color: #f87171; }\n.cal-cell.today.sat .day-num,\n.cal-cell.today.sun .day-num { color: white; }\n.ev-chip {\n  display: block; font-size: 9.5px; font-weight: 600;\n  border-radius: 3px; padding: 1px 4px; margin-bottom: 2px;\n  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;\n  cursor: pointer; color: white;\n}\n.ev-chip.live    { background: var(--live); }\n.ev-chip.goods   { background: var(--goods); color: #1a0a00; }\n.ev-chip.general { background: var(--general); }\n.ev-more { font-size: 9px; color: var(--muted); padding-left: 2px; }\n\n/* FAB */\n.fab {\n  position: fixed; bottom: calc(24px + var(--safe-bottom)); right: 20px;\n  width: 56px; height: 56px; background: var(--accent2); border: none;\n  border-radius: 50%; color: white; font-size: 28px; cursor: pointer;\n  box-shadow: 0 4px 24px rgba(124,58,237,0.55);\n  display: none; align-items: center; justify-content: center;\n  z-index: 200; transition: transform 0.15s;\n}\n.fab:active { transform: scale(0.91); }\n.fab.visible { display: flex; }\n\n/* Modal (bottom sheet) */\n.overlay {\n  position: fixed; inset: 0; background: rgba(0,0,0,0.75);\n  z-index: 300; display: none; align-items: flex-end; justify-content: center;\n}\n.overlay.open { display: flex; }\n.sheet {\n  background: var(--surface); border-radius: 22px 22px 0 0;\n  width: 100%; max-width: 560px; max-height: 93vh; overflow-y: auto;\n  padding: 16px 18px calc(16px + var(--safe-bottom));\n}\n.handle {\n  width: 38px; height: 4px; background: var(--border);\n  border-radius: 2px; margin: 0 auto 16px;\n}\n.sheet-title { font-size: 18px; font-weight: 700; margin-bottom: 18px; }\n.fg { margin-bottom: 13px; }\n.fl {\n  display: block; font-size: 10px; font-weight: 700;\n  color: var(--muted); letter-spacing: 0.07em; text-transform: uppercase;\n  margin-bottom: 5px;\n}\n.fi {\n  width: 100%; background: var(--surface2); border: 1.5px solid var(--border);\n  border-radius: 10px; color: var(--text); font-size: 14px;\n  padding: 10px 12px; outline: none; font-family: inherit;\n}\n.fi:focus { border-color: var(--accent2); }\ntextarea.fi { min-height: 68px; resize: vertical; }\nselect.fi { appearance: none; }\n\n.type-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }\n.ty-btn {\n  padding: 10px 4px; background: var(--surface2); border: 1.5px solid var(--border);\n  border-radius: 10px; color: var(--muted); font-size: 12px; font-weight: 600;\n  cursor: pointer; display: flex; flex-direction: column;\n  align-items: center; gap: 3px; transition: all 0.13s;\n}\n.ty-btn .ico { font-size: 18px; }\n.ty-btn.sel-live    { border-color: var(--live);    color: var(--live);    background: rgba(239,68,68,0.1); }\n.ty-btn.sel-goods   { border-color: var(--goods);   color: #d97706; background: rgba(245,158,11,0.1); }\n.ty-btn.sel-general { border-color: var(--general); color: var(--general); background: rgba(129,140,248,0.1); }\n\n.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }\n.tog-row {\n  display: flex; align-items: center; justify-content: space-between;\n  background: var(--surface2); border: 1.5px solid var(--border);\n  border-radius: 10px; padding: 10px 12px;\n}\n.tog-lbl { font-size: 13px; }\n.tog { position: relative; width: 44px; height: 26px; }\n.tog input { opacity: 0; width: 0; height: 0; }\n.tog-sl {\n  position: absolute; inset: 0; background: var(--border);\n  border-radius: 13px; cursor: pointer; transition: background 0.2s;\n}\n.tog-sl::before {\n  content: \"\"; position: absolute; width: 20px; height: 20px;\n  border-radius: 50%; background: white; top: 3px; left: 3px;\n  transition: transform 0.2s;\n}\n.tog input:checked + .tog-sl { background: var(--accent2); }\n.tog input:checked + .tog-sl::before { transform: translateX(18px); }\n\n.btn-row { display: flex; gap: 10px; margin-top: 18px; }\n.btn-pri {\n  flex: 1; padding: 14px; background: var(--accent2); border: none;\n  border-radius: 12px; color: white; font-size: 15px; font-weight: 700;\n  cursor: pointer; transition: opacity 0.15s;\n}\n.btn-pri:active { opacity: 0.8; }\n.btn-sec {\n  padding: 14px 18px; background: var(--surface2); border: 1.5px solid var(--border);\n  border-radius: 12px; color: var(--muted); font-size: 15px; font-weight: 600; cursor: pointer;\n}\n.btn-danger {\n  padding: 14px 16px; background: rgba(239,68,68,0.1);\n  border: 1.5px solid var(--live); border-radius: 12px;\n  color: var(--live); font-size: 15px; font-weight: 600; cursor: pointer;\n}\n\n.gcal-badge {\n  display: inline-flex; align-items: center; gap: 5px;\n  background: rgba(66,133,244,0.12); border: 1px solid rgba(66,133,244,0.35);\n  color: #60a5fa; border-radius: 8px; font-size: 12px;\n  padding: 5px 10px; margin-bottom: 6px;\n}\n\n/* Toast */\n.toast {\n  position: fixed; bottom: calc(92px + var(--safe-bottom)); left: 50%;\n  transform: translateX(-50%) translateY(14px);\n  background: var(--surface3); border: 1px solid var(--border); color: var(--text);\n  padding: 10px 18px; border-radius: 22px; font-size: 13px;\n  opacity: 0; transition: all 0.28s; white-space: nowrap; z-index: 500; pointer-events: none;\n}\n.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }\n</style>\n</head>\n<body>\n\n<div class=\"header\">\n  <div class=\"header-icon\">📅</div>\n  <div class=\"header-info\">\n    <div class=\"header-title\">エターナルディクト イベントカレンダー</div>\n    <div class=\"header-sub\">予定管理 &amp; Google カレンダー同期</div>\n  </div>\n  <button class=\"auth-btn\" id=\"auth-btn\" onclick=\"onAuthBtn()\">🔒 ログイン</button>\n</div>\n\n<div class=\"month-nav\">\n  <button class=\"month-btn\" onclick=\"changeMonth(-1)\">‹</button>\n  <span class=\"month-label\" id=\"month-label\"></span>\n  <button class=\"month-btn\" onclick=\"changeMonth(1)\">›</button>\n</div>\n\n<div class=\"legend\">\n  <div class=\"legend-item\"><div class=\"legend-dot\" style=\"background:var(--live)\"></div>配信/ライブ</div>\n  <div class=\"legend-item\"><div class=\"legend-dot\" style=\"background:var(--goods)\"></div>グッズ/販売</div>\n  <div class=\"legend-item\"><div class=\"legend-dot\" style=\"background:var(--general)\"></div>汎用メモ</div>\n</div>\n\n<div class=\"cal-wrap\">\n  <div class=\"cal-head\">\n    <div>月</div><div>火</div><div>水</div><div>木</div><div>金</div>\n    <div class=\"sat\">土</div><div class=\"sun\">日</div>\n  </div>\n  <div class=\"cal-grid\" id=\"cal-grid\"></div>\n</div>\n\n<button class=\"fab\" id=\"fab\" onclick=\"requireAuth(()=>openModal(null))\">＋</button>\n\n<!-- 予定モーダル -->\n<div class=\"overlay\" id=\"ev-overlay\" onclick=\"onEvBg(event)\">\n  <div class=\"sheet\">\n    <div class=\"handle\"></div>\n    <div class=\"sheet-title\" id=\"ev-title\">予定を追加</div>\n\n    <div class=\"fg\">\n      <label class=\"fl\">タイトル</label>\n      <input type=\"text\" class=\"fi\" id=\"f-title\" placeholder=\"予定のタイトル\">\n    </div>\n\n    <div class=\"fg\">\n      <label class=\"fl\">種類</label>\n      <div class=\"type-row\">\n        <button class=\"ty-btn\" id=\"btn-live\"    onclick=\"setType('live')\"><span class=\"ico\">🔴</span>配信/ライブ</button>\n        <button class=\"ty-btn\" id=\"btn-goods\"   onclick=\"setType('goods')\"><span class=\"ico\">🛍️</span>グッズ/販売</button>\n        <button class=\"ty-btn\" id=\"btn-general\" onclick=\"setType('general')\"><span class=\"ico\">📝</span>汎用メモ</button>\n      </div>\n    </div>\n\n    <div class=\"fg\" id=\"pf-group\" style=\"display:none\">\n      <label class=\"fl\">プラットフォーム</label>\n      <select class=\"fi\" id=\"f-pf\">\n        <option value=\"\">選択してください</option>\n        <option value=\"ColorSing\">ColorSing</option>\n        <option value=\"TikTok\">TikTok</option>\n        <option value=\"ポコチャ\">ポコチャ</option>\n        <option value=\"UTAO\">UTAO</option>\n        <option value=\"ふわっち\">ふわっち</option>\n        <option value=\"ショッピング\">ショッピング</option>\n        <option value=\"Instagram\">Instagram</option>\n        <option value=\"YouTube\">YouTube</option>\n      </select>\n    </div>\n\n    <div class=\"fg\">\n      <div class=\"tog-row\">\n        <span class=\"tog-lbl\">終日</span>\n        <label class=\"tog\">\n          <input type=\"checkbox\" id=\"f-allday\" onchange=\"onAlldayChange()\">\n          <span class=\"tog-sl\"></span>\n        </label>\n      </div>\n    </div>\n\n    <div id=\"dt-block\">\n      <div class=\"fg\">\n        <div class=\"row2\">\n          <div><label class=\"fl\">開始日</label><input type=\"date\" class=\"fi\" id=\"f-sd\"></div>\n          <div><label class=\"fl\">開始時刻</label><input type=\"time\" class=\"fi\" id=\"f-st\" value=\"20:00\"></div>\n        </div>\n      </div>\n      <div class=\"fg\">\n        <div class=\"row2\">\n          <div><label class=\"fl\">終了日</label><input type=\"date\" class=\"fi\" id=\"f-ed\"></div>\n          <div><label class=\"fl\">終了時刻</label><input type=\"time\" class=\"fi\" id=\"f-et\" value=\"22:00\"></div>\n        </div>\n      </div>\n    </div>\n\n    <div id=\"ad-block\" style=\"display:none\">\n      <div class=\"fg\">\n        <div class=\"row2\">\n          <div><label class=\"fl\">開始日</label><input type=\"date\" class=\"fi\" id=\"f-sd-ad\"></div>\n          <div><label class=\"fl\">終了日</label><input type=\"date\" class=\"fi\" id=\"f-ed-ad\"></div>\n        </div>\n      </div>\n    </div>\n\n    <div class=\"fg\">\n      <label class=\"fl\">メモ</label>\n      <textarea class=\"fi\" id=\"f-desc\" placeholder=\"詳細・メモ（任意）\"></textarea>\n    </div>\n\n    <div id=\"gcal-info\"></div>\n\n    <div class=\"btn-row\" id=\"br-new\">\n      <button class=\"btn-sec\"  onclick=\"closeEvModal()\">キャンセル</button>\n      <button class=\"btn-pri\"  onclick=\"saveEvent()\">保存</button>\n    </div>\n    <div class=\"btn-row\" id=\"br-edit\" style=\"display:none\">\n      <button class=\"btn-danger\" onclick=\"deleteEvent()\">削除</button>\n      <button class=\"btn-pri\"    onclick=\"saveEvent()\">保存</button>\n    </div>\n  </div>\n</div>\n\n<!-- ログインモーダル -->\n<div class=\"overlay\" id=\"ln-overlay\" onclick=\"onLnBg(event)\">\n  <div class=\"sheet\">\n    <div class=\"handle\"></div>\n    <div class=\"sheet-title\">ログイン</div>\n    <div class=\"fg\">\n      <label class=\"fl\">パスワード</label>\n      <input type=\"password\" class=\"fi\" id=\"ln-pw\" placeholder=\"パスワードを入力\"\n        onkeydown=\"if(event.key==='Enter')doLogin()\">\n    </div>\n    <div id=\"ln-err\" style=\"color:var(--live);font-size:13px;margin-bottom:8px;display:none\"></div>\n    <div class=\"btn-row\">\n      <button class=\"btn-sec\" onclick=\"closeLnModal()\">キャンセル</button>\n      <button class=\"btn-pri\" onclick=\"doLogin()\">ログイン</button>\n    </div>\n  </div>\n</div>\n\n<div class=\"toast\" id=\"toast\"></div>\n\n<script>\nlet Y, M, events = [], editId = null, selType = 'general';\nlet authed = false, pendingFn = null;\n\n(function(){\n  const n = new Date(); Y = n.getFullYear(); M = n.getMonth();\n  checkAuth().then(loadEvents);\n})();\n\n/* ── 認証 ──────────────────────────────────────────────────────── */\nasync function checkAuth() {\n  try { const d = await (await fetch('/api/me')).json(); authed = !!d.authed; }\n  catch(e) { authed = false; }\n  refreshAuthUI();\n}\n\nfunction refreshAuthUI() {\n  const btn = document.getElementById('auth-btn');\n  const fab = document.getElementById('fab');\n  if (authed) {\n    btn.textContent = '🔓 ログアウト'; btn.classList.add('authed');\n    fab.classList.add('visible');\n  } else {\n    btn.textContent = '🔒 ログイン'; btn.classList.remove('authed');\n    fab.classList.remove('visible');\n  }\n}\n\nfunction onAuthBtn() {\n  if (authed) {\n    fetch('/logout').then(() => { authed = false; refreshAuthUI(); toast('ログアウトしました'); });\n  } else { openLnModal(); }\n}\n\nfunction requireAuth(fn) {\n  if (authed) fn(); else { pendingFn = fn; openLnModal(); }\n}\n\nfunction openLnModal() {\n  document.getElementById('ln-pw').value = '';\n  document.getElementById('ln-err').style.display = 'none';\n  document.getElementById('ln-overlay').classList.add('open');\n  setTimeout(() => document.getElementById('ln-pw').focus(), 80);\n}\nfunction closeLnModal() { document.getElementById('ln-overlay').classList.remove('open'); }\nfunction onLnBg(e) { if (e.target===document.getElementById('ln-overlay')) closeLnModal(); }\n\nasync function doLogin() {\n  const pw = document.getElementById('ln-pw').value;\n  const errEl = document.getElementById('ln-err');\n  try {\n    const r = await fetch('/login', {\n      method: 'POST', headers: {'Content-Type':'application/json'},\n      body: JSON.stringify({ password: pw }),\n    });\n    if (r.ok) {\n      authed = true; refreshAuthUI(); closeLnModal(); toast('ログインしました');\n      if (pendingFn) { const f = pendingFn; pendingFn = null; f(); }\n    } else {\n      errEl.textContent = 'パスワードが違います'; errEl.style.display = 'block';\n      document.getElementById('ln-pw').value = '';\n      document.getElementById('ln-pw').focus();\n    }\n  } catch(e) {\n    errEl.textContent = '通信エラーが発生しました'; errEl.style.display = 'block';\n  }\n}\n\n/* ── カレンダー ─────────────────────────────────────────────────── */\nasync function loadEvents() {\n  try { const d = await (await fetch('/api/events')).json(); if (d.ok) events = d.events || []; }\n  catch(e) {}\n  renderCal();\n}\n\nfunction changeMonth(d) {\n  M += d;\n  if (M < 0)  { M = 11; Y--; }\n  if (M > 11) { M = 0;  Y++; }\n  renderCal();\n}\n\nfunction dateFmt(d) {\n  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;\n}\n\nfunction renderCal() {\n  document.getElementById('month-label').textContent = `${Y}年${M+1}月`;\n  const grid = document.getElementById('cal-grid');\n  grid.innerHTML = '';\n\n  const first = new Date(Y, M, 1);\n  let dow = first.getDay(); dow = dow===0 ? 6 : dow-1;\n  const dim = new Date(Y, M+1, 0).getDate();\n  const dip = new Date(Y, M,   0).getDate();\n  const today = dateFmt(new Date());\n\n  const cells = [];\n  for (let i=dow-1; i>=0; i--) cells.push({d:dip-i, m:M-1, y:Y, other:true});\n  for (let d=1; d<=dim; d++)   cells.push({d, m:M, y:Y, other:false});\n  const rem = (7 - cells.length%7) % 7;\n  for (let d=1; d<=rem; d++)   cells.push({d, m:M+1, y:Y, other:true});\n\n  cells.forEach(cell => {\n    const dt = new Date(cell.y, cell.m, cell.d);\n    const ds = dateFmt(dt);\n    const wd = dt.getDay();\n    const el = document.createElement('div');\n    el.className = 'cal-cell'\n      + (cell.other ? ' other-month' : '')\n      + (ds===today ? ' today' : '')\n      + (wd===6 ? ' sat' : wd===0 ? ' sun' : '');\n\n    const dn = document.createElement('div');\n    dn.className = 'day-num'; dn.textContent = cell.d;\n    el.appendChild(dn);\n\n    const dayEvs = events.filter(ev => (ev.start_datetime||'').slice(0,10)===ds);\n    dayEvs.slice(0,3).forEach(ev => {\n      const chip = document.createElement('div');\n      chip.className = `ev-chip ${ev.event_type||'general'}`;\n      chip.textContent = ev.title || '(無題)';\n      chip.onclick = e => { e.stopPropagation(); requireAuth(()=>openEditModal(ev)); };\n      el.appendChild(chip);\n    });\n    if (dayEvs.length > 3) {\n      const more = document.createElement('div');\n      more.className = 'ev-more'; more.textContent = `+${dayEvs.length-3}件`;\n      el.appendChild(more);\n    }\n    el.onclick = () => requireAuth(()=>openModal(ds));\n    grid.appendChild(el);\n  });\n}\n\n/* ── 予定モーダル ───────────────────────────────────────────────── */\nfunction setType(t) {\n  selType = t;\n  ['live','goods','general'].forEach(x => {\n    document.getElementById(`btn-${x}`).className = 'ty-btn' + (x===t ? ` sel-${x}` : '');\n  });\n  document.getElementById('pf-group').style.display = t==='live' ? 'block' : 'none';\n}\n\nfunction onAlldayChange() {\n  const v = document.getElementById('f-allday').checked;\n  document.getElementById('dt-block').style.display = v ? 'none' : 'block';\n  document.getElementById('ad-block').style.display = v ? 'block' : 'none';\n}\n\nfunction openModal(preDate) {\n  editId = null;\n  document.getElementById('ev-title').textContent = '予定を追加';\n  document.getElementById('br-new').style.display  = '';\n  document.getElementById('br-edit').style.display = 'none';\n  document.getElementById('gcal-info').innerHTML   = '';\n  document.getElementById('f-title').value = '';\n  document.getElementById('f-desc').value  = '';\n  document.getElementById('f-pf').value    = '';\n  document.getElementById('f-allday').checked = false;\n  onAlldayChange();\n  const ds = preDate || dateFmt(new Date());\n  ['f-sd','f-ed','f-sd-ad','f-ed-ad'].forEach(id => document.getElementById(id).value = ds);\n  document.getElementById('f-st').value = '20:00';\n  document.getElementById('f-et').value = '22:00';\n  setType('general');\n  document.getElementById('ev-overlay').classList.add('open');\n  setTimeout(() => document.getElementById('f-title').focus(), 80);\n}\n\nfunction openEditModal(ev) {\n  editId = ev.id;\n  document.getElementById('ev-title').textContent = '予定を編集';\n  document.getElementById('br-new').style.display  = 'none';\n  document.getElementById('br-edit').style.display = '';\n  document.getElementById('f-title').value = ev.title || '';\n  document.getElementById('f-desc').value  = ev.description || '';\n  document.getElementById('f-pf').value    = ev.platform || '';\n  const ad = ev.all_day || false;\n  document.getElementById('f-allday').checked = ad;\n  onAlldayChange();\n  const sd = (ev.start_datetime||'').slice(0,10);\n  const st = (ev.start_datetime||'').slice(11,16) || '20:00';\n  const ed = (ev.end_datetime  ||'').slice(0,10) || sd;\n  const et = (ev.end_datetime  ||'').slice(11,16) || '22:00';\n  document.getElementById('f-sd').value    = sd;\n  document.getElementById('f-st').value    = st;\n  document.getElementById('f-ed').value    = ed;\n  document.getElementById('f-et').value    = et;\n  document.getElementById('f-sd-ad').value = sd;\n  document.getElementById('f-ed-ad').value = ed;\n  setType(ev.event_type || 'general');\n  document.getElementById('gcal-info').innerHTML = ev.google_calendar_event_id\n    ? '<div class=\"gcal-badge\">📅 Google カレンダーと同期済み</div>' : '';\n  document.getElementById('ev-overlay').classList.add('open');\n}\n\nfunction closeEvModal() {\n  document.getElementById('ev-overlay').classList.remove('open');\n  editId = null;\n}\nfunction onEvBg(e) { if (e.target===document.getElementById('ev-overlay')) closeEvModal(); }\n\nasync function saveEvent() {\n  const title = document.getElementById('f-title').value.trim();\n  if (!title) { toast('タイトルを入力してください'); return; }\n  const ad = document.getElementById('f-allday').checked;\n  let start, end;\n  if (ad) {\n    start = document.getElementById('f-sd-ad').value;\n    end   = document.getElementById('f-ed-ad').value || start;\n    if (!start) { toast('日付を入力してください'); return; }\n  } else {\n    const sd = document.getElementById('f-sd').value;\n    const st = document.getElementById('f-st').value || '00:00';\n    const ed = document.getElementById('f-ed').value || sd;\n    const et = document.getElementById('f-et').value || st;\n    if (!sd) { toast('日付を入力してください'); return; }\n    start = `${sd}T${st}:00+09:00`;\n    end   = `${ed}T${et}:00+09:00`;\n  }\n  const body = {\n    title,\n    description: document.getElementById('f-desc').value.trim(),\n    event_type:  selType,\n    platform:    document.getElementById('f-pf').value,\n    start_datetime: start, end_datetime: end, all_day: ad,\n  };\n  try {\n    const url = editId ? `/api/events/${editId}` : '/api/events';\n    const r = await fetch(url, {\n      method: editId ? 'PUT' : 'POST',\n      headers: {'Content-Type':'application/json'},\n      body: JSON.stringify(body),\n    });\n    const d = await r.json();\n    if (d.ok) {\n      closeEvModal(); await loadEvents();\n      const synced = d.event && d.event.google_calendar_event_id;\n      toast((editId ? '更新しました' : '保存しました') + (synced ? ' ✓ Google同期' : ''));\n    } else { toast('保存に失敗しました'); }\n  } catch(e) { toast('通信エラーが発生しました'); }\n}\n\nasync function deleteEvent() {\n  if (!editId) return;\n  if (!confirm('この予定を削除しますか？\\n（Googleカレンダーからも削除されます）')) return;\n  try {\n    const r = await fetch(`/api/events/${editId}`, { method: 'DELETE' });\n    const d = await r.json();\n    if (d.ok) { closeEvModal(); await loadEvents(); toast('削除しました'); }\n    else { toast('削除に失敗しました'); }\n  } catch(e) { toast('通信エラーが発生しました'); }\n}\n\n/* ── Toast ──────────────────────────────────────────────────────── */\nfunction toast(msg) {\n  const t = document.getElementById('toast');\n  t.textContent = msg; t.classList.add('show');\n  setTimeout(() => t.classList.remove('show'), 2800);\n}\n</script>\n</body>\n</html>\n"""\n\n\n@app.route("/")\ndef index():\n    return HTML, 200, {"Content-Type": "text/html; charset=utf-8"}\n\n\nif __name__ == "__main__":\n    port = int(os.environ.get("PORT", 5001))\n    app.run(host="0.0.0.0", port=port, debug=False)\n
+"""
+スケジュールカレンダーアプリ — 独立した Flask アプリ
+
+機能:
+  - 月次カレンダー表示（配信/ライブ・グッズ/販売・汎用メモ）
+  - 予定の追加・編集・削除（パスワード認証必須）
+  - Google カレンダーへの一方向同期（サービスアカウント経由）
+
+環境変数（Render などで設定）:
+  SCHEDULE_PASSWORD        ログインパスワード（必須）
+  FLASK_SECRET_KEY         セッション用秘密鍵
+  GOOGLE_SERVICE_ACCOUNT_JSON  Google サービスアカウントの JSON キー
+  GOOGLE_CALENDAR_ID       同期先カレンダー ID（省略時: primary）
+"""
+import os
+import sys
+import json
+import uuid
+from pathlib import Path
+from datetime import datetime, timezone
+
+from flask import Flask, request, jsonify, session, redirect
+
+sys.path.insert(0, str(Path(__file__).parent))
+
+app = Flask(__name__)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(24))
+
+EVENTS_FILE = Path("posts/schedule_events.json")
+
+
+# ── データ管理 ────────────────────────────────────────────────────
+
+def load_events():
+    if EVENTS_FILE.exists():
+        with open(EVENTS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return []
+
+
+def save_events(events):
+    EVENTS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(EVENTS_FILE, "w", encoding="utf-8") as f:
+        json.dump(events, f, ensure_ascii=False, indent=2)
+
+
+# ── 認証 ─────────────────────────────────────────────────────────
+
+def is_authed():
+    return bool(session.get("schedule_ok"))
+
+
+@app.route("/api/me")
+def api_me():
+    return jsonify({"authed": is_authed()})
+
+
+@app.route("/login", methods=["POST"])
+def login():
+    data = request.get_json(force=True)
+    pw = os.environ.get("SCHEDULE_PASSWORD", "")
+    if pw and data.get("password") == pw:
+        session["schedule_ok"] = True
+        return jsonify({"ok": True})
+    return jsonify({"error": "パスワードが違います"}), 401
+
+
+@app.route("/logout")
+def logout():
+    session.pop("schedule_ok", None)
+    return redirect("/")
+
+
+# ── イベント CRUD API ─────────────────────────────────────────────
+
+@app.route("/api/events", methods=["GET"])
+def api_list():
+    return jsonify({"ok": True, "events": load_events()})
+
+
+@app.route("/api/events", methods=["POST"])
+def api_create():
+    if not is_authed():
+        return jsonify({"error": "unauthorized"}), 401
+    data = request.get_json(force=True)
+    event = {
+        "id": str(uuid.uuid4()),
+        "title": str(data.get("title", "")).strip(),
+        "description": str(data.get("description", "")).strip(),
+        "event_type": data.get("event_type", "general"),
+        "platform": data.get("platform", ""),
+        "start_datetime": data.get("start_datetime", ""),
+        "end_datetime": data.get("end_datetime", ""),
+        "all_day": bool(data.get("all_day", False)),
+        "google_calendar_event_id": None,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        from google_calendar import sync_create
+        event["google_calendar_event_id"] = sync_create(event)
+    except Exception:
+        pass
+    events = load_events()
+    events.append(event)
+    save_events(events)
+    return jsonify({"ok": True, "event": event})
+
+
+@app.route("/api/events/<event_id>", methods=["PUT"])
+def api_update(event_id):
+    if not is_authed():
+        return jsonify({"error": "unauthorized"}), 401
+    data = request.get_json(force=True)
+    events = load_events()
+    for i, ev in enumerate(events):
+        if ev["id"] == event_id:
+            events[i].update({
+                "title": str(data.get("title", ev["title"])).strip(),
+                "description": str(data.get("description", ev.get("description", ""))).strip(),
+                "event_type": data.get("event_type", ev["event_type"]),
+                "platform": data.get("platform", ev.get("platform", "")),
+                "start_datetime": data.get("start_datetime", ev["start_datetime"]),
+                "end_datetime": data.get("end_datetime", ev.get("end_datetime", "")),
+                "all_day": bool(data.get("all_day", ev.get("all_day", False))),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            })
+            try:
+                from google_calendar import sync_update
+                sync_update(ev.get("google_calendar_event_id"), events[i])
+            except Exception:
+                pass
+            save_events(events)
+            return jsonify({"ok": True, "event": events[i]})
+    return jsonify({"error": "not found"}), 404
+
+
+@app.route("/api/events/<event_id>", methods=["DELETE"])
+def api_delete(event_id):
+    if not is_authed():
+        return jsonify({"error": "unauthorized"}), 401
+    events = load_events()
+    for i, ev in enumerate(events):
+        if ev["id"] == event_id:
+            try:
+                from google_calendar import sync_delete
+                sync_delete(ev.get("google_calendar_event_id"))
+            except Exception:
+                pass
+            events.pop(i)
+            save_events(events)
+            return jsonify({"ok": True})
+    return jsonify({"error": "not found"}), 404
+
+
+# ── フロントエンド ────────────────────────────────────────────────
+
+HTML = r"""<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0a0a1a">
+<title>エターナルディクト イベントカレンダー</title>
+<style>
+:root {
+  --bg: #0a0a1a;
+  --surface: #13132a;
+  --surface2: #1c1c38;
+  --surface3: #252548;
+  --accent: #6d28d9;
+  --accent2: #7c3aed;
+  --accent-light: #a78bfa;
+  --text: #e2e8f0;
+  --muted: #7a859a;
+  --border: #252548;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --live: #ef4444;
+  --goods: #f59e0b;
+  --general: #818cf8;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
+  min-height: 100vh;
+  padding-bottom: calc(86px + var(--safe-bottom));
+}
+
+/* Header */
+.header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 16px 18px 14px;
+  display: flex; align-items: center; gap: 12px;
+  position: sticky; top: 0; z-index: 100;
+}
+.header-icon {
+  width: 40px; height: 40px;
+  background: linear-gradient(135deg, var(--accent2), #4c1d95);
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; flex-shrink: 0;
+}
+.header-info { flex: 1; min-width: 0; }
+.header-title { font-size: 17px; font-weight: 700; }
+.header-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
+.auth-btn {
+  background: var(--surface2); border: 1.5px solid var(--border);
+  border-radius: 10px; padding: 7px 12px;
+  color: var(--muted); font-size: 12px; font-weight: 600;
+  cursor: pointer; flex-shrink: 0; transition: all 0.15s;
+  white-space: nowrap;
+}
+.auth-btn.authed { color: var(--accent-light); border-color: var(--accent2); }
+
+/* Month nav */
+.month-nav {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px 10px; max-width: 560px; margin: 0 auto;
+}
+.month-btn {
+  background: var(--surface); border: 1.5px solid var(--border);
+  color: var(--text); width: 38px; height: 38px; border-radius: 10px;
+  font-size: 20px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s;
+}
+.month-btn:active { background: var(--surface2); }
+.month-label { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }
+
+/* Legend */
+.legend {
+  display: flex; gap: 14px; flex-wrap: wrap;
+  padding: 2px 16px 12px; max-width: 560px; margin: 0 auto;
+}
+.legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); }
+.legend-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+
+/* Calendar */
+.cal-wrap { max-width: 560px; margin: 0 auto; padding: 0 12px; }
+.cal-head {
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; margin-bottom: 4px;
+}
+.cal-head > div {
+  text-align: center; font-size: 11px; font-weight: 600;
+  color: var(--muted); padding: 4px 0;
+}
+.cal-head > .sat { color: #60a5fa; }
+.cal-head > .sun { color: #f87171; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.cal-cell {
+  min-height: 66px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 5px 4px 3px; cursor: pointer; overflow: hidden;
+  transition: background 0.12s;
+}
+.cal-cell:active { background: var(--surface2); }
+.cal-cell.other-month { opacity: 0.28; }
+.day-num {
+  font-size: 12px; font-weight: 600;
+  width: 22px; height: 22px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%; margin-bottom: 3px;
+}
+.cal-cell.today .day-num { background: var(--accent2); color: white; }
+.cal-cell.sat .day-num { color: #60a5fa; }
+.cal-cell.sun .day-num { color: #f87171; }
+.cal-cell.today.sat .day-num,
+.cal-cell.today.sun .day-num { color: white; }
+.ev-chip {
+  display: block; font-size: 9.5px; font-weight: 600;
+  border-radius: 3px; padding: 1px 4px; margin-bottom: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  cursor: pointer; color: white;
+}
+.ev-chip.live    { background: var(--live); }
+.ev-chip.goods   { background: var(--goods); color: #1a0a00; }
+.ev-chip.general { background: var(--general); }
+.ev-more { font-size: 9px; color: var(--muted); padding-left: 2px; }
+
+/* FAB */
+.fab {
+  position: fixed; bottom: calc(24px + var(--safe-bottom)); right: 20px;
+  width: 56px; height: 56px; background: var(--accent2); border: none;
+  border-radius: 50%; color: white; font-size: 28px; cursor: pointer;
+  box-shadow: 0 4px 24px rgba(124,58,237,0.55);
+  display: none; align-items: center; justify-content: center;
+  z-index: 200; transition: transform 0.15s;
+}
+.fab:active { transform: scale(0.91); }
+.fab.visible { display: flex; }
+
+/* Modal (bottom sheet) */
+.overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.75);
+  z-index: 300; display: none; align-items: flex-end; justify-content: center;
+}
+.overlay.open { display: flex; }
+.sheet {
+  background: var(--surface); border-radius: 22px 22px 0 0;
+  width: 100%; max-width: 560px; max-height: 93vh; overflow-y: auto;
+  padding: 16px 18px calc(16px + var(--safe-bottom));
+}
+.handle {
+  width: 38px; height: 4px; background: var(--border);
+  border-radius: 2px; margin: 0 auto 16px;
+}
+.sheet-title { font-size: 18px; font-weight: 700; margin-bottom: 18px; }
+.fg { margin-bottom: 13px; }
+.fl {
+  display: block; font-size: 10px; font-weight: 700;
+  color: var(--muted); letter-spacing: 0.07em; text-transform: uppercase;
+  margin-bottom: 5px;
+}
+.fi {
+  width: 100%; background: var(--surface2); border: 1.5px solid var(--border);
+  border-radius: 10px; color: var(--text); font-size: 14px;
+  padding: 10px 12px; outline: none; font-family: inherit;
+}
+.fi:focus { border-color: var(--accent2); }
+textarea.fi { min-height: 68px; resize: vertical; }
+select.fi { appearance: none; }
+
+.type-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.ty-btn {
+  padding: 10px 4px; background: var(--surface2); border: 1.5px solid var(--border);
+  border-radius: 10px; color: var(--muted); font-size: 12px; font-weight: 600;
+  cursor: pointer; display: flex; flex-direction: column;
+  align-items: center; gap: 3px; transition: all 0.13s;
+}
+.ty-btn .ico { font-size: 18px; }
+.ty-btn.sel-live    { border-color: var(--live);    color: var(--live);    background: rgba(239,68,68,0.1); }
+.ty-btn.sel-goods   { border-color: var(--goods);   color: #d97706; background: rgba(245,158,11,0.1); }
+.ty-btn.sel-general { border-color: var(--general); color: var(--general); background: rgba(129,140,248,0.1); }
+
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.tog-row {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--surface2); border: 1.5px solid var(--border);
+  border-radius: 10px; padding: 10px 12px;
+}
+.tog-lbl { font-size: 13px; }
+.tog { position: relative; width: 44px; height: 26px; }
+.tog input { opacity: 0; width: 0; height: 0; }
+.tog-sl {
+  position: absolute; inset: 0; background: var(--border);
+  border-radius: 13px; cursor: pointer; transition: background 0.2s;
+}
+.tog-sl::before {
+  content: ""; position: absolute; width: 20px; height: 20px;
+  border-radius: 50%; background: white; top: 3px; left: 3px;
+  transition: transform 0.2s;
+}
+.tog input:checked + .tog-sl { background: var(--accent2); }
+.tog input:checked + .tog-sl::before { transform: translateX(18px); }
+
+.btn-row { display: flex; gap: 10px; margin-top: 18px; }
+.btn-pri {
+  flex: 1; padding: 14px; background: var(--accent2); border: none;
+  border-radius: 12px; color: white; font-size: 15px; font-weight: 700;
+  cursor: pointer; transition: opacity 0.15s;
+}
+.btn-pri:active { opacity: 0.8; }
+.btn-sec {
+  padding: 14px 18px; background: var(--surface2); border: 1.5px solid var(--border);
+  border-radius: 12px; color: var(--muted); font-size: 15px; font-weight: 600; cursor: pointer;
+}
+.btn-danger {
+  padding: 14px 16px; background: rgba(239,68,68,0.1);
+  border: 1.5px solid var(--live); border-radius: 12px;
+  color: var(--live); font-size: 15px; font-weight: 600; cursor: pointer;
+}
+
+.gcal-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: rgba(66,133,244,0.12); border: 1px solid rgba(66,133,244,0.35);
+  color: #60a5fa; border-radius: 8px; font-size: 12px;
+  padding: 5px 10px; margin-bottom: 6px;
+}
+
+/* Toast */
+.toast {
+  position: fixed; bottom: calc(92px + var(--safe-bottom)); left: 50%;
+  transform: translateX(-50%) translateY(14px);
+  background: var(--surface3); border: 1px solid var(--border); color: var(--text);
+  padding: 10px 18px; border-radius: 22px; font-size: 13px;
+  opacity: 0; transition: all 0.28s; white-space: nowrap; z-index: 500; pointer-events: none;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-icon">📅</div>
+  <div class="header-info">
+    <div class="header-title">エターナルディクト イベントカレンダー</div>
+    <div class="header-sub">予定管理 &amp; Google カレンダー同期</div>
+  </div>
+  <button class="auth-btn" id="auth-btn" onclick="onAuthBtn()">🔒 ログイン</button>
+</div>
+
+<div class="month-nav">
+  <button class="month-btn" onclick="changeMonth(-1)">‹</button>
+  <span class="month-label" id="month-label"></span>
+  <button class="month-btn" onclick="changeMonth(1)">›</button>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:var(--live)"></div>配信/ライブ</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--goods)"></div>グッズ/販売</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--general)"></div>汎用メモ</div>
+</div>
+
+<div class="cal-wrap">
+  <div class="cal-head">
+    <div>月</div><div>火</div><div>水</div><div>木</div><div>金</div>
+    <div class="sat">土</div><div class="sun">日</div>
+  </div>
+  <div class="cal-grid" id="cal-grid"></div>
+</div>
+
+<button class="fab" id="fab" onclick="requireAuth(()=>openModal(null))">＋</button>
+
+<!-- 予定モーダル -->
+<div class="overlay" id="ev-overlay" onclick="onEvBg(event)">
+  <div class="sheet">
+    <div class="handle"></div>
+    <div class="sheet-title" id="ev-title">予定を追加</div>
+
+    <div class="fg">
+      <label class="fl">タイトル</label>
+      <input type="text" class="fi" id="f-title" placeholder="予定のタイトル">
+    </div>
+
+    <div class="fg">
+      <label class="fl">種類</label>
+      <div class="type-row">
+        <button class="ty-btn" id="btn-live"    onclick="setType('live')"><span class="ico">🔴</span>配信/ライブ</button>
+        <button class="ty-btn" id="btn-goods"   onclick="setType('goods')"><span class="ico">🛍️</span>グッズ/販売</button>
+        <button class="ty-btn" id="btn-general" onclick="setType('general')"><span class="ico">📝</span>汎用メモ</button>
+      </div>
+    </div>
+
+    <div class="fg" id="pf-group" style="display:none">
+      <label class="fl">プラットフォーム</label>
+      <select class="fi" id="f-pf">
+        <option value="">選択してください</option>
+        <option value="ColorSing">ColorSing</option>
+        <option value="TikTok">TikTok</option>
+        <option value="ポコチャ">ポコチャ</option>
+        <option value="UTAO">UTAO</option>
+        <option value="ふわっち">ふわっち</option>
+        <option value="ショッピング">ショッピング</option>
+        <option value="Instagram">Instagram</option>
+        <option value="YouTube">YouTube</option>
+      </select>
+    </div>
+
+    <div class="fg">
+      <div class="tog-row">
+        <span class="tog-lbl">終日</span>
+        <label class="tog">
+          <input type="checkbox" id="f-allday" onchange="onAlldayChange()">
+          <span class="tog-sl"></span>
+        </label>
+      </div>
+    </div>
+
+    <div id="dt-block">
+      <div class="fg">
+        <div class="row2">
+          <div><label class="fl">開始日</label><input type="date" class="fi" id="f-sd"></div>
+          <div><label class="fl">開始時刻</label><input type="time" class="fi" id="f-st" value="20:00"></div>
+        </div>
+      </div>
+      <div class="fg">
+        <div class="row2">
+          <div><label class="fl">終了日</label><input type="date" class="fi" id="f-ed"></div>
+          <div><label class="fl">終了時刻</label><input type="time" class="fi" id="f-et" value="22:00"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="ad-block" style="display:none">
+      <div class="fg">
+        <div class="row2">
+          <div><label class="fl">開始日</label><input type="date" class="fi" id="f-sd-ad"></div>
+          <div><label class="fl">終了日</label><input type="date" class="fi" id="f-ed-ad"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="fg">
+      <label class="fl">メモ</label>
+      <textarea class="fi" id="f-desc" placeholder="詳細・メモ（任意）"></textarea>
+    </div>
+
+    <div id="gcal-info"></div>
+
+    <div class="btn-row" id="br-new">
+      <button class="btn-sec"  onclick="closeEvModal()">キャンセル</button>
+      <button class="btn-pri"  onclick="saveEvent()">保存</button>
+    </div>
+    <div class="btn-row" id="br-edit" style="display:none">
+      <button class="btn-danger" onclick="deleteEvent()">削除</button>
+      <button class="btn-pri"    onclick="saveEvent()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ログインモーダル -->
+<div class="overlay" id="ln-overlay" onclick="onLnBg(event)">
+  <div class="sheet">
+    <div class="handle"></div>
+    <div class="sheet-title">ログイン</div>
+    <div class="fg">
+      <label class="fl">パスワード</label>
+      <input type="password" class="fi" id="ln-pw" placeholder="パスワードを入力"
+        onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <div id="ln-err" style="color:var(--live);font-size:13px;margin-bottom:8px;display:none"></div>
+    <div class="btn-row">
+      <button class="btn-sec" onclick="closeLnModal()">キャンセル</button>
+      <button class="btn-pri" onclick="doLogin()">ログイン</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let Y, M, events = [], editId = null, selType = 'general';
+let authed = false, pendingFn = null;
+
+(function(){
+  const n = new Date(); Y = n.getFullYear(); M = n.getMonth();
+  checkAuth().then(loadEvents);
+})();
+
+/* ── 認証 ──────────────────────────────────────────────────────── */
+async function checkAuth() {
+  try { const d = await (await fetch('/api/me')).json(); authed = !!d.authed; }
+  catch(e) { authed = false; }
+  refreshAuthUI();
+}
+
+function refreshAuthUI() {
+  const btn = document.getElementById('auth-btn');
+  const fab = document.getElementById('fab');
+  if (authed) {
+    btn.textContent = '🔓 ログアウト'; btn.classList.add('authed');
+    fab.classList.add('visible');
+  } else {
+    btn.textContent = '🔒 ログイン'; btn.classList.remove('authed');
+    fab.classList.remove('visible');
+  }
+}
+
+function onAuthBtn() {
+  if (authed) {
+    fetch('/logout').then(() => { authed = false; refreshAuthUI(); toast('ログアウトしました'); });
+  } else { openLnModal(); }
+}
+
+function requireAuth(fn) {
+  if (authed) fn(); else { pendingFn = fn; openLnModal(); }
+}
+
+function openLnModal() {
+  document.getElementById('ln-pw').value = '';
+  document.getElementById('ln-err').style.display = 'none';
+  document.getElementById('ln-overlay').classList.add('open');
+  setTimeout(() => document.getElementById('ln-pw').focus(), 80);
+}
+function closeLnModal() { document.getElementById('ln-overlay').classList.remove('open'); }
+function onLnBg(e) { if (e.target===document.getElementById('ln-overlay')) closeLnModal(); }
+
+async function doLogin() {
+  const pw = document.getElementById('ln-pw').value;
+  const errEl = document.getElementById('ln-err');
+  try {
+    const r = await fetch('/login', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ password: pw }),
+    });
+    if (r.ok) {
+      authed = true; refreshAuthUI(); closeLnModal(); toast('ログインしました');
+      if (pendingFn) { const f = pendingFn; pendingFn = null; f(); }
+    } else {
+      errEl.textContent = 'パスワードが違います'; errEl.style.display = 'block';
+      document.getElementById('ln-pw').value = '';
+      document.getElementById('ln-pw').focus();
+    }
+  } catch(e) {
+    errEl.textContent = '通信エラーが発生しました'; errEl.style.display = 'block';
+  }
+}
+
+/* ── カレンダー ─────────────────────────────────────────────────── */
+async function loadEvents() {
+  try { const d = await (await fetch('/api/events')).json(); if (d.ok) events = d.events || []; }
+  catch(e) {}
+  renderCal();
+}
+
+function changeMonth(d) {
+  M += d;
+  if (M < 0)  { M = 11; Y--; }
+  if (M > 11) { M = 0;  Y++; }
+  renderCal();
+}
+
+function dateFmt(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function renderCal() {
+  document.getElementById('month-label').textContent = `${Y}年${M+1}月`;
+  const grid = document.getElementById('cal-grid');
+  grid.innerHTML = '';
+
+  const first = new Date(Y, M, 1);
+  let dow = first.getDay(); dow = dow===0 ? 6 : dow-1;
+  const dim = new Date(Y, M+1, 0).getDate();
+  const dip = new Date(Y, M,   0).getDate();
+  const today = dateFmt(new Date());
+
+  const cells = [];
+  for (let i=dow-1; i>=0; i--) cells.push({d:dip-i, m:M-1, y:Y, other:true});
+  for (let d=1; d<=dim; d++)   cells.push({d, m:M, y:Y, other:false});
+  const rem = (7 - cells.length%7) % 7;
+  for (let d=1; d<=rem; d++)   cells.push({d, m:M+1, y:Y, other:true});
+
+  cells.forEach(cell => {
+    const dt = new Date(cell.y, cell.m, cell.d);
+    const ds = dateFmt(dt);
+    const wd = dt.getDay();
+    const el = document.createElement('div');
+    el.className = 'cal-cell'
+      + (cell.other ? ' other-month' : '')
+      + (ds===today ? ' today' : '')
+      + (wd===6 ? ' sat' : wd===0 ? ' sun' : '');
+
+    const dn = document.createElement('div');
+    dn.className = 'day-num'; dn.textContent = cell.d;
+    el.appendChild(dn);
+
+    const dayEvs = events.filter(ev => (ev.start_datetime||'').slice(0,10)===ds);
+    dayEvs.slice(0,3).forEach(ev => {
+      const chip = document.createElement('div');
+      chip.className = `ev-chip ${ev.event_type||'general'}`;
+      chip.textContent = ev.title || '(無題)';
+      chip.onclick = e => { e.stopPropagation(); requireAuth(()=>openEditModal(ev)); };
+      el.appendChild(chip);
+    });
+    if (dayEvs.length > 3) {
+      const more = document.createElement('div');
+      more.className = 'ev-more'; more.textContent = `+${dayEvs.length-3}件`;
+      el.appendChild(more);
+    }
+    el.onclick = () => requireAuth(()=>openModal(ds));
+    grid.appendChild(el);
+  });
+}
+
+/* ── 予定モーダル ───────────────────────────────────────────────── */
+function setType(t) {
+  selType = t;
+  ['live','goods','general'].forEach(x => {
+    document.getElementById(`btn-${x}`).className = 'ty-btn' + (x===t ? ` sel-${x}` : '');
+  });
+  document.getElementById('pf-group').style.display = t==='live' ? 'block' : 'none';
+}
+
+function onAlldayChange() {
+  const v = document.getElementById('f-allday').checked;
+  document.getElementById('dt-block').style.display = v ? 'none' : 'block';
+  document.getElementById('ad-block').style.display = v ? 'block' : 'none';
+}
+
+function openModal(preDate) {
+  editId = null;
+  document.getElementById('ev-title').textContent = '予定を追加';
+  document.getElementById('br-new').style.display  = '';
+  document.getElementById('br-edit').style.display = 'none';
+  document.getElementById('gcal-info').innerHTML   = '';
+  document.getElementById('f-title').value = '';
+  document.getElementById('f-desc').value  = '';
+  document.getElementById('f-pf').value    = '';
+  document.getElementById('f-allday').checked = false;
+  onAlldayChange();
+  const ds = preDate || dateFmt(new Date());
+  ['f-sd','f-ed','f-sd-ad','f-ed-ad'].forEach(id => document.getElementById(id).value = ds);
+  document.getElementById('f-st').value = '20:00';
+  document.getElementById('f-et').value = '22:00';
+  setType('general');
+  document.getElementById('ev-overlay').classList.add('open');
+  setTimeout(() => document.getElementById('f-title').focus(), 80);
+}
+
+function openEditModal(ev) {
+  editId = ev.id;
+  document.getElementById('ev-title').textContent = '予定を編集';
+  document.getElementById('br-new').style.display  = 'none';
+  document.getElementById('br-edit').style.display = '';
+  document.getElementById('f-title').value = ev.title || '';
+  document.getElementById('f-desc').value  = ev.description || '';
+  document.getElementById('f-pf').value    = ev.platform || '';
+  const ad = ev.all_day || false;
+  document.getElementById('f-allday').checked = ad;
+  onAlldayChange();
+  const sd = (ev.start_datetime||'').slice(0,10);
+  const st = (ev.start_datetime||'').slice(11,16) || '20:00';
+  const ed = (ev.end_datetime  ||'').slice(0,10) || sd;
+  const et = (ev.end_datetime  ||'').slice(11,16) || '22:00';
+  document.getElementById('f-sd').value    = sd;
+  document.getElementById('f-st').value    = st;
+  document.getElementById('f-ed').value    = ed;
+  document.getElementById('f-et').value    = et;
+  document.getElementById('f-sd-ad').value = sd;
+  document.getElementById('f-ed-ad').value = ed;
+  setType(ev.event_type || 'general');
+  document.getElementById('gcal-info').innerHTML = ev.google_calendar_event_id
+    ? '<div class="gcal-badge">📅 Google カレンダーと同期済み</div>' : '';
+  document.getElementById('ev-overlay').classList.add('open');
+}
+
+function closeEvModal() {
+  document.getElementById('ev-overlay').classList.remove('open');
+  editId = null;
+}
+function onEvBg(e) { if (e.target===document.getElementById('ev-overlay')) closeEvModal(); }
+
+async function saveEvent() {
+  const title = document.getElementById('f-title').value.trim();
+  if (!title) { toast('タイトルを入力してください'); return; }
+  const ad = document.getElementById('f-allday').checked;
+  let start, end;
+  if (ad) {
+    start = document.getElementById('f-sd-ad').value;
+    end   = document.getElementById('f-ed-ad').value || start;
+    if (!start) { toast('日付を入力してください'); return; }
+  } else {
+    const sd = document.getElementById('f-sd').value;
+    const st = document.getElementById('f-st').value || '00:00';
+    const ed = document.getElementById('f-ed').value || sd;
+    const et = document.getElementById('f-et').value || st;
+    if (!sd) { toast('日付を入力してください'); return; }
+    start = `${sd}T${st}:00+09:00`;
+    end   = `${ed}T${et}:00+09:00`;
+  }
+  const body = {
+    title,
+    description: document.getElementById('f-desc').value.trim(),
+    event_type:  selType,
+    platform:    document.getElementById('f-pf').value,
+    start_datetime: start, end_datetime: end, all_day: ad,
+  };
+  try {
+    const url = editId ? `/api/events/${editId}` : '/api/events';
+    const r = await fetch(url, {
+      method: editId ? 'PUT' : 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(body),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      closeEvModal(); await loadEvents();
+      const synced = d.event && d.event.google_calendar_event_id;
+      toast((editId ? '更新しました' : '保存しました') + (synced ? ' ✓ Google同期' : ''));
+    } else { toast('保存に失敗しました'); }
+  } catch(e) { toast('通信エラーが発生しました'); }
+}
+
+async function deleteEvent() {
+  if (!editId) return;
+  if (!confirm('この予定を削除しますか？\n（Googleカレンダーからも削除されます）')) return;
+  try {
+    const r = await fetch(`/api/events/${editId}`, { method: 'DELETE' });
+    const d = await r.json();
+    if (d.ok) { closeEvModal(); await loadEvents(); toast('削除しました'); }
+    else { toast('削除に失敗しました'); }
+  } catch(e) { toast('通信エラーが発生しました'); }
+}
+
+/* ── Toast ──────────────────────────────────────────────────────── */
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+</script>
+</body>
+</html>
+"""
+
+
+@app.route("/")
+def index():
+    return HTML, 200, {"Content-Type": "text/html; charset=utf-8"}
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5001))
+    app.run(host="0.0.0.0", port=port, debug=False)
