@@ -5,10 +5,12 @@
   - 月次カレンダー表示（配信/ライブ・グッズ/販売・汎用メモ）
   - 予定の追加・編集・削除（パスワード認証必須）
   - Google カレンダーへの一方向同期（サービスアカウント経由）
+  - Supabase (PostgreSQL) でデータ永続化（DATABASE_URL 未設定時はファイル）
 
 環境変数（Render などで設定）:
   SCHEDULE_PASSWORD        ログインパスワード（必須）
   FLASK_SECRET_KEY         セッション用秘密鍵
+  DATABASE_URL             Supabase の接続 URI（永続化に必要）
   GOOGLE_SERVICE_ACCOUNT_JSON  Google サービスアカウントの JSON キー
   GOOGLE_CALENDAR_ID       同期先カレンダー ID（省略時: primary）
 """
@@ -28,17 +30,158 @@ app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(24))
 
 EVENTS_FILE = Path("posts/schedule_events.json")
 
+_COLS = ("id", "title", "description", "event_type", "platform",
+         "start_datetime", "end_datetime", "all_day",
+         "google_calendar_event_id", "created_at", "updated_at")
+
+
+# ── DB 接続 ───────────────────────────────────────────────────────
+
+def _db_conn():
+    url = os.environ.get("DATABASE_URL", "")
+    if not url:
+        return None
+    try:
+        import psycopg2
+        return psycopg2.connect(url, sslmode="require")
+    except Exception:
+        return None
+
+
+def _ensure_table():
+    conn = _db_conn()
+    if not conn:
+        return
+    try:
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS schedule_events (
+                        id TEXT PRIMARY KEY,
+                        title TEXT NOT NULL DEFAULT '',
+                        description TEXT DEFAULT '',
+                        event_type TEXT DEFAULT 'general',
+                        platform TEXT DEFAULT '',
+                        start_datetime TEXT DEFAULT '',
+                        end_datetime TEXT DEFAULT '',
+                        all_day BOOLEAN DEFAULT FALSE,
+                        google_calendar_event_id TEXT,
+                        created_at TEXT DEFAULT '',
+                        updated_at TEXT DEFAULT ''
+                    )
+                """)
+    except Exception:
+        pass
+    finally:
+        conn.close()
+
 
 # ── データ管理 ────────────────────────────────────────────────────
 
 def load_events():
+    conn = _db_conn()
+    if conn:
+        try:
+            import psycopg2.extras
+            with conn:
+                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                    cur.execute(
+                        "SELECT * FROM schedule_events ORDER BY start_datetime"
+                    )
+                    return [dict(r) for r in cur.fetchall()]
+        except Exception:
+            pass
+        finally:
+            conn.close()
     if EVENTS_FILE.exists():
         with open(EVENTS_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
     return []
 
 
-def save_events(events):
+def _db_insert(event):
+    conn = _db_conn()
+    if conn:
+        try:
+            with conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        INSERT INTO schedule_events
+                        (id,title,description,event_type,platform,
+                         start_datetime,end_datetime,all_day,
+                         google_calendar_event_id,created_at,updated_at)
+                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    """, (
+                        event["id"], event["title"], event.get("description",""),
+                        event.get("event_type","general"), event.get("platform",""),
+                        event.get("start_datetime",""), event.get("end_datetime",""),
+                        event.get("all_day", False),
+                        event.get("google_calendar_event_id"),
+                        event.get("created_at",""), event.get("updated_at",""),
+                    ))
+            return True
+        except Exception:
+            pass
+        finally:
+            conn.close()
+    events = load_events()
+    events.append(event)
+    _file_save(events)
+    return True
+
+
+def _db_update(event_id, fields):
+    conn = _db_conn()
+    if conn:
+        try:
+            with conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        UPDATE schedule_events SET
+                        title=%s,description=%s,event_type=%s,platform=%s,
+                        start_datetime=%s,end_datetime=%s,all_day=%s,updated_at=%s
+                        WHERE id=%s
+                    """, (
+                        fields["title"], fields.get("description",""),
+                        fields.get("event_type","general"), fields.get("platform",""),
+                        fields.get("start_datetime",""), fields.get("end_datetime",""),
+                        fields.get("all_day", False), fields.get("updated_at",""),
+                        event_id,
+                    ))
+            return True
+        except Exception:
+            pass
+        finally:
+            conn.close()
+    events = load_events()
+    for i, ev in enumerate(events):
+        if ev["id"] == event_id:
+            events[i].update(fields)
+            break
+    _file_save(events)
+    return True
+
+
+def _db_delete(event_id):
+    conn = _db_conn()
+    if conn:
+        try:
+            with conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "DELETE FROM schedule_events WHERE id=%s", (event_id,)
+                    )
+            return True
+        except Exception:
+            pass
+        finally:
+            conn.close()
+    events = [ev for ev in load_events() if ev["id"] != event_id]
+    _file_save(events)
+    return True
+
+
+def _file_save(events):
     EVENTS_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(EVENTS_FILE, "w", encoding="utf-8") as f:
         json.dump(events, f, ensure_ascii=False, indent=2)
@@ -101,9 +244,7 @@ def api_create():
         event["google_calendar_event_id"] = sync_create(event)
     except Exception:
         pass
-    events = load_events()
-    events.append(event)
-    save_events(events)
+    _db_insert(event)
     return jsonify({"ok": True, "event": event})
 
 
@@ -113,26 +254,27 @@ def api_update(event_id):
         return jsonify({"error": "unauthorized"}), 401
     data = request.get_json(force=True)
     events = load_events()
-    for i, ev in enumerate(events):
-        if ev["id"] == event_id:
-            events[i].update({
-                "title": str(data.get("title", ev["title"])).strip(),
-                "description": str(data.get("description", ev.get("description", ""))).strip(),
-                "event_type": data.get("event_type", ev["event_type"]),
-                "platform": data.get("platform", ev.get("platform", "")),
-                "start_datetime": data.get("start_datetime", ev["start_datetime"]),
-                "end_datetime": data.get("end_datetime", ev.get("end_datetime", "")),
-                "all_day": bool(data.get("all_day", ev.get("all_day", False))),
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            })
-            try:
-                from google_calendar import sync_update
-                sync_update(ev.get("google_calendar_event_id"), events[i])
-            except Exception:
-                pass
-            save_events(events)
-            return jsonify({"ok": True, "event": events[i]})
-    return jsonify({"error": "not found"}), 404
+    ev = next((e for e in events if e["id"] == event_id), None)
+    if not ev:
+        return jsonify({"error": "not found"}), 404
+    fields = {
+        "title": str(data.get("title", ev["title"])).strip(),
+        "description": str(data.get("description", ev.get("description", ""))).strip(),
+        "event_type": data.get("event_type", ev["event_type"]),
+        "platform": data.get("platform", ev.get("platform", "")),
+        "start_datetime": data.get("start_datetime", ev["start_datetime"]),
+        "end_datetime": data.get("end_datetime", ev.get("end_datetime", "")),
+        "all_day": bool(data.get("all_day", ev.get("all_day", False))),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    _db_update(event_id, fields)
+    updated = {**ev, **fields}
+    try:
+        from google_calendar import sync_update
+        sync_update(ev.get("google_calendar_event_id"), updated)
+    except Exception:
+        pass
+    return jsonify({"ok": True, "event": updated})
 
 
 @app.route("/api/events/<event_id>", methods=["DELETE"])
@@ -140,17 +282,16 @@ def api_delete(event_id):
     if not is_authed():
         return jsonify({"error": "unauthorized"}), 401
     events = load_events()
-    for i, ev in enumerate(events):
-        if ev["id"] == event_id:
-            try:
-                from google_calendar import sync_delete
-                sync_delete(ev.get("google_calendar_event_id"))
-            except Exception:
-                pass
-            events.pop(i)
-            save_events(events)
-            return jsonify({"ok": True})
-    return jsonify({"error": "not found"}), 404
+    ev = next((e for e in events if e["id"] == event_id), None)
+    if not ev:
+        return jsonify({"error": "not found"}), 404
+    try:
+        from google_calendar import sync_delete
+        sync_delete(ev.get("google_calendar_event_id"))
+    except Exception:
+        pass
+    _db_delete(event_id)
+    return jsonify({"ok": True})
 
 
 # ── フロントエンド ────────────────────────────────────────────────
@@ -825,6 +966,8 @@ function toast(msg) {
 def index():
     return HTML, 200, {"Content-Type": "text/html; charset=utf-8"}
 
+
+_ensure_table()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5001))

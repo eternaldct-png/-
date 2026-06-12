@@ -24,3 +24,6 @@ stripe>=10.0.0
 # Google Calendar 同期
 google-auth>=2.27.0
 google-api-python-client>=2.118.0
+
+# Supabase (PostgreSQL) データ永続化
+psycopg2-binary>=2.9.0
