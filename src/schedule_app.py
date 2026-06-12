@@ -451,11 +451,14 @@ select.fi { appearance: none; }
       <label class="fl">プラットフォーム</label>
       <select class="fi" id="f-pf">
         <option value="">選択してください</option>
-        <option value="YouTube">YouTube</option>
+        <option value="ColorSing">ColorSing</option>
         <option value="TikTok">TikTok</option>
-        <option value="X">X (Twitter)</option>
+        <option value="ポコチャ">ポコチャ</option>
+        <option value="UTAO">UTAO</option>
+        <option value="ふわっち">ふわっち</option>
+        <option value="ショッピング">ショッピング</option>
         <option value="Instagram">Instagram</option>
-        <option value="その他">その他</option>
+        <option value="YouTube">YouTube</option>
       </select>
     </div>
 
