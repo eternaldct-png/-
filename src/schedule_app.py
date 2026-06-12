@@ -163,7 +163,7 @@ HTML = r"""<!DOCTYPE html>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#0a0a1a">
-<title>スケジュール</title>
+<title>エターナルディクト イベントカレンダー</title>
 <style>
 :root {
   --bg: #0a0a1a;
@@ -399,7 +399,7 @@ select.fi { appearance: none; }
 <div class="header">
   <div class="header-icon">📅</div>
   <div class="header-info">
-    <div class="header-title">スケジュール</div>
+    <div class="header-title">エターナルディクト イベントカレンダー</div>
     <div class="header-sub">予定管理 &amp; Google カレンダー同期</div>
   </div>
   <button class="auth-btn" id="auth-btn" onclick="onAuthBtn()">🔒 ログイン</button>
