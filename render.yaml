@@ -30,3 +30,19 @@ services:
         sync: false          # Google サービスアカウントの JSON キー（Google Calendar 同期用）
       - key: GOOGLE_CALENDAR_ID
         sync: false          # 同期先カレンダー ID（省略時: primary）
+
+  - type: web
+    name: eternal-interview-booking
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn src.booking_app:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120
+    plan: free
+    envVars:
+      - key: FLASK_SECRET_KEY
+        sync: false          # セッション用秘密鍵（任意の文字列）
+      - key: DATABASE_URL
+        sync: false          # Supabase の接続 URI（任意。未設定時はファイルに保存）
+      - key: GOOGLE_SERVICE_ACCOUNT_JSON
+        sync: false          # Google サービスアカウントの JSON キー（Google Calendar 同期用）
+      - key: GOOGLE_CALENDAR_ID
+        sync: false          # eternal.d.c.t@gmail.com と共有したカレンダー ID

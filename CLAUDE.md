@@ -98,3 +98,27 @@ git push -u origin claude/homepage-payment-spreadsheet-DD1ly
 - URL: `https://kazuto-post-generator.onrender.com/goods/admin`
 - パスワード: Render の `WEB_PASSWORD` で設定した値
 - 表示内容: 注文日時 / 商品名 / オプション（サイズ・カラー・デザイン）/ 金額 / 氏名 / 住所 / 連絡先
+
+---
+
+## 面談予約アプリ（src/booking_app.py）
+
+kazuto と あまりん/さな/しー/かぴのすけ の4ペアそれぞれについて、外部ゲストが
+ログイン不要で1時間の面談を予約できるアプリ。Render では別サービス
+`eternal-interview-booking` としてホスト（`render.yaml` 参照）。
+
+### 仕組み
+- ログイン不要。5人は `/availability` で自分の名前を選んで空き時間（1時間単位、9:00〜22:00）を登録する。
+- 各ペアの予約ページ（`/book/<slug>`）には、kazuto とそのメンバー両方が空けている時間だけが表示される。
+- ゲストは名前だけ入力して予約。**先着順**で、同じスロットは一度しか予約できない。
+- kazuto は全ペア共通の参加者なので、1ペアで埋まると他のペアの同時刻も自動的に予約不可になる。
+- 予約が確定すると `eternal.d.c.t@gmail.com` の Google カレンダーに同期される（`GOOGLE_SERVICE_ACCOUNT_JSON` / `GOOGLE_CALENDAR_ID` をそのカレンダーに合わせて設定し、サービスアカウントのメールアドレスをカレンダー共有に追加しておく必要あり）。
+
+### URL
+- `/` — メニュー（空き時間登録 + 4人分の予約リンク）
+- `/availability` — 空き時間登録（5人共通、ログイン不要）
+- `/book/amarin` `/book/sana` `/book/shi` `/book/kapinosuke` — 各メンバーとの面談予約ページ（一般公開）
+
+### データ
+- `posts/booking_availability.json` — 各人の空き時間（`DATABASE_URL` 設定時は Postgres の `booking_availability` テーブル）
+- `posts/booking_reservations.json` — 確定した予約（同テーブル構成時は `interview_bookings` テーブル）
