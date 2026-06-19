@@ -108,7 +108,8 @@ kazuto と あまりん/さな/しー/かぴのすけ の4ペアそれぞれに�
 `eternal-interview-booking` としてホスト（`render.yaml` 参照）。
 
 ### 仕組み
-- ログイン不要。5人は `/availability` で自分の名前を選んで空き時間（1時間単位、9:00〜22:00）を登録する。
+- `/availability`（空き時間登録）はパスワード保護（`AVAILABILITY_PASSWORD`、未設定時のデフォルト: `ETERNALLOVE`）。5人はログイン後、自分の名前を選んで空き時間（1時間単位、9:00〜22:00）を登録する。
+- `/book/<slug>`（外部ゲスト向け予約ページ）はログイン不要・一般公開。
 - 各ペアの予約ページ（`/book/<slug>`）には、kazuto とそのメンバー両方が空けている時間だけが表示される。
 - ゲストは名前だけ入力して予約。**先着順**で、同じスロットは一度しか予約できない。
 - kazuto は全ペア共通の参加者なので、1ペアで埋まると他のペアの同時刻も自動的に予約不可になる。
@@ -117,8 +118,8 @@ kazuto と あまりん/さな/しー/かぴのすけ の4ペアそれぞれに�
 
 ### URL
 - `/` — メニュー（空き時間登録 + 4人分の予約リンク）
-- `/availability` — 空き時間登録（5人共通、ログイン不要）
-- `/book/amarin` `/book/sana` `/book/shi` `/book/kapinosuke` — 各メンバーとの面談予約ページ（一般公開）
+- `/availability` — 空き時間登録（5人共通、パスワード保護）
+- `/book/amarin` `/book/sana` `/book/shi` `/book/kapinosuke` — 各メンバーとの面談予約ページ（一般公開・ログイン不要）
 
 ### データ
 - `posts/booking_availability.json` — 各人の空き時間（`DATABASE_URL` 設定時は Postgres の `booking_availability` テーブル）
