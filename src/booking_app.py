@@ -24,12 +24,14 @@ import uuid
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, session
 
 sys.path.insert(0, str(Path(__file__).parent))
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(24))
+
+AVAILABILITY_PASSWORD = os.environ.get("AVAILABILITY_PASSWORD", "ETERNALLOVE")
 
 ADMIN = "kazuto"
 MEMBER_SLUGS = {
@@ -331,10 +333,38 @@ def pair_open_slots(member_name):
     return person_available_slots(ADMIN) & person_available_slots(member_name) - booked_slots()
 
 
+# ── 認証（空き時間登録ページ） ───────────────────────────────────
+
+def is_avail_authed():
+    return bool(session.get("avail_ok"))
+
+
+@app.route("/api/availability/me")
+def api_availability_me():
+    return jsonify({"authed": is_avail_authed()})
+
+
+@app.route("/api/availability/login", methods=["POST"])
+def api_availability_login():
+    data = request.get_json(force=True)
+    if data.get("password") == AVAILABILITY_PASSWORD:
+        session["avail_ok"] = True
+        return jsonify({"ok": True})
+    return jsonify({"error": "パスワードが違います"}), 401
+
+
+@app.route("/api/availability/logout", methods=["POST"])
+def api_availability_logout():
+    session.pop("avail_ok", None)
+    return jsonify({"ok": True})
+
+
 # ── API: 空き時間登録 ────────────────────────────────────────────
 
 @app.route("/api/availability")
 def api_availability_get():
+    if not is_avail_authed():
+        return jsonify({"error": "unauthorized"}), 401
     person = request.args.get("person", "")
     date = request.args.get("date", "")
     if person not in ALL_PEOPLE or not date:
@@ -359,6 +389,8 @@ def api_availability_get():
 
 @app.route("/api/availability/toggle", methods=["POST"])
 def api_availability_toggle():
+    if not is_avail_authed():
+        return jsonify({"error": "unauthorized"}), 401
     data = request.get_json(force=True)
     person = data.get("person", "")
     date = data.get("date", "")
@@ -378,6 +410,8 @@ def api_availability_toggle():
 
 @app.route("/api/booking/<booking_id>/edit", methods=["POST"])
 def api_booking_edit(booking_id):
+    if not is_avail_authed():
+        return jsonify({"error": "unauthorized"}), 401
     data = request.get_json(force=True)
     guest_name = str(data.get("guest_name", "")).strip()
     if not guest_name:
@@ -405,6 +439,8 @@ def api_booking_edit(booking_id):
 
 @app.route("/api/booking/<booking_id>/delete", methods=["POST"])
 def api_booking_delete(booking_id):
+    if not is_avail_authed():
+        return jsonify({"error": "unauthorized"}), 401
     booking = delete_booking(booking_id)
     if not booking:
         return jsonify({"error": "予約が見つかりません"}), 404
@@ -629,6 +665,7 @@ AVAILABILITY_HTML = """<!DOCTYPE html>
     <div class="header-title">空き時間登録</div>
     <div class="header-sub">タップで空き時間をON/OFF</div>
   </div>
+  <button class="back-btn" onclick="doLogout()" title="ログアウト">🔒</button>
 </div>
 <div class="wrap">
   <select class="fi" id="f-person" onchange="onPersonChange()">__PERSON_OPTIONS__</select>
@@ -638,6 +675,17 @@ AVAILABILITY_HTML = """<!DOCTYPE html>
     <button class="day-btn" onclick="changeDay(1)">›</button>
   </div>
   <div class="hour-grid" id="hour-grid"></div>
+</div>
+
+<div class="overlay open" id="pw-overlay">
+  <div class="sheet">
+    <div class="handle"></div>
+    <div class="sheet-title">パスワードを入力してください</div>
+    <input type="password" class="fi" id="f-pw" placeholder="パスワード" onkeydown="if(event.key==='Enter')submitPw()">
+    <div class="btn-row">
+      <button class="btn-pri" style="width:100%" onclick="submitPw()">入る</button>
+    </div>
+  </div>
 </div>
 <div class="toast" id="toast"></div>
 <script>
@@ -719,8 +767,38 @@ async function deleteBooking(bookingId, hour, member) {
     else { toast(d.error || '削除に失敗しました'); }
   } catch(e) { toast('通信エラーが発生しました'); }
 }
+async function doLogout() {
+  await fetch('/api/availability/logout', { method: 'POST' });
+  location.reload();
+}
+async function checkAuth() {
+  try {
+    const d = await (await fetch('/api/availability/me')).json();
+    if (d.authed) {
+      document.getElementById('pw-overlay').classList.remove('open');
+      render();
+    }
+  } catch(e) {}
+}
+async function submitPw() {
+  const password = document.getElementById('f-pw').value;
+  try {
+    const r = await fetch('/api/availability/login', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ password }),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      document.getElementById('pw-overlay').classList.remove('open');
+      render();
+    } else {
+      toast(d.error || 'パスワードが違います');
+      document.getElementById('f-pw').value = '';
+    }
+  } catch(e) { toast('通信エラーが発生しました'); }
+}
 __TOAST_JS__
-render();
+checkAuth();
 </script>
 </body>
 </html>

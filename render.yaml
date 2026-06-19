@@ -40,6 +40,8 @@ services:
     envVars:
       - key: FLASK_SECRET_KEY
         sync: false          # セッション用秘密鍵（任意の文字列）
+      - key: AVAILABILITY_PASSWORD
+        sync: false          # /availability ログインパスワード（未設定時のデフォルト: ETERNALLOVE）
       - key: DATABASE_URL
         sync: false          # Supabase の接続 URI（任意。未設定時はファイルに保存）
       - key: GOOGLE_SERVICE_ACCOUNT_JSON
