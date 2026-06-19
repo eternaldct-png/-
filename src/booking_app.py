@@ -248,6 +248,64 @@ def set_booking_google_event_id(booking_id, google_event_id):
     _bookings_file_save(rows)
 
 
+def get_booking(booking_id):
+    return next((r for r in load_bookings() if r["id"] == booking_id), None)
+
+
+def update_booking_guest_name(booking_id, guest_name):
+    conn = _db_conn()
+    if conn:
+        try:
+            with conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "UPDATE interview_bookings SET guest_name=%s WHERE id=%s",
+                        (guest_name, booking_id),
+                    )
+            return True
+        except Exception:
+            return False
+        finally:
+            conn.close()
+    rows = load_bookings()
+    found = False
+    for r in rows:
+        if r["id"] == booking_id:
+            r["guest_name"] = guest_name
+            found = True
+            break
+    if found:
+        _bookings_file_save(rows)
+    return found
+
+
+def delete_booking(booking_id):
+    """削除した予約を返す（Googleカレンダー同期解除に使う）。なければ None。"""
+    conn = _db_conn()
+    if conn:
+        try:
+            import psycopg2.extras
+            with conn:
+                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                    cur.execute("SELECT * FROM interview_bookings WHERE id=%s", (booking_id,))
+                    row = cur.fetchone()
+                    if not row:
+                        return None
+                    cur.execute("DELETE FROM interview_bookings WHERE id=%s", (booking_id,))
+            return dict(row)
+        except Exception:
+            return None
+        finally:
+            conn.close()
+    rows = load_bookings()
+    target = next((r for r in rows if r["id"] == booking_id), None)
+    if not target:
+        return None
+    rows = [r for r in rows if r["id"] != booking_id]
+    _bookings_file_save(rows)
+    return target
+
+
 # ── 予約ロジック ─────────────────────────────────────────────────
 
 def slot_iso(date_str, hour_str):
@@ -294,6 +352,7 @@ def api_availability_get():
             "booked": slot in booked,
             "booked_with": b["member"] if b else "",
             "guest_name": b["guest_name"] if b else "",
+            "booking_id": b["id"] if b else "",
         })
     return jsonify({"ok": True, "hours": hours})
 
@@ -315,6 +374,47 @@ def api_availability_toggle():
         return jsonify({"ok": True, "available": False})
     add_availability(person, slot)
     return jsonify({"ok": True, "available": True})
+
+
+@app.route("/api/booking/<booking_id>/edit", methods=["POST"])
+def api_booking_edit(booking_id):
+    data = request.get_json(force=True)
+    guest_name = str(data.get("guest_name", "")).strip()
+    if not guest_name:
+        return jsonify({"error": "名前を入力してください"}), 400
+    if not update_booking_guest_name(booking_id, guest_name):
+        return jsonify({"error": "予約が見つかりません"}), 404
+    booking = get_booking(booking_id)
+    if booking and booking.get("google_calendar_event_id"):
+        try:
+            from google_calendar import sync_update
+            slot = booking["slot"]
+            date, hour = slot[:10], slot[11:16]
+            sync_update(booking["google_calendar_event_id"], {
+                "title": f"面談: {guest_name} × {booking['member']}",
+                "description": f"{booking['member']} との1時間面談（ゲスト: {guest_name}）",
+                "event_type": "interview",
+                "start_datetime": slot,
+                "end_datetime": slot_end_iso(date, hour),
+                "all_day": False,
+            })
+        except Exception:
+            pass
+    return jsonify({"ok": True})
+
+
+@app.route("/api/booking/<booking_id>/delete", methods=["POST"])
+def api_booking_delete(booking_id):
+    booking = delete_booking(booking_id)
+    if not booking:
+        return jsonify({"error": "予約が見つかりません"}), 404
+    if booking.get("google_calendar_event_id"):
+        try:
+            from google_calendar import sync_delete
+            sync_delete(booking["google_calendar_event_id"])
+        except Exception:
+            pass
+    return jsonify({"ok": True})
 
 
 # ── API: 面談予約（公開） ────────────────────────────────────────
@@ -448,6 +548,12 @@ select.fi, input.fi {
 .hour-btn.on { border-color: var(--ok); color: var(--ok); background: rgba(34,197,94,0.12); }
 .hour-btn.busy { border-color: var(--busy); color: var(--busy); background: rgba(239,68,68,0.1); cursor: not-allowed; }
 .hour-btn .who { display: block; font-size: 10px; font-weight: 500; margin-top: 2px; opacity: 0.85; }
+.booking-actions { display: flex; gap: 4px; margin-top: 5px; justify-content: center; }
+.act-btn {
+  font-size: 10px; padding: 3px 6px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--surface3); color: var(--text); cursor: pointer; font-family: inherit;
+}
+.act-btn.danger { border-color: var(--busy); color: var(--busy); }
 .empty-msg { color: var(--muted); font-size: 13px; text-align: center; padding: 24px 0; }
 .overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,0.75);
@@ -561,6 +667,16 @@ async function render() {
       who.className = 'who';
       who.textContent = `${h.booked_with}×${h.guest_name}`;
       btn.appendChild(who);
+      const actions = document.createElement('div');
+      actions.className = 'booking-actions';
+      const editBtn = document.createElement('button');
+      editBtn.className = 'act-btn'; editBtn.textContent = '編集';
+      editBtn.onclick = (e) => { e.stopPropagation(); editBooking(h.booking_id, h.guest_name); };
+      const delBtn = document.createElement('button');
+      delBtn.className = 'act-btn danger'; delBtn.textContent = '削除';
+      delBtn.onclick = (e) => { e.stopPropagation(); deleteBooking(h.booking_id, h.hour, h.booked_with); };
+      actions.appendChild(editBtn); actions.appendChild(delBtn);
+      btn.appendChild(actions);
     } else {
       btn.textContent = h.hour;
       btn.onclick = () => toggle(person, ds, h.hour);
@@ -577,6 +693,30 @@ async function toggle(person, date, hour) {
     const d = await r.json();
     if (d.ok) { render(); }
     else { toast(d.error || '更新に失敗しました'); render(); }
+  } catch(e) { toast('通信エラーが発生しました'); }
+}
+async function editBooking(bookingId, currentName) {
+  const guest_name = window.prompt('ゲスト名を編集', currentName);
+  if (guest_name === null) return;
+  const trimmed = guest_name.trim();
+  if (!trimmed) { toast('名前を入力してください'); return; }
+  try {
+    const r = await fetch(`/api/booking/${bookingId}/edit`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ guest_name: trimmed }),
+    });
+    const d = await r.json();
+    if (d.ok) { toast('更新しました'); render(); }
+    else { toast(d.error || '更新に失敗しました'); }
+  } catch(e) { toast('通信エラーが発生しました'); }
+}
+async function deleteBooking(bookingId, hour, member) {
+  if (!window.confirm(`${hour} ${member}の予約を削除しますか？`)) return;
+  try {
+    const r = await fetch(`/api/booking/${bookingId}/delete`, { method: 'POST' });
+    const d = await r.json();
+    if (d.ok) { toast('削除しました'); render(); }
+    else { toast(d.error || '削除に失敗しました'); }
   } catch(e) { toast('通信エラーが発生しました'); }
 }
 __TOAST_JS__
