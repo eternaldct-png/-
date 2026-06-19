@@ -283,15 +283,17 @@ def api_availability_get():
         return jsonify({"error": "invalid params"}), 400
     avail = person_available_slots(person)
     booked = booked_slots()
-    booked_by = {r["slot"]: r["member"] for r in load_bookings()}
+    booked_by = {r["slot"]: r for r in load_bookings()}
     hours = []
     for h in HOURS:
         slot = slot_iso(date, h)
+        b = booked_by.get(slot)
         hours.append({
             "hour": h,
             "available": slot in avail,
             "booked": slot in booked,
-            "booked_with": booked_by.get(slot, ""),
+            "booked_with": b["member"] if b else "",
+            "guest_name": b["guest_name"] if b else "",
         })
     return jsonify({"ok": True, "hours": hours})
 
@@ -431,6 +433,11 @@ select.fi, input.fi {
   background: var(--surface); border: 1.5px solid var(--border); color: var(--text);
   width: 38px; height: 38px; border-radius: 10px; font-size: 18px; cursor: pointer;
 }
+.back-btn {
+  background: var(--surface2); border: 1.5px solid var(--border); color: var(--text);
+  width: 36px; height: 36px; border-radius: 10px; font-size: 20px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; text-decoration: none; flex-shrink: 0;
+}
 .day-label { font-size: 15px; font-weight: 700; }
 .hour-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .hour-btn {
@@ -440,6 +447,7 @@ select.fi, input.fi {
 }
 .hour-btn.on { border-color: var(--ok); color: var(--ok); background: rgba(34,197,94,0.12); }
 .hour-btn.busy { border-color: var(--busy); color: var(--busy); background: rgba(239,68,68,0.1); cursor: not-allowed; }
+.hour-btn .who { display: block; font-size: 10px; font-weight: 500; margin-top: 2px; opacity: 0.85; }
 .empty-msg { color: var(--muted); font-size: 13px; text-align: center; padding: 24px 0; }
 .overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,0.75);
@@ -509,6 +517,7 @@ AVAILABILITY_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <div class="header">
+  <a class="back-btn" href="/">‹</a>
   <div class="header-icon">📝</div>
   <div class="header-info">
     <div class="header-title">空き時間登録</div>
@@ -546,8 +555,16 @@ async function render() {
   d.hours.forEach(h => {
     const btn = document.createElement('div');
     btn.className = 'hour-btn' + (h.booked ? ' busy' : h.available ? ' on' : '');
-    btn.textContent = h.booked ? `${h.hour} 予約済` : h.hour;
-    if (!h.booked) btn.onclick = () => toggle(person, ds, h.hour);
+    if (h.booked) {
+      btn.textContent = h.hour;
+      const who = document.createElement('span');
+      who.className = 'who';
+      who.textContent = `${h.booked_with}×${h.guest_name}`;
+      btn.appendChild(who);
+    } else {
+      btn.textContent = h.hour;
+      btn.onclick = () => toggle(person, ds, h.hour);
+    }
     grid.appendChild(btn);
   });
 }
@@ -579,6 +596,7 @@ BOOK_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <div class="header">
+  <a class="back-btn" href="/">‹</a>
   <div class="header-icon">🤝</div>
   <div class="header-info">
     <div class="header-title">__MEMBER__ と面談予約</div>
