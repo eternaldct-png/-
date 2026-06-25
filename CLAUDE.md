@@ -101,6 +101,31 @@ git push -u origin claude/homepage-payment-spreadsheet-DD1ly
 
 ---
 
+## /stickers ページ（LINEスタンプメーカー）
+
+写真からLINEスタンプ（個別PNG・最大16枚）を作る無料ツール。OpenAI等の画像生成APIキーは使わない構成（従量課金を避けるため）。
+
+### 仕組み
+1. ユーザーがChatGPT Plus等（既存のサブスク）を使い、元写真1〜2枚から「ポーズ・表情違いを16種類、背景は無地の単色で」生成し、手元に16枚ダウンロードする（このapp外で行う手動ステップ）
+2. `/stickers` にその16枚をアップロードし、各枚にセリフ（任意）を入力
+3. `src/sticker_generator.py` が Pillow のみで以下を自動処理:
+   - 背景透過（四隅の色を背景とみなし色距離でアルファ抜き）
+   - 白ふち付与（アルファチャンネルの膨張差分）
+   - セリフ合成（`media/fonts` のNoto Sans CJKを共有利用、`src/media/image_generator.py` と同じフォントDLロジック）
+   - LINEスタンプ規定サイズ（最大370×320px）に縮小
+4. 生成結果は一時ディレクトリ（OSの`tempfile`配下、2時間で自動削除）に保存し、個別PNGダウンロード or ZIP一括ダウンロード
+
+### URL
+- `/stickers` — アップロードフォーム
+- `/stickers/generate` — POST、画像処理して結果ギャラリーを表示
+- `/stickers/file/<job_id>/<NN>.png` `/stickers/zip/<job_id>` — ダウンロード
+
+### 注意
+- 元画像（ChatGPT生成画像）の背景が無地・単色だと背景透過の精度が高い。背景が複雑だと透過がうまくいかない場合がある。
+- 新しい環境変数は不要（既存のRender環境変数だけで動く）。
+
+---
+
 ## 面談予約アプリ（src/booking_app.py）
 
 kazuto と あまりん/さな/しー/かぴのすけ の4ペアそれぞれについて、外部ゲストが

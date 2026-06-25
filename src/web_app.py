@@ -1661,6 +1661,308 @@ def goods_admin_logout():
     session.pop("goods_admin_ok", None)
     return redirect("/goods/admin")
 
+
+# ── LINEスタンプメーカー ──────────────────────────────────────────
+# ChatGPT などで手動生成したキャラクターのポーズ違い画像（最大16枚）をアップロードすると、
+# 背景透過・白ふち・セリフ合成・LINEスタンプサイズ調整をまとめて行う。外部APIキーは不要。
+
+import re as _re
+import shutil
+import tempfile
+import uuid
+
+STICKER_TMP_ROOT = Path(tempfile.gettempdir()) / "line_stickers"
+_STICKER_JOB_RE = _re.compile(r"^[0-9a-f]{32}$")
+_STICKER_FILE_RE = _re.compile(r"^\d{2}\.png$")
+_STICKER_JOB_MAX_AGE = 2 * 60 * 60  # 2時間でクリーンアップ
+
+
+def _cleanup_old_sticker_jobs():
+    import time
+
+    if not STICKER_TMP_ROOT.exists():
+        return
+    now = time.time()
+    for job_dir in STICKER_TMP_ROOT.iterdir():
+        try:
+            if job_dir.is_dir() and now - job_dir.stat().st_mtime > _STICKER_JOB_MAX_AGE:
+                shutil.rmtree(job_dir, ignore_errors=True)
+        except OSError:
+            pass
+
+
+STICKERS_HTML = r"""<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>LINEスタンプメーカー | ETERNALd.c.t</title>
+<style>
+:root {
+  --bg: #f7f7fb; --surface: #ffffff; --surface2: #f1f0fa;
+  --grad: linear-gradient(135deg, #7c3aed, #d946ef, #ec4899);
+  --accent-text: #9333ea; --text: #1f2333; --muted: #6b7280; --border: #eceaf5;
+  --shadow: 0 6px 24px rgba(124,58,237,0.08);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body {
+  background: var(--bg); color: var(--text); min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
+  padding-bottom: 40px;
+}
+.header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 28px 18px 24px; text-align: center; }
+.header .badge {
+  display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+  color: white; background: var(--grad); padding: 4px 14px; border-radius: 999px; margin-bottom: 10px;
+}
+.header h1 { font-size: 19px; font-weight: 800; }
+.header p { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.6; }
+.main { padding: 22px 16px; max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 20px; box-shadow: var(--shadow); }
+.card h2 { font-size: 14px; font-weight: 800; margin-bottom: 10px; }
+.steps { font-size: 12.5px; color: var(--muted); line-height: 1.9; padding-left: 4px; }
+.steps li { margin-bottom: 6px; }
+.file-btn {
+  display: block; width: 100%; padding: 14px; text-align: center; border: 1.5px dashed var(--border);
+  border-radius: 12px; font-size: 13px; font-weight: 700; color: var(--accent-text);
+  background: var(--surface2); cursor: pointer; margin-bottom: 10px;
+}
+input[type=file] { display: none; }
+.count-note { font-size: 12px; color: var(--muted); text-align: center; margin-bottom: 14px; }
+.stk-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.stk-thumb { width: 48px; height: 48px; object-fit: cover; border-radius: 10px; border: 1px solid var(--border); flex-shrink: 0; }
+.stk-row input[type=text] {
+  flex: 1; padding: 10px 12px; border: 1.5px solid var(--border); border-radius: 10px;
+  font-size: 13px; background: var(--surface2); color: var(--text);
+}
+.stk-row input[type=text]:focus { outline: none; border-color: var(--accent-text); }
+.submit-btn {
+  width: 100%; padding: 15px; border: none; border-radius: 12px; background: var(--grad); color: white;
+  font-size: 15px; font-weight: 800; cursor: pointer; letter-spacing: 0.02em;
+  box-shadow: 0 6px 18px rgba(217,70,239,0.28); margin-top: 6px;
+}
+.submit-btn:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+.error { color: #ef4444; font-size: 12.5px; text-align: center; margin-top: 10px; }
+</style>
+</head>
+<body>
+<div class="header">
+  <span class="badge">ETERNAL d.c.t</span>
+  <h1>🎨 LINEスタンプメーカー</h1>
+  <p>キャラクター画像を白ふち＋透過＋セリフ入りのLINEスタンプに自動加工します。</p>
+</div>
+<div class="main">
+  <div class="card">
+    <h2>使い方</h2>
+    <ol class="steps">
+      <li>ChatGPT（ChatGPT Plusなど）に元写真1〜2枚を渡し、「このキャラクターのポーズ・表情違いを16種類、背景は無地の単色で生成して」と頼んで16枚ダウンロードする</li>
+      <li>その16枚をこのページにアップロードする</li>
+      <li>各画像にセリフ（任意）を入力する</li>
+      <li>「スタンプを作成する」を押すと、背景透過・白ふち・セリフ入りの画像が個別に生成される</li>
+    </ol>
+  </div>
+  <div class="card">
+    <h2>画像をアップロード</h2>
+    <form id="stkForm" action="/stickers/generate" method="post" enctype="multipart/form-data">
+      <label class="file-btn" for="photoInput">📷 画像を選ぶ（最大16枚）</label>
+      <input type="file" id="photoInput" name="photos" accept="image/*" multiple>
+      <div class="count-note" id="countNote">まだ画像が選ばれていません</div>
+      <div id="captionList"></div>
+      <button class="submit-btn" id="submitBtn" type="submit" disabled>スタンプを作成する</button>
+      __ERROR__
+    </form>
+  </div>
+</div>
+<script>
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+document.getElementById('photoInput').addEventListener('change', function (e) {
+  const files = Array.from(e.target.files).slice(0, 16);
+  const list = document.getElementById('captionList');
+  list.innerHTML = '';
+  const submitBtn = document.getElementById('submitBtn');
+  const countNote = document.getElementById('countNote');
+  if (!files.length) {
+    submitBtn.disabled = true;
+    countNote.textContent = 'まだ画像が選ばれていません';
+    return;
+  }
+  files.forEach((file) => {
+    const reader = new FileReader();
+    reader.onload = function (ev) {
+      const row = document.createElement('div');
+      row.className = 'stk-row';
+      const img = document.createElement('img');
+      img.className = 'stk-thumb';
+      img.src = ev.target.result;
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.name = 'captions';
+      input.maxLength = 20;
+      input.placeholder = 'セリフ（空欄でもOK）例: ありがとう!';
+      row.appendChild(img);
+      row.appendChild(input);
+      list.appendChild(row);
+    };
+    reader.readAsDataURL(file);
+  });
+  submitBtn.disabled = false;
+  countNote.textContent = files.length + '枚 選択中（最大16枚まで処理されます）';
+});
+</script>
+</body>
+</html>"""
+
+
+STICKERS_RESULT_HTML = r"""<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>スタンプが完成しました | ETERNALd.c.t</title>
+<style>
+:root {
+  --bg: #f7f7fb; --surface: #ffffff;
+  --grad: linear-gradient(135deg, #7c3aed, #d946ef, #ec4899);
+  --accent-text: #9333ea; --text: #1f2333; --muted: #6b7280; --border: #eceaf5;
+  --shadow: 0 6px 24px rgba(124,58,237,0.08);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg); color: var(--text); min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
+  padding-bottom: 40px;
+}
+.header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 28px 18px 24px; text-align: center; }
+.header h1 { font-size: 18px; font-weight: 800; }
+.header p { font-size: 12px; color: var(--muted); margin-top: 6px; }
+.main { padding: 22px 16px; max-width: 520px; margin: 0 auto; }
+.zip-btn {
+  display: block; text-align: center; width: 100%; padding: 15px; border-radius: 12px;
+  background: var(--grad); color: white; font-weight: 800; font-size: 15px; text-decoration: none;
+  box-shadow: 0 6px 18px rgba(217,70,239,0.28); margin-bottom: 18px;
+}
+.grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+.stk-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 10px;
+  box-shadow: var(--shadow); text-align: center;
+}
+.stk-card img {
+  width: 100%; aspect-ratio: 1/1; object-fit: contain; margin-bottom: 8px;
+  background: repeating-conic-gradient(#eee 0% 25%, #fff 0% 50%) 50% / 16px 16px;
+  border-radius: 8px;
+}
+.stk-dl {
+  display: block; font-size: 12px; font-weight: 700; color: var(--accent-text);
+  text-decoration: none; padding: 6px; border: 1px solid var(--border); border-radius: 8px;
+}
+.back-link { display: block; text-align: center; margin-top: 22px; font-size: 13px; color: var(--muted); }
+.note { font-size: 12px; color: var(--muted); text-align: center; line-height: 1.8; margin-bottom: 18px; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>✅ スタンプが完成しました（__COUNT__枚）</h1>
+  <p>各画像を保存するか、まとめてZIPでダウンロードしてください</p>
+</div>
+<div class="main">
+  <a class="zip-btn" href="/stickers/zip/__JOB_ID__">ZIPでまとめてダウンロード</a>
+  <p class="note">生成データは一定時間後に自動削除されます。必要な画像は早めに保存してください。</p>
+  <div class="grid">
+    __THUMBS__
+  </div>
+  <a class="back-link" href="/stickers">← もう一度作る</a>
+</div>
+</body>
+</html>"""
+
+
+@app.route("/stickers")
+def stickers_index():
+    return STICKERS_HTML.replace("__ERROR__", ""), 200, {"Content-Type": "text/html; charset=utf-8"}
+
+
+@app.route("/stickers/generate", methods=["POST"])
+def stickers_generate():
+    from sticker_generator import process_sticker
+
+    files = [f for f in request.files.getlist("photos") if f and f.filename]
+    captions = request.form.getlist("captions")
+
+    if not files:
+        html = STICKERS_HTML.replace("__ERROR__", '<p class="error">画像が選択されていません</p>')
+        return html, 400, {"Content-Type": "text/html; charset=utf-8"}
+
+    files = files[:16]
+    captions = captions[:16]
+
+    _cleanup_old_sticker_jobs()
+    STICKER_TMP_ROOT.mkdir(parents=True, exist_ok=True)
+    job_id = uuid.uuid4().hex
+    job_dir = STICKER_TMP_ROOT / job_id
+    job_dir.mkdir(parents=True)
+
+    saved_names = []
+    for i, f in enumerate(files):
+        caption = captions[i] if i < len(captions) else ""
+        try:
+            png_bytes = process_sticker(f.read(), caption)
+        except Exception:
+            continue
+        name = f"{len(saved_names) + 1:02d}.png"
+        (job_dir / name).write_bytes(png_bytes)
+        saved_names.append(name)
+
+    if not saved_names:
+        shutil.rmtree(job_dir, ignore_errors=True)
+        html = STICKERS_HTML.replace("__ERROR__", '<p class="error">画像の処理に失敗しました。別の画像でお試しください</p>')
+        return html, 500, {"Content-Type": "text/html; charset=utf-8"}
+
+    thumbs_html = "".join(
+        f'<div class="stk-card"><img src="/stickers/file/{job_id}/{name}" alt="sticker {name}">'
+        f'<a class="stk-dl" href="/stickers/file/{job_id}/{name}" download="{name}">PNGを保存</a></div>'
+        for name in saved_names
+    )
+    html = (STICKERS_RESULT_HTML
+            .replace("__THUMBS__", thumbs_html)
+            .replace("__JOB_ID__", job_id)
+            .replace("__COUNT__", str(len(saved_names))))
+    return html, 200, {"Content-Type": "text/html; charset=utf-8"}
+
+
+@app.route("/stickers/file/<job_id>/<filename>")
+def stickers_file(job_id, filename):
+    from flask import send_file
+
+    if not _STICKER_JOB_RE.match(job_id) or not _STICKER_FILE_RE.match(filename):
+        return "Not Found", 404
+    path = STICKER_TMP_ROOT / job_id / filename
+    if not path.exists():
+        return "Not Found", 404
+    return send_file(path, mimetype="image/png")
+
+
+@app.route("/stickers/zip/<job_id>")
+def stickers_zip(job_id):
+    import io
+    import zipfile
+    from flask import send_file
+
+    if not _STICKER_JOB_RE.match(job_id):
+        return "Not Found", 404
+    job_dir = STICKER_TMP_ROOT / job_id
+    if not job_dir.exists():
+        return "Not Found", 404
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for p in sorted(job_dir.glob("*.png")):
+            zf.write(p, p.name)
+    buf.seek(0)
+    return send_file(buf, mimetype="application/zip", as_attachment=True, download_name="line_stickers.zip")
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
