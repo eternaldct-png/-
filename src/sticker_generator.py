@@ -34,19 +34,15 @@ def _ensure_font(size: int) -> ImageFont.FreeTypeFont:
 
 
 def remove_background(img: Image.Image, tolerance: int = BG_TOLERANCE) -> Image.Image:
-    """四隅の色を背景色とみなし、色距離がしきい値以下のピクセルを透過する"""
-    rgb = img.convert("RGB")
-    corners = [rgb.getpixel((0, 0)), rgb.getpixel((rgb.width - 1, 0)),
-               rgb.getpixel((0, rgb.height - 1)), rgb.getpixel((rgb.width - 1, rgb.height - 1))]
-    bg_color = tuple(sum(c[i] for c in corners) // len(corners) for i in range(3))
-
-    bg_layer = Image.new("RGB", rgb.size, bg_color)
-    diff = ImageChops.difference(rgb, bg_layer).convert("L")
-    mask = diff.point(lambda p: 255 if p > tolerance else 0)
-    mask = mask.filter(ImageFilter.MedianFilter(3))
-
+    """四隅から塗り取り（flood fill）し、背景と地続きの領域だけを透過する。
+    キャラクター内部の白目・歯など孤立した白い部分は地続きでないため透過されない。"""
     out = img.convert("RGBA")
-    out.putalpha(mask)
+    w, h = out.size
+    seeds = [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)]
+    for seed in seeds:
+        if out.getpixel(seed)[3] != 0:
+            ImageDraw.floodfill(out, seed, (0, 0, 0, 0), thresh=tolerance)
+
     bbox = out.getbbox()
     if bbox:
         out = out.crop(bbox)
