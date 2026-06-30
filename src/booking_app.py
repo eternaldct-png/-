@@ -58,7 +58,8 @@ def _db_conn():
     try:
         import psycopg2
         return psycopg2.connect(url, sslmode="require")
-    except Exception:
+    except Exception as e:
+        print(f"[booking_app] DB connection failed: {e}", file=sys.stderr)
         return None
 
 
@@ -357,6 +358,21 @@ def api_availability_login():
 def api_availability_logout():
     session.pop("avail_ok", None)
     return jsonify({"ok": True})
+
+
+@app.route("/api/availability/storage-status")
+def api_storage_status():
+    if not is_avail_authed():
+        return jsonify({"error": "unauthorized"}), 401
+    url_set = bool(os.environ.get("DATABASE_URL", ""))
+    conn = _db_conn()
+    connected = conn is not None
+    if conn:
+        conn.close()
+    return jsonify({
+        "database_url_set": url_set,
+        "database_connected": connected,
+    })
 
 
 # ── API: 空き時間登録 ────────────────────────────────────────────
@@ -668,6 +684,9 @@ AVAILABILITY_HTML = """<!DOCTYPE html>
   <button class="back-btn" onclick="doLogout()" title="ログアウト">🔒</button>
 </div>
 <div class="wrap">
+  <div id="storage-warn" style="display:none; background:rgba(239,68,68,0.12); border:1px solid var(--busy); color:var(--busy); border-radius:10px; padding:10px 12px; font-size:12px; margin-bottom:12px;">
+    ⚠️ データベース未接続のため、登録した空き時間や予約はサーバー再起動時に消える可能性があります。Renderの環境変数 DATABASE_URL を確認してください。
+  </div>
   <select class="fi" id="f-person" onchange="onPersonChange()">__PERSON_OPTIONS__</select>
   <div class="day-nav">
     <button class="day-btn" onclick="changeDay(-1)">‹</button>
@@ -777,7 +796,14 @@ async function checkAuth() {
     if (d.authed) {
       document.getElementById('pw-overlay').classList.remove('open');
       render();
+      checkStorage();
     }
+  } catch(e) {}
+}
+async function checkStorage() {
+  try {
+    const d = await (await fetch('/api/availability/storage-status')).json();
+    document.getElementById('storage-warn').style.display = d.database_connected ? 'none' : 'block';
   } catch(e) {}
 }
 async function submitPw() {
@@ -791,6 +817,7 @@ async function submitPw() {
     if (d.ok) {
       document.getElementById('pw-overlay').classList.remove('open');
       render();
+      checkStorage();
     } else {
       toast(d.error || 'パスワードが違います');
       document.getElementById('f-pw').value = '';
