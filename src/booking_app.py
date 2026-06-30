@@ -724,6 +724,8 @@ async function render() {
   const d = await r.json();
   const grid = document.getElementById('hour-grid');
   grid.innerHTML = '';
+  grid.style.opacity = '1';
+  grid.style.pointerEvents = 'auto';
   if (!d.ok) return;
   d.hours.forEach(h => {
     const btn = document.createElement('div');
@@ -751,16 +753,29 @@ async function render() {
     grid.appendChild(btn);
   });
 }
+let toggling = false;
 async function toggle(person, date, hour) {
+  if (toggling) return;
+  toggling = true;
+  const grid = document.getElementById('hour-grid');
+  grid.style.opacity = '0.5';
+  grid.style.pointerEvents = 'none';
+  toast('更新中…');
   try {
     const r = await fetch('/api/availability/toggle', {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ person, date, hour }),
     });
     const d = await r.json();
-    if (d.ok) { render(); }
-    else { toast(d.error || '更新に失敗しました'); render(); }
-  } catch(e) { toast('通信エラーが発生しました'); }
+    if (d.ok) { await render(); }
+    else { toast(d.error || '更新に失敗しました'); await render(); }
+  } catch(e) {
+    toast('通信エラーが発生しました（サーバー起動中の可能性があります。少し待って再度お試しください）');
+    grid.style.opacity = '1';
+    grid.style.pointerEvents = 'auto';
+  } finally {
+    toggling = false;
+  }
 }
 async function editBooking(bookingId, currentName) {
   const guest_name = window.prompt('ゲスト名を編集', currentName);
