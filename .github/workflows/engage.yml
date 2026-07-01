@@ -1,10 +1,14 @@
+# NOTE: 2026-07-01時点、tweets/search/recent が401 Unauthorizedで失敗するため
+# いいね・リポストとも常に0件（現在のプランは投稿のみ対応、読み取りにはX API Basic
+# プラン $200/月〜が必要。ユーザーが有料化を見送ったため自動実行を無効化）。
+# Basicプランへアップグレードした場合は下記の schedule: ブロックを復活させること。
 name: Auto Engage (Like & Repost)
 
 on:
-  schedule:
-    # 朝 9:00 JST・夜 21:00 JSTに実行
-    - cron: "30 0 * * *"   # 9:30 JST ※Instagram(9:00)と衝突回避
-    - cron: "0 12 * * *"   # 21:00 JST ※kazuto X は 21:20 にずらし済み
+  # schedule:
+  #   朝 9:30 JST・夜 21:00 JST ※X API Basicプラン導入後に有効化する
+  #   - cron: "30 0 * * *"
+  #   - cron: "0 12 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
