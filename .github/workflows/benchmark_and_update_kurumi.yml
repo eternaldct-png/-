@@ -1,3 +1,9 @@
+# NOTE: 2026-07-01時点、X APIの読み取り系エンドポイント
+# （tweets/search/recent, users/:id/tweets）が401 Unauthorizedで失敗する状態。
+# 現在のプラン（従量課金/Free相当）は投稿(書き込み)のみ対応で、
+# 読み取りアクセスにはX API Basicプラン（$200/月〜）へのアップグレードが必要。
+# ユーザーが有料化を見送ったため、自動実行(schedule)は無効化。
+# Basicプランへアップグレードした場合は下記の schedule: ブロックを復活させること。
 name: ベンチマーク分析 & ペルソナ自動更新（木村來未）
 
 on:
@@ -17,9 +23,9 @@ on:
         required: false
         default: 'false'
         type: boolean
-  schedule:
-    # 毎週日曜 23:30 JST (14:30 UTC) に自動実行 ※kazuto(22:00)と衝突回避
-    - cron: "30 14 * * 0"
+  # schedule:
+  #   毎週日曜 23:30 JST (14:30 UTC) ※X API Basicプラン導入後に有効化する
+  #   - cron: "30 14 * * 0"
 
 jobs:
   benchmark-and-update:

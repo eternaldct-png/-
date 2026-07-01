@@ -1,3 +1,7 @@
+# NOTE: 2026-07-01時点、X APIの読み取り系エンドポイント（users/:id/tweets）が
+# 401 Unauthorizedで失敗する状態。現在のプラン（従量課金/Free相当）は投稿(書き込み)のみ対応。
+# 読み取りアクセスにはX API Basicプラン（$200/月〜）へのアップグレードが必要。
+# ユーザーが有料化を見送ったため、自動実行(schedule)は無効化。
 name: Analyze Engagement
 
 on:
@@ -11,9 +15,9 @@ on:
         options:
           - '50'
           - '100'
-  schedule:
-    # 毎週月曜 9:00 JST に自動実行
-    - cron: "0 0 * * 1"
+  # schedule:
+  #   毎週月曜 9:00 JST ※X API Basicプラン導入後に有効化する
+  #   - cron: "0 0 * * 1"
 
 jobs:
   analyze:
