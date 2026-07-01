@@ -1,7 +1,7 @@
 """
 ベンチマーク分析モジュール
-ColorSing・歌・ライバー関連の高エンゲージメントアカウントを分析し、
-投稿パターンを抽出してkazutoのペルソナ改善に活用する
+ペルソナのテーマに関連する高エンゲージメントアカウントを分析し、
+投稿パターンを抽出してペルソナ改善に活用する（複数ペルソナ対応）
 """
 import os
 import re
@@ -17,14 +17,20 @@ from ddgs import DDGS
 JST = ZoneInfo("Asia/Tokyo")
 ANALYSIS_DIR = Path("analysis")
 
-# 分析対象ハッシュタグ（ターゲットオーディエンスが集まる場所）
-TARGET_HASHTAGS = [
-    "ColorSing",
-    "歌好きと繋がりたい",
-    "ライバー",
-    "歌ってみた",
-    "音楽好きと繋がりたい",
-]
+# ペルソナ設定に benchmark_hashtags / engagement.target_hashtags が
+# 無い場合のフォールバック
+DEFAULT_HASHTAGS = ["広報", "中の人", "PR"]
+
+
+def get_target_hashtags(persona: dict) -> list[str]:
+    """ペルソナ設定からベンチマーク対象ハッシュタグを取得する"""
+    tags = persona.get("benchmark_hashtags")
+    if tags:
+        return tags
+    tags = persona.get("engagement", {}).get("target_hashtags")
+    if tags:
+        return [t for t in tags if t]
+    return DEFAULT_HASHTAGS
 
 # エンゲージメントスコア計算式（analyze.py と統一）
 def _score(metrics: dict) -> int:
@@ -45,7 +51,7 @@ def get_client() -> tweepy.Client:
     )
 
 
-def search_benchmark_tweets(max_per_tag: int = 20) -> list[dict]:
+def search_benchmark_tweets(max_per_tag: int, target_hashtags: list[str]) -> list[dict]:
     """
     ターゲットハッシュタグの高エンゲージメントツイートを収集する
     X APIの検索は直近7日間が対象
@@ -54,7 +60,7 @@ def search_benchmark_tweets(max_per_tag: int = 20) -> list[dict]:
     all_tweets = []
     seen_ids = set()
 
-    for hashtag in TARGET_HASHTAGS:
+    for hashtag in target_hashtags:
         query = f"#{hashtag} -is:retweet lang:ja"
         try:
             response = client.search_recent_tweets(
@@ -212,15 +218,17 @@ def extract_patterns(tweets: list[dict]) -> dict:
     return patterns
 
 
-def ddg_research_best_practices() -> list[dict]:
+def ddg_research_best_practices(persona: dict) -> list[dict]:
     """
-    DuckDuckGoで音楽ライバー・ColorSing関連の成功事例・ノウハウを検索する
+    DuckDuckGoでペルソナのテーマに関連する成功事例・ノウハウを検索する
     """
+    interests = persona.get("interests", [])
+    theme = interests[0] if interests else persona.get("role", "SNS")
     queries = [
-        "ColorSing 人気ライバー 配信 コツ",
-        "X Twitter 音楽アカウント フォロワー増やす 投稿",
-        "歌い手 SNS 人気 投稿 パターン 2024",
-        "ライバー事務所 Twitter 発信 集客",
+        f"{theme} X Twitter 投稿 コツ 2024",
+        "X Twitter フォロワー増やす 投稿 パターン",
+        f"{persona.get('name', '')} のような 企業広報 SNS 発信事例",
+        "企業公式アカウント 中の人 バズる 投稿 コツ",
     ]
     results = []
     for query in queries:
@@ -243,9 +251,10 @@ def synthesize_with_claude(
     patterns: dict,
     ddg_results: list[dict],
     persona: dict,
+    target_hashtags: list[str],
 ) -> str:
     """
-    収集データをClaudeで総合分析し、kazuto向けの改善提案を生成する
+    収集データをClaudeで総合分析し、ペルソナ向けの改善提案を生成する
     """
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
@@ -266,9 +275,13 @@ def synthesize_with_claude(
         f"【{r['title']}】\n{r['snippet']}" for r in ddg_results[:4]
     ])
 
+    persona_name = persona.get("name", "アカウント")
+    persona_role = persona.get("background", {}).get("role", persona.get("bio", ""))
+    hashtag_str = " ".join(f"#{h}" for h in target_hashtags)
+
     prompt = f"""あなたはXのSNS戦略コンサルタントです。
-ColorSingで配信する歌い手「{persona.get('name', 'kazuto')}」（ライバー事務所代表）のX投稿を改善するため、
-ターゲットハッシュタグ（#ColorSing #歌好きと繋がりたい #ライバー #歌ってみた）の
+「{persona_name}」（{persona_role}）のX投稿を改善するため、
+ターゲットハッシュタグ（{hashtag_str}）の
 高エンゲージメント投稿を分析しました。
 
 == 高エンゲージメント投稿 TOP5 ==
@@ -288,12 +301,12 @@ ColorSingで配信する歌い手「{persona.get('name', 'kazuto')}」（ライ�
 == エンゲージメントが高い時間帯 ==
 {hour_summary}
 
-== Web調査（音楽ライバー・SNS成功事例）==
+== Web調査（テーマ関連のSNS成功事例）==
 {ddg_summary}
 
-== kazutoの現在の投稿スタイル ==
+== {persona_name}の現在の投稿スタイル ==
 口調: {persona.get('tone')}
-1日の投稿数: {persona.get('posting_schedule', {}).get('times_per_day', 5)}回
+1日の投稿数: {persona.get('posting_schedule', {}).get('times_per_day', 3)}回
 興味テーマ: {persona.get('interests', [])}
 
 以下の形式で日本語の分析レポートを書いてください：
@@ -301,14 +314,14 @@ ColorSingで配信する歌い手「{persona.get('name', 'kazuto')}」（ライ�
 ## 1. 高エンゲージメント投稿の勝ちパターン（5点）
 具体的な文章構造・フック・言葉選びのパターンを挙げてください
 
-## 2. kazutoが今すぐ取り入れるべき投稿テクニック（5点）
+## 2. {persona_name}が今すぐ取り入れるべき投稿テクニック（5点）
 現在のスタイルと比較して、差分となる改善点を具体的に
 
 ## 3. 最適な投稿時間帯・曜日の推奨
 データに基づいた具体的な時間帯の推奨
 
 ## 4. 即使えるフック文の例（5例）
-高エンゲージメント投稿のパターンを参考に、kazutoが実際に使えるオープニング文
+高エンゲージメント投稿のパターンを参考に、{persona_name}が実際に使えるオープニング文
 
 ## 5. ハッシュタグ戦略の更新提案
 どのタグを優先し、どう組み合わせるべきか
@@ -322,8 +335,10 @@ ColorSingで配信する歌い手「{persona.get('name', 'kazuto')}」（ライ�
     return message.content[0].text
 
 
-def save_benchmark_report(tweets: list[dict], patterns: dict, analysis: str) -> Path:
-    """分析結果をJSONとMarkdownで保存する"""
+def save_benchmark_report(
+    tweets: list[dict], patterns: dict, analysis: str, target_hashtags: list[str], slug: str = "kurumi"
+) -> Path:
+    """分析結果をJSONとMarkdownで保存する（ペルソナごとに名前空間を分ける）"""
     ANALYSIS_DIR.mkdir(exist_ok=True)
     now = datetime.now(JST)
     ts = now.strftime("%Y%m%d_%H%M")
@@ -335,11 +350,11 @@ def save_benchmark_report(tweets: list[dict], patterns: dict, analysis: str) -> 
         "patterns": patterns,
         "top_tweets": tweets[:20],
     }
-    raw_path = ANALYSIS_DIR / f"benchmark_raw_{ts}.json"
+    raw_path = ANALYSIS_DIR / f"{slug}_benchmark_raw_{ts}.json"
     raw_path.write_text(json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8")
 
     # 最新パターンJSON（persona_updaterが読み込む）
-    latest_patterns_path = ANALYSIS_DIR / "benchmark_patterns_latest.json"
+    latest_patterns_path = ANALYSIS_DIR / f"{slug}_benchmark_patterns_latest.json"
     latest_patterns_path.write_text(
         json.dumps(raw, ensure_ascii=False, indent=2), encoding="utf-8"
     )
@@ -355,7 +370,7 @@ def save_benchmark_report(tweets: list[dict], patterns: dict, analysis: str) -> 
 
     report = f"""# ベンチマーク分析レポート
 生成日時: {now.strftime('%Y年%m月%d日 %H:%M')} JST
-対象ハッシュタグ: {', '.join('#' + h for h in TARGET_HASHTAGS)}
+対象ハッシュタグ: {', '.join('#' + h for h in target_hashtags)}
 収集ツイート数: {total}件
 
 ## サマリー
@@ -380,10 +395,10 @@ def save_benchmark_report(tweets: list[dict], patterns: dict, analysis: str) -> 
 *このレポートはClaude AIによる自動分析です*
 """
 
-    report_path = ANALYSIS_DIR / f"benchmark_report_{ts}.md"
+    report_path = ANALYSIS_DIR / f"{slug}_benchmark_report_{ts}.md"
     report_path.write_text(report, encoding="utf-8")
 
-    latest_report_path = ANALYSIS_DIR / "benchmark_latest.md"
+    latest_report_path = ANALYSIS_DIR / f"{slug}_benchmark_latest.md"
     latest_report_path.write_text(report, encoding="utf-8")
 
     print(f"[benchmark] レポート保存: {report_path}")
@@ -391,10 +406,19 @@ def save_benchmark_report(tweets: list[dict], patterns: dict, analysis: str) -> 
     return report_path
 
 
-def run_benchmark(max_per_tag: int = 20) -> str:
+def run_benchmark(max_per_tag: int = 20, persona_path: str = "persona/config.yaml") -> str:
     """ベンチマーク分析のメインエントリーポイント"""
+    from persona_utils import persona_slug
+    slug = persona_slug(persona_path)
+
+    print(f"[benchmark] [{slug}] ペルソナ設定を読み込み中...")
+    with open(persona_path, "r", encoding="utf-8") as f:
+        persona = yaml.safe_load(f)
+    target_hashtags = get_target_hashtags(persona)
+    print(f"[benchmark] 対象ハッシュタグ: {target_hashtags}")
+
     print("[benchmark] ターゲットハッシュタグのツイートを収集中...")
-    tweets = search_benchmark_tweets(max_per_tag)
+    tweets = search_benchmark_tweets(max_per_tag, target_hashtags)
 
     if not tweets:
         print("[benchmark] 収集できたツイートがありません。スキップします。")
@@ -404,19 +428,12 @@ def run_benchmark(max_per_tag: int = 20) -> str:
     patterns = extract_patterns(tweets)
 
     print("[benchmark] Web調査中（DuckDuckGo）...")
-    ddg_results = ddg_research_best_practices()
-
-    print("[benchmark] ペルソナ設定を読み込み中...")
-    persona_path = Path("persona/kazuto_config.yaml")
-    if not persona_path.exists():
-        persona_path = Path("persona/config.yaml")
-    with open(persona_path, "r", encoding="utf-8") as f:
-        persona = yaml.safe_load(f)
+    ddg_results = ddg_research_best_practices(persona)
 
     print("[benchmark] Claude AIで総合分析中...")
-    analysis = synthesize_with_claude(tweets, patterns, ddg_results, persona)
+    analysis = synthesize_with_claude(tweets, patterns, ddg_results, persona, target_hashtags)
 
-    report_path = save_benchmark_report(tweets, patterns, analysis)
+    report_path = save_benchmark_report(tweets, patterns, analysis, target_hashtags, slug=slug)
 
     print(f"\n{'='*60}")
     print(analysis)

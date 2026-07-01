@@ -213,9 +213,9 @@ if __name__ == "__main__":
 
     if args.benchmark:
         from benchmark_analyzer import run_benchmark
-        run_benchmark()
+        run_benchmark(persona_path=args.persona)
     elif args.update_persona:
         from persona_updater import run_update
-        run_update(auto=args.auto)
+        run_update(auto=args.auto, persona_path=args.persona)
     else:
         run(dry_run=args.dry_run, generate_only=args.generate, platform=args.platform, persona_path=args.persona)

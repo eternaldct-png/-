@@ -123,6 +123,14 @@ hashtags:
     ai: ["#AI", "#生成AI", "#テクノロジー"]
     work: ["#広報あるある", "#仕事あるある"]
 
+# ベンチマーク分析の対象ハッシュタグ（学習対象＝高エンゲージメントな他アカウントを探す場所）
+# エンゲージメント自動いいね対象(engagement.target_hashtags)とは目的が異なるので分けて管理
+benchmark_hashtags:
+  - "広報"
+  - "中の人"
+  - "PR"
+  - "SNS運用"
+
 # 自動いいね・リポスト設定
 engagement:
   enabled: true

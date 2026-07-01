@@ -167,12 +167,12 @@ def analyze_with_claude(tweets: list[dict], persona: dict) -> str:
     return message.content[0].text
 
 
-def save_analysis_report(tweets: list[dict], analysis: str) -> Path:
-    """分析レポートをMarkdownファイルで保存する"""
+def save_analysis_report(tweets: list[dict], analysis: str, slug: str = "kurumi") -> Path:
+    """分析レポートをMarkdownファイルで保存する（ペルソナごとに名前空間を分ける）"""
     ANALYSIS_DIR.mkdir(exist_ok=True)
     now = datetime.now(JST)
-    report_path = ANALYSIS_DIR / f"report_{now.strftime('%Y%m%d_%H%M')}.md"
-    latest_path = ANALYSIS_DIR / "latest_report.md"
+    report_path = ANALYSIS_DIR / f"{slug}_report_{now.strftime('%Y%m%d_%H%M')}.md"
+    latest_path = ANALYSIS_DIR / f"{slug}_latest_report.md"
 
     total = len(tweets)
     avg_score = sum(t["engagement_score"] for t in tweets) / total if total else 0
@@ -207,9 +207,12 @@ def save_analysis_report(tweets: list[dict], analysis: str) -> Path:
     return report_path
 
 
-def run_analysis(max_tweets: int = 100) -> str:
+def run_analysis(max_tweets: int = 100, persona_path: str = "persona/config.yaml") -> str:
     """エンゲージメント分析を実行してレポートを生成する"""
-    print("[analyze] ツイートデータを取得中...")
+    from persona_utils import persona_slug
+    slug = persona_slug(persona_path)
+
+    print(f"[analyze] [{slug}] ツイートデータを取得中...")
     tweets = fetch_tweets_with_metrics(max_tweets)
 
     if not tweets:
@@ -217,19 +220,19 @@ def run_analysis(max_tweets: int = 100) -> str:
         return ""
 
     print("[analyze] Claude AIで分析中...")
-    with open("persona/config.yaml", "r", encoding="utf-8") as f:
+    with open(persona_path, "r", encoding="utf-8") as f:
         persona = yaml.safe_load(f)
 
     analysis = analyze_with_claude(tweets, persona)
 
-    # 生データを保存
+    # 生データを保存（ペルソナごとに名前空間を分ける）
     ANALYSIS_DIR.mkdir(exist_ok=True)
-    raw_path = ANALYSIS_DIR / "raw_metrics.json"
+    raw_path = ANALYSIS_DIR / f"{slug}_raw_metrics.json"
     raw_path.write_text(
         json.dumps(tweets, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
-    report_path = save_analysis_report(tweets, analysis)
+    report_path = save_analysis_report(tweets, analysis, slug=slug)
     print(f"\n{'='*60}")
     print(analysis)
     print(f"{'='*60}\n")

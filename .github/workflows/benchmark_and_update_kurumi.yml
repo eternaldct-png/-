@@ -1,4 +1,4 @@
-name: ベンチマーク分析 & ペルソナ自動更新（kazuto）
+name: ベンチマーク分析 & ペルソナ自動更新（木村來未）
 
 on:
   workflow_dispatch:
@@ -18,8 +18,8 @@ on:
         default: 'false'
         type: boolean
   schedule:
-    # 毎週日曜 22:00 JST (13:00 UTC) に自動実行
-    - cron: "0 13 * * 0"
+    # 毎週日曜 23:30 JST (14:30 UTC) に自動実行 ※kazuto(22:00)と衝突回避
+    - cron: "30 14 * * 0"
 
 jobs:
   benchmark-and-update:
@@ -42,37 +42,37 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      # Step 1: 自分の投稿パフォーマンス分析
+      # Step 1: 自分の投稿パフォーマンス分析（インプレッション・いいね・RT・返信）
       - name: Step1 - 自己投稿パフォーマンス分析
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          X_API_KEY: ${{ secrets.KAZUTO_X_API_KEY }}
-          X_API_SECRET: ${{ secrets.KAZUTO_X_API_SECRET }}
-          X_ACCESS_TOKEN: ${{ secrets.KAZUTO_X_ACCESS_TOKEN }}
-          X_ACCESS_SECRET: ${{ secrets.KAZUTO_X_ACCESS_SECRET }}
+          X_API_KEY: ${{ secrets.X_API_KEY }}
+          X_API_SECRET: ${{ secrets.X_API_SECRET }}
+          X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+          X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
         run: |
           python -c "
           import sys
           sys.path.insert(0, 'src')
           from analyze import run_analysis
-          run_analysis(max_tweets=50, persona_path='persona/kazuto_config.yaml')
+          run_analysis(max_tweets=100, persona_path='persona/config.yaml')
           print('[workflow] Step1 完了')
           "
 
-      # Step 2: ベンチマーク分析（高エンゲージメント外部アカウント）
+      # Step 2: ベンチマーク分析（広報・中の人・PR関連の高エンゲージメントアカウント）
       - name: Step2 - ベンチマーク分析（外部高エンゲージメントアカウント）
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          X_API_KEY: ${{ secrets.KAZUTO_X_API_KEY }}
-          X_API_SECRET: ${{ secrets.KAZUTO_X_API_SECRET }}
-          X_ACCESS_TOKEN: ${{ secrets.KAZUTO_X_ACCESS_TOKEN }}
-          X_ACCESS_SECRET: ${{ secrets.KAZUTO_X_ACCESS_SECRET }}
+          X_API_KEY: ${{ secrets.X_API_KEY }}
+          X_API_SECRET: ${{ secrets.X_API_SECRET }}
+          X_ACCESS_TOKEN: ${{ secrets.X_ACCESS_TOKEN }}
+          X_ACCESS_SECRET: ${{ secrets.X_ACCESS_SECRET }}
         run: |
           python -c "
           import sys
           sys.path.insert(0, 'src')
           from benchmark_analyzer import run_benchmark
-          run_benchmark(max_per_tag=int('${{ github.event.inputs.max_per_tag || 20 }}'), persona_path='persona/kazuto_config.yaml')
+          run_benchmark(max_per_tag=int('${{ github.event.inputs.max_per_tag || 20 }}'), persona_path='persona/config.yaml')
           print('[workflow] Step2 完了')
           "
 
@@ -86,7 +86,7 @@ jobs:
           import sys
           sys.path.insert(0, 'src')
           from persona_updater import run_update
-          updated = run_update(auto=True, persona_path='persona/kazuto_config.yaml')
+          updated = run_update(auto=True, persona_path='persona/config.yaml')
           print(f'[workflow] ペルソナ更新: {\"適用済み\" if updated else \"変更なし\"}')
           "
 
@@ -95,21 +95,21 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action (benchmark)"
-          git add analysis/ persona/kazuto_config.yaml persona/backups/ || true
-          git diff --staged --quiet || git commit -m "chore: kazuto ベンチマーク分析 & ペルソナ自動更新 [skip ci]"
+          git add analysis/ persona/config.yaml persona/backups/ || true
+          git diff --staged --quiet || git commit -m "chore: 木村來未 ベンチマーク分析 & ペルソナ自動更新 [skip ci]"
           git push || true
 
       # Step 5: 分析サマリーをワークフローのサマリーに出力
       - name: Step5 - 分析サマリー表示
         run: |
-          echo "## kazuto ベンチマーク分析 & ペルソナ更新 完了" >> $GITHUB_STEP_SUMMARY
+          echo "## 木村來未 ベンチマーク分析 & ペルソナ更新 完了" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          if [ -f analysis/kazuto_benchmark_latest.md ]; then
+          if [ -f analysis/kurumi_benchmark_latest.md ]; then
             echo "### ベンチマーク分析レポート（抜粋）" >> $GITHUB_STEP_SUMMARY
-            head -40 analysis/kazuto_benchmark_latest.md >> $GITHUB_STEP_SUMMARY
+            head -40 analysis/kurumi_benchmark_latest.md >> $GITHUB_STEP_SUMMARY
           fi
           echo "" >> $GITHUB_STEP_SUMMARY
-          if [ -f analysis/kazuto_persona_update_log.jsonl ]; then
+          if [ -f analysis/kurumi_persona_update_log.jsonl ]; then
             echo "### ペルソナ更新ログ（最新）" >> $GITHUB_STEP_SUMMARY
-            tail -1 analysis/kazuto_persona_update_log.jsonl >> $GITHUB_STEP_SUMMARY
+            tail -1 analysis/kurumi_persona_update_log.jsonl >> $GITHUB_STEP_SUMMARY
           fi

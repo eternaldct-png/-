@@ -1,7 +1,7 @@
 """
 ペルソナ自動更新モジュール
 ベンチマーク分析と自投稿のエンゲージメントデータを元に
-persona/kazuto_config.yaml を継続的に改善する
+ペルソナYAMLを継続的に改善する（複数ペルソナ対応）
 """
 import os
 import re
@@ -13,9 +13,10 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from persona_utils import persona_slug
+
 JST = ZoneInfo("Asia/Tokyo")
 ANALYSIS_DIR = Path("analysis")
-PERSONA_PATH = Path("persona/kazuto_config.yaml")
 BACKUP_DIR = Path("persona/backups")
 
 
@@ -25,20 +26,20 @@ def _load_text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def load_reports() -> dict:
-    """最新の分析レポートをすべて読み込む"""
+def load_reports(slug: str) -> dict:
+    """最新の分析レポートをすべて読み込む（ペルソナごとに名前空間を分ける）"""
     return {
-        "benchmark": _load_text(ANALYSIS_DIR / "benchmark_latest.md"),
-        "own_performance": _load_text(ANALYSIS_DIR / "latest_report.md"),
-        "benchmark_patterns": _load_text(ANALYSIS_DIR / "benchmark_patterns_latest.json"),
+        "benchmark": _load_text(ANALYSIS_DIR / f"{slug}_benchmark_latest.md"),
+        "own_performance": _load_text(ANALYSIS_DIR / f"{slug}_latest_report.md"),
+        "benchmark_patterns": _load_text(ANALYSIS_DIR / f"{slug}_benchmark_patterns_latest.json"),
     }
 
 
-def load_current_persona() -> tuple[dict, str]:
+def load_current_persona(persona_path: Path) -> tuple[dict, str]:
     """現在のpersona YAMLを辞書とテキストの両方で返す"""
-    if not PERSONA_PATH.exists():
-        raise FileNotFoundError(f"ペルソナファイルが見つかりません: {PERSONA_PATH}")
-    raw = PERSONA_PATH.read_text(encoding="utf-8")
+    if not persona_path.exists():
+        raise FileNotFoundError(f"ペルソナファイルが見つかりません: {persona_path}")
+    raw = persona_path.read_text(encoding="utf-8")
     return yaml.safe_load(raw), raw
 
 
@@ -46,6 +47,7 @@ def generate_persona_update(
     persona: dict,
     persona_raw: str,
     reports: dict,
+    persona_path: Path,
 ) -> tuple[str, str]:
     """
     Claude に現在のペルソナと分析結果を渡し、
@@ -55,6 +57,8 @@ def generate_persona_update(
         (updated_yaml_str, reasoning_str)
     """
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+
+    persona_name = persona.get("name", "アカウント")
 
     benchmark_summary = reports["benchmark"][:3000] if reports["benchmark"] else "（ベンチマークデータなし）"
     own_summary = reports["own_performance"][:2000] if reports["own_performance"] else "（自己分析データなし）"
@@ -78,7 +82,7 @@ def generate_persona_update(
             pass
 
     prompt = f"""あなたはXのSNS戦略の専門家です。
-ColorSingで配信する「kazuto」のX投稿ペルソナを、分析データに基づいて改善してください。
+「{persona_name}」のX投稿ペルソナを、分析データに基づいて改善してください。
 
 == 現在のペルソナ設定（YAML）==
 ```yaml
@@ -93,7 +97,7 @@ ColorSingで配信する「kazuto」のX投稿ペルソナを、分析データ�
 {own_summary}
 
 ## 指示
-上記のデータを踏まえ、kazutoのペルソナYAMLを改善してください。
+上記のデータを踏まえ、{persona_name}のペルソナYAMLを改善してください。
 
 ### 変更対象（必要なものだけ変更する）
 1. `post_styles` の各スタイルのexamples（高エンゲージメントパターンを反映した具体例に更新）
@@ -113,7 +117,7 @@ ColorSingで配信する「kazuto」のX投稿ペルソナを、分析データ�
   "reasoning": "変更した理由の要約（日本語200文字以内）",
   "changes": [
     {{
-      "section": "変更するYAMLのキーパス（例: post_styles.music_depth.examples）",
+      "section": "変更するYAMLのキーパス（例: post_styles.company_love.examples）",
       "description": "何をどう変えたか（1行）",
       "new_value": "新しい値（YAMLの値として有効な形式）"
     }}
@@ -161,14 +165,14 @@ ColorSingで配信する「kazuto」のX投稿ペルソナを、分析データ�
         return "", "（更新YAMLの生成に失敗）"
 
 
-def show_diff(old_yaml: str, new_yaml: str) -> None:
+def show_diff(old_yaml: str, new_yaml: str, persona_path: Path) -> None:
     """変更差分を見やすく表示する"""
     old_lines = old_yaml.splitlines(keepends=True)
     new_lines = new_yaml.splitlines(keepends=True)
     diff = list(difflib.unified_diff(
         old_lines, new_lines,
-        fromfile="persona/kazuto_config.yaml (現在)",
-        tofile="persona/kazuto_config.yaml (更新後)",
+        fromfile=f"{persona_path} (現在)",
+        tofile=f"{persona_path} (更新後)",
         n=3,
     ))
     if not diff:
@@ -184,12 +188,12 @@ def show_diff(old_yaml: str, new_yaml: str) -> None:
     print(f"\n{'='*60}\n")
 
 
-def backup_persona() -> Path:
+def backup_persona(persona_path: Path) -> Path:
     """現在のペルソナをバックアップする"""
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     now = datetime.now(JST)
-    backup_path = BACKUP_DIR / f"kazuto_config_{now.strftime('%Y%m%d_%H%M%S')}.yaml"
-    backup_path.write_text(PERSONA_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+    backup_path = BACKUP_DIR / f"{persona_path.stem}_{now.strftime('%Y%m%d_%H%M%S')}.yaml"
+    backup_path.write_text(persona_path.read_text(encoding="utf-8"), encoding="utf-8")
     print(f"[updater] バックアップ保存: {backup_path}")
     return backup_path
 
@@ -205,14 +209,14 @@ def validate_yaml(yaml_str: str) -> bool:
         return False
 
 
-def apply_update(new_yaml: str, reasoning: str) -> bool:
+def apply_update(new_yaml: str, reasoning: str, persona_path: Path, slug: str) -> bool:
     """バックアップ後にペルソナYAMLを更新する"""
-    backup_persona()
-    PERSONA_PATH.write_text(new_yaml, encoding="utf-8")
+    backup_persona(persona_path)
+    persona_path.write_text(new_yaml, encoding="utf-8")
 
-    # 更新ログを保存
+    # 更新ログを保存（ペルソナごとに名前空間を分ける）
     ANALYSIS_DIR.mkdir(exist_ok=True)
-    log_path = ANALYSIS_DIR / "persona_update_log.jsonl"
+    log_path = ANALYSIS_DIR / f"{slug}_persona_update_log.jsonl"
     log_entry = {
         "updated_at": datetime.now(JST).isoformat(),
         "reasoning": reasoning,
@@ -220,22 +224,26 @@ def apply_update(new_yaml: str, reasoning: str) -> bool:
     with open(log_path, "a", encoding="utf-8") as f:
         f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
 
-    print(f"[updater] ペルソナを更新しました: {PERSONA_PATH}")
+    print(f"[updater] ペルソナを更新しました: {persona_path}")
     return True
 
 
-def run_update(auto: bool = False) -> bool:
+def run_update(auto: bool = False, persona_path: str = "persona/config.yaml") -> bool:
     """
     ペルソナ更新のメインエントリーポイント
 
     Args:
         auto: True の場合、確認なしで自動適用（GitHub Actions用）
+        persona_path: 更新対象のペルソナ設定ファイルパス
 
     Returns:
         更新を適用した場合 True
     """
-    print("[updater] 分析レポートを読み込み中...")
-    reports = load_reports()
+    path = Path(persona_path)
+    slug = persona_slug(persona_path)
+
+    print(f"[updater] [{slug}] 分析レポートを読み込み中...")
+    reports = load_reports(slug)
 
     has_data = any(v for v in reports.values())
     if not has_data:
@@ -243,10 +251,10 @@ def run_update(auto: bool = False) -> bool:
         return False
 
     print("[updater] 現在のペルソナを読み込み中...")
-    persona, persona_raw = load_current_persona()
+    persona, persona_raw = load_current_persona(path)
 
     print("[updater] Claude AIでペルソナ更新案を生成中...")
-    new_yaml, reasoning = generate_persona_update(persona, persona_raw, reports)
+    new_yaml, reasoning = generate_persona_update(persona, persona_raw, reports, path)
 
     if not new_yaml:
         print("[updater] ペルソナ更新YAMLの生成に失敗しました")
@@ -256,17 +264,17 @@ def run_update(auto: bool = False) -> bool:
         print("[updater] 生成されたYAMLが無効です。更新をスキップします")
         return False
 
-    show_diff(persona_raw, new_yaml)
+    show_diff(persona_raw, new_yaml, path)
 
     if auto:
         print("[updater] --auto モード: 確認なしで更新を適用します")
-        return apply_update(new_yaml, reasoning)
+        return apply_update(new_yaml, reasoning, path, slug)
 
     # インタラクティブモード
     print(f"変更理由: {reasoning}")
     ans = input("この変更を適用しますか？ [y/N]: ").strip().lower()
     if ans == "y":
-        return apply_update(new_yaml, reasoning)
+        return apply_update(new_yaml, reasoning, path, slug)
     else:
         print("[updater] 更新をキャンセルしました")
         return False
