@@ -2,35 +2,20 @@
 LINEスタンプ加工モジュール
 
 ChatGPT などで手動生成したキャラクター画像（ポーズ・表情違いを16枚）を受け取り、
-- 背景を透過
+- 背景を透過（四隅から地続きの背景のみ除去）
 - 白いふちを付与
-- セリフ（キャプション）を合成
 - LINEスタンプの規定サイズ（最大370x320px）に収める
 処理を行う。外部APIは使わず Pillow のみで完結する。
 """
 import io
-from pathlib import Path
 
-from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont, ImageOps
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageOps
 
 LINE_MAX_WIDTH = 370
 LINE_MAX_HEIGHT = 320
 
 BORDER_PX = 8
 BG_TOLERANCE = 30
-CAPTION_AREA_H = 70
-CAPTION_FILL = (255, 70, 130, 255)
-CAPTION_STROKE = (255, 255, 255, 255)
-
-
-def _ensure_font(size: int) -> ImageFont.FreeTypeFont:
-    """投稿画像生成と同じフォントディレクトリ（media/fonts）を共有して再利用する"""
-    from media.image_generator import _ensure_fonts
-
-    _, bold_path = _ensure_fonts()
-    if bold_path and Path(bold_path).exists():
-        return ImageFont.truetype(str(bold_path), size)
-    return ImageFont.load_default()
 
 
 def remove_background(img: Image.Image, tolerance: int = BG_TOLERANCE) -> Image.Image:
@@ -68,35 +53,6 @@ def add_white_outline(img: Image.Image, border_px: int = BORDER_PX) -> Image.Ima
     return base
 
 
-def draw_caption(img: Image.Image, text: str) -> Image.Image:
-    """画像下に透過の余白を追加し、太字+白縁取りのセリフを合成する"""
-    text = text.strip()
-    if not text:
-        return img
-
-    canvas = Image.new("RGBA", (img.width, img.height + CAPTION_AREA_H), (0, 0, 0, 0))
-    canvas.paste(img, (0, 0), img)
-    draw = ImageDraw.Draw(canvas)
-
-    size = 36
-    font = _ensure_font(size)
-    max_w = img.width - 16
-    while size > 14:
-        font = _ensure_font(size)
-        bbox = draw.textbbox((0, 0), text, font=font, stroke_width=3)
-        if bbox[2] - bbox[0] <= max_w:
-            break
-        size -= 2
-
-    cx = img.width // 2
-    cy = img.height + CAPTION_AREA_H // 2
-    draw.text(
-        (cx, cy), text, font=font, fill=CAPTION_FILL,
-        stroke_width=3, stroke_fill=CAPTION_STROKE, anchor="mm",
-    )
-    return canvas
-
-
 def fit_to_line_size(img: Image.Image) -> Image.Image:
     """LINEスタンプの最大サイズ（370x320）を超える場合のみ縮小する"""
     if img.width <= LINE_MAX_WIDTH and img.height <= LINE_MAX_HEIGHT:
@@ -106,12 +62,11 @@ def fit_to_line_size(img: Image.Image) -> Image.Image:
     return img.resize(new_size, Image.LANCZOS)
 
 
-def process_sticker(image_bytes: bytes, caption: str = "") -> bytes:
-    """1枚分の元画像から、透過+白ふち+セリフ入りのスタンプPNGを生成する"""
+def process_sticker(image_bytes: bytes) -> bytes:
+    """1枚分の元画像から、背景透過+白ふちのスタンプPNGを生成する"""
     img = Image.open(io.BytesIO(image_bytes))
     img = remove_background(img)
     img = add_white_outline(img)
-    img = draw_caption(img, caption)
     img = fit_to_line_size(img)
 
     buf = io.BytesIO()
