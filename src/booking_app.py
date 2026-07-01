@@ -44,6 +44,7 @@ ALL_PEOPLE = [ADMIN] + list(MEMBER_SLUGS.values())
 HOURS = [f"{h:02d}:00" for h in range(9, 22)]  # 09:00〜21:00開始、最終枠21:00-22:00
 DAYS_AHEAD = 21  # 予約ページに表示する日数
 
+
 AVAILABILITY_FILE = Path("posts/booking_availability.json")
 BOOKINGS_FILE = Path("posts/booking_reservations.json")
 JST = timezone(timedelta(hours=9))
@@ -471,12 +472,21 @@ def api_booking_delete(booking_id):
 
 # ── API: 面談予約（公開） ────────────────────────────────────────
 
-@app.route("/api/book/<slug>/slots")
-def api_book_slots(slug):
+def _resolve_slug(slug):
+    """slug -> (member_display_name, open_slots_set) または None"""
+    if slug == ADMIN:
+        return ADMIN, person_available_slots(ADMIN) - booked_slots()
     member = MEMBER_SLUGS.get(slug)
     if not member:
+        return None, None
+    return member, pair_open_slots(member)
+
+
+@app.route("/api/book/<slug>/slots")
+def api_book_slots(slug):
+    member, open_slots = _resolve_slug(slug)
+    if member is None:
         return jsonify({"error": "not found"}), 404
-    open_slots = pair_open_slots(member)
     today = datetime.now(JST).date()
     days = []
     for i in range(DAYS_AHEAD):
@@ -490,8 +500,8 @@ def api_book_slots(slug):
 
 @app.route("/api/book/<slug>", methods=["POST"])
 def api_book_create(slug):
-    member = MEMBER_SLUGS.get(slug)
-    if not member:
+    member, open_slots = _resolve_slug(slug)
+    if member is None:
         return jsonify({"error": "not found"}), 404
     data = request.get_json(force=True)
     date = data.get("date", "")
@@ -502,7 +512,7 @@ def api_book_create(slug):
     if not guest_name:
         return jsonify({"error": "名前を入力してください"}), 400
     slot = slot_iso(date, hour)
-    if slot not in pair_open_slots(member):
+    if slot not in open_slots:
         return jsonify({"error": "この時間はすでに予約できません"}), 409
     booking = create_booking(member, slot, guest_name)
     if not booking:
@@ -522,6 +532,8 @@ def api_book_create(slug):
     except Exception:
         pass
     return jsonify({"ok": True})
+
+
 
 
 # ── フロントエンド ────────────────────────────────────────────────
@@ -860,7 +872,7 @@ BOOK_HTML = """<!DOCTYPE html>
   <div class="header-icon">🤝</div>
   <div class="header-info">
     <div class="header-title">__MEMBER__ と面談予約</div>
-    <div class="header-sub">1時間の面談を予約できます（kazuto 同席）</div>
+    <div class="header-sub">__HEADER_SUB__</div>
   </div>
 </div>
 <div class="wrap">
@@ -954,7 +966,13 @@ loadSlots();
 
 @app.route("/")
 def index():
-    cards = ""
+    cards = (
+        '<div class="card">'
+        '<div class="card-title">🤝 kazuto と面談を予約する</div>'
+        '<div class="card-sub">kazuto の空き時間から1時間を選んで予約</div>'
+        '<a class="btn-pri" href="/book/kazuto">予約する</a>'
+        '</div>'
+    )
     for slug, name in MEMBER_SLUGS.items():
         cards += (
             '<div class="card">'
@@ -979,13 +997,18 @@ def availability_page():
 
 @app.route("/book/<slug>")
 def book_page(slug):
-    member = MEMBER_SLUGS.get(slug)
-    if not member:
+    member, _ = _resolve_slug(slug)
+    if member is None:
         return "Not Found", 404
+    if slug == ADMIN:
+        header_sub = "1時間の面談を予約できます"
+    else:
+        header_sub = "1時間の面談を予約できます（kazuto 同席）"
     html = (BOOK_HTML
             .replace("__CSS__", CSS)
             .replace("__MEMBER__", member)
             .replace("__SLUG__", json.dumps(slug))
+            .replace("__HEADER_SUB__", header_sub)
             .replace("__TOAST_JS__", TOAST_JS))
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
