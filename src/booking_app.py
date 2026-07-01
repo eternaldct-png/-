@@ -44,9 +44,6 @@ ALL_PEOPLE = [ADMIN] + list(MEMBER_SLUGS.values())
 HOURS = [f"{h:02d}:00" for h in range(9, 22)]  # 09:00〜21:00開始、最終枠21:00-22:00
 DAYS_AHEAD = 21  # 予約ページに表示する日数
 
-# kazuto×さな 内部予約用
-SELF_BOOKING_MEMBER = "さな"
-SELF_BOOKING_GUEST_NAME = "kazuto"
 
 AVAILABILITY_FILE = Path("posts/booking_availability.json")
 BOOKINGS_FILE = Path("posts/booking_reservations.json")
@@ -528,13 +525,16 @@ def api_book_create(slug):
     return jsonify({"ok": True})
 
 
-# ── API: kazuto×さな 内部予約 ────────────────────────────────────
+# ── API: メンバー内部予約（パスワード保護） ──────────────────────
 
-@app.route("/api/book/kazuto-sana/slots")
-def api_kazuto_sana_slots():
+@app.route("/api/self-book/<slug>/slots")
+def api_self_book_slots(slug):
     if not is_avail_authed():
         return jsonify({"error": "unauthorized"}), 401
-    open_slots = pair_open_slots(SELF_BOOKING_MEMBER)
+    member = MEMBER_SLUGS.get(slug)
+    if not member:
+        return jsonify({"error": "not found"}), 404
+    open_slots = pair_open_slots(member)
     today = datetime.now(JST).date()
     days = []
     for i in range(DAYS_AHEAD):
@@ -543,29 +543,32 @@ def api_kazuto_sana_slots():
         hours = [h for h in HOURS if slot_iso(ds, h) in open_slots]
         if hours:
             days.append({"date": ds, "hours": hours})
-    return jsonify({"ok": True, "days": days})
+    return jsonify({"ok": True, "member": member, "days": days})
 
 
-@app.route("/api/book/kazuto-sana", methods=["POST"])
-def api_kazuto_sana_book():
+@app.route("/api/self-book/<slug>", methods=["POST"])
+def api_self_book_create(slug):
     if not is_avail_authed():
         return jsonify({"error": "unauthorized"}), 401
+    member = MEMBER_SLUGS.get(slug)
+    if not member:
+        return jsonify({"error": "not found"}), 404
     data = request.get_json(force=True)
     date = data.get("date", "")
     hour = data.get("hour", "")
     if not date or hour not in HOURS:
         return jsonify({"error": "invalid params"}), 400
     slot = slot_iso(date, hour)
-    if slot not in pair_open_slots(SELF_BOOKING_MEMBER):
+    if slot not in pair_open_slots(member):
         return jsonify({"error": "この時間はすでに予約できません"}), 409
-    booking = create_booking(SELF_BOOKING_MEMBER, slot, SELF_BOOKING_GUEST_NAME)
+    booking = create_booking(member, slot, member)
     if not booking:
         return jsonify({"error": "この時間はすでに予約できません"}), 409
     try:
         from google_calendar import sync_create
         google_id = sync_create({
-            "title": f"打ち合わせ: kazuto × {SELF_BOOKING_MEMBER}",
-            "description": f"kazuto × {SELF_BOOKING_MEMBER} 内部打ち合わせ",
+            "title": f"打ち合わせ: kazuto × {member}",
+            "description": f"kazuto × {member} 内部打ち合わせ",
             "event_type": "interview",
             "start_datetime": slot,
             "end_datetime": slot_end_iso(date, hour),
@@ -1006,12 +1009,12 @@ loadSlots();
 """
 
 
-KAZUTO_SANA_BOOK_HTML = """<!DOCTYPE html>
+SELF_BOOK_HTML = """<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>kazuto × さな — 内部予約</title>
+<title>kazuto × __MEMBER__ — 内部予約</title>
 <style>__CSS__</style>
 </head>
 <body>
@@ -1019,7 +1022,7 @@ KAZUTO_SANA_BOOK_HTML = """<!DOCTYPE html>
   <a class="back-btn" href="/">‹</a>
   <div class="header-icon">🗓️</div>
   <div class="header-info">
-    <div class="header-title">kazuto × さな 予約</div>
+    <div class="header-title">kazuto × __MEMBER__ 予約</div>
     <div class="header-sub">内部打ち合わせスケジュール</div>
   </div>
   <button class="back-btn" onclick="doLogout()" title="ログアウト">🔒</button>
@@ -1056,6 +1059,7 @@ KAZUTO_SANA_BOOK_HTML = """<!DOCTYPE html>
 </div>
 <div class="toast" id="toast"></div>
 <script>
+const SLUG = __SLUG__;
 let curDate = new Date();
 let daysData = [];
 let pickSlot = null;
@@ -1066,7 +1070,7 @@ function dayLabel(d) {
 }
 function changeDay(diff) { curDate.setDate(curDate.getDate()+diff); renderGrid(); }
 async function loadSlots() {
-  const r = await fetch('/api/book/kazuto-sana/slots');
+  const r = await fetch(`/api/self-book/${SLUG}/slots`);
   if (r.status === 401) { checkAuth(); return; }
   const d = await r.json();
   if (d.ok) daysData = d.days;
@@ -1102,7 +1106,7 @@ function onBg(e) { if (e.target===document.getElementById('bk-overlay')) closeMo
 async function confirmBook() {
   if (!pickSlot) return;
   try {
-    const r = await fetch('/api/book/kazuto-sana', {
+    const r = await fetch(`/api/self-book/${SLUG}`, {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ date: pickSlot.ds, hour: pickSlot.h }),
     });
@@ -1160,13 +1164,13 @@ def index():
             f'<a class="btn-pri" href="/book/{slug}">予約する</a>'
             '</div>'
         )
-    cards += (
-        '<div class="card">'
-        '<div class="card-title">🗓️ kazuto × さな 内部予約</div>'
-        '<div class="card-sub">kazuto とさなの打ち合わせ（パスワード必要）</div>'
-        '<a class="btn-sec" href="/book/kazuto-sana">予約する</a>'
-        '</div>'
-    )
+    cards += '<div class="card"><div class="card-title" style="margin-bottom:10px;">🗓️ メンバー内部予約（PW必要）</div>'
+    for slug, name in MEMBER_SLUGS.items():
+        cards += (
+            f'<a class="btn-sec" href="/self-book/{slug}" '
+            f'style="margin-bottom:8px;">kazuto × {name}</a>'
+        )
+    cards += '</div>'
     html = HOME_HTML.replace("__CSS__", CSS).replace("__MEMBER_CARDS__", cards)
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
@@ -1194,10 +1198,15 @@ def book_page(slug):
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
 
-@app.route("/book/kazuto-sana")
-def book_kazuto_sana_page():
-    html = (KAZUTO_SANA_BOOK_HTML
+@app.route("/self-book/<slug>")
+def self_book_page(slug):
+    member = MEMBER_SLUGS.get(slug)
+    if not member:
+        return "Not Found", 404
+    html = (SELF_BOOK_HTML
             .replace("__CSS__", CSS)
+            .replace("__MEMBER__", member)
+            .replace("__SLUG__", json.dumps(slug))
             .replace("__TOAST_JS__", TOAST_JS))
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
