@@ -44,6 +44,10 @@ ALL_PEOPLE = [ADMIN] + list(MEMBER_SLUGS.values())
 HOURS = [f"{h:02d}:00" for h in range(9, 22)]  # 09:00〜21:00開始、最終枠21:00-22:00
 DAYS_AHEAD = 21  # 予約ページに表示する日数
 
+# kazuto×さな 内部予約用
+SELF_BOOKING_MEMBER = "さな"
+SELF_BOOKING_GUEST_NAME = "kazuto"
+
 AVAILABILITY_FILE = Path("posts/booking_availability.json")
 BOOKINGS_FILE = Path("posts/booking_reservations.json")
 JST = timezone(timedelta(hours=9))
@@ -524,6 +528,56 @@ def api_book_create(slug):
     return jsonify({"ok": True})
 
 
+# ── API: kazuto×さな 内部予約 ────────────────────────────────────
+
+@app.route("/api/book/kazuto-sana/slots")
+def api_kazuto_sana_slots():
+    if not is_avail_authed():
+        return jsonify({"error": "unauthorized"}), 401
+    open_slots = pair_open_slots(SELF_BOOKING_MEMBER)
+    today = datetime.now(JST).date()
+    days = []
+    for i in range(DAYS_AHEAD):
+        d = today + timedelta(days=i)
+        ds = d.strftime("%Y-%m-%d")
+        hours = [h for h in HOURS if slot_iso(ds, h) in open_slots]
+        if hours:
+            days.append({"date": ds, "hours": hours})
+    return jsonify({"ok": True, "days": days})
+
+
+@app.route("/api/book/kazuto-sana", methods=["POST"])
+def api_kazuto_sana_book():
+    if not is_avail_authed():
+        return jsonify({"error": "unauthorized"}), 401
+    data = request.get_json(force=True)
+    date = data.get("date", "")
+    hour = data.get("hour", "")
+    if not date or hour not in HOURS:
+        return jsonify({"error": "invalid params"}), 400
+    slot = slot_iso(date, hour)
+    if slot not in pair_open_slots(SELF_BOOKING_MEMBER):
+        return jsonify({"error": "この時間はすでに予約できません"}), 409
+    booking = create_booking(SELF_BOOKING_MEMBER, slot, SELF_BOOKING_GUEST_NAME)
+    if not booking:
+        return jsonify({"error": "この時間はすでに予約できません"}), 409
+    try:
+        from google_calendar import sync_create
+        google_id = sync_create({
+            "title": f"打ち合わせ: kazuto × {SELF_BOOKING_MEMBER}",
+            "description": f"kazuto × {SELF_BOOKING_MEMBER} 内部打ち合わせ",
+            "event_type": "interview",
+            "start_datetime": slot,
+            "end_datetime": slot_end_iso(date, hour),
+            "all_day": False,
+        })
+        if google_id:
+            set_booking_google_event_id(booking["id"], google_id)
+    except Exception:
+        pass
+    return jsonify({"ok": True})
+
+
 # ── フロントエンド ────────────────────────────────────────────────
 
 CSS = """
@@ -952,6 +1006,149 @@ loadSlots();
 """
 
 
+KAZUTO_SANA_BOOK_HTML = """<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>kazuto × さな — 内部予約</title>
+<style>__CSS__</style>
+</head>
+<body>
+<div class="header">
+  <a class="back-btn" href="/">‹</a>
+  <div class="header-icon">🗓️</div>
+  <div class="header-info">
+    <div class="header-title">kazuto × さな 予約</div>
+    <div class="header-sub">内部打ち合わせスケジュール</div>
+  </div>
+  <button class="back-btn" onclick="doLogout()" title="ログアウト">🔒</button>
+</div>
+<div class="wrap">
+  <div class="day-nav">
+    <button class="day-btn" onclick="changeDay(-1)">‹</button>
+    <span class="day-label" id="day-label"></span>
+    <button class="day-btn" onclick="changeDay(1)">›</button>
+  </div>
+  <div class="hour-grid" id="hour-grid"></div>
+</div>
+
+<div class="overlay open" id="pw-overlay">
+  <div class="sheet">
+    <div class="handle"></div>
+    <div class="sheet-title">パスワードを入力してください</div>
+    <input type="password" class="fi" id="f-pw" placeholder="パスワード" onkeydown="if(event.key==='Enter')submitPw()">
+    <div class="btn-row">
+      <button class="btn-pri" style="width:100%" onclick="submitPw()">入る</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="bk-overlay" onclick="onBg(event)">
+  <div class="sheet">
+    <div class="handle"></div>
+    <div class="sheet-title" id="bk-title"></div>
+    <div class="btn-row">
+      <button class="btn-sec" onclick="closeModal()">キャンセル</button>
+      <button class="btn-pri" onclick="confirmBook()">予約する</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+let curDate = new Date();
+let daysData = [];
+let pickSlot = null;
+function dateFmt(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function dayLabel(d) {
+  const wd = ['日','月','火','水','木','金','土'][d.getDay()];
+  return `${d.getMonth()+1}月${d.getDate()}日(${wd})`;
+}
+function changeDay(diff) { curDate.setDate(curDate.getDate()+diff); renderGrid(); }
+async function loadSlots() {
+  const r = await fetch('/api/book/kazuto-sana/slots');
+  if (r.status === 401) { checkAuth(); return; }
+  const d = await r.json();
+  if (d.ok) daysData = d.days;
+  renderGrid();
+}
+function renderGrid() {
+  document.getElementById('day-label').textContent = dayLabel(curDate);
+  const ds = dateFmt(curDate);
+  const grid = document.getElementById('hour-grid');
+  grid.innerHTML = '';
+  const day = daysData.find(x => x.date === ds);
+  if (!day || day.hours.length === 0) {
+    const msg = document.createElement('div');
+    msg.className = 'empty-msg'; msg.textContent = 'この日に空いている時間はありません';
+    grid.appendChild(msg);
+    return;
+  }
+  day.hours.forEach(h => {
+    const btn = document.createElement('div');
+    btn.className = 'hour-btn on';
+    btn.textContent = h;
+    btn.onclick = () => openModal(ds, h);
+    grid.appendChild(btn);
+  });
+}
+function openModal(ds, h) {
+  pickSlot = { ds, h };
+  document.getElementById('bk-title').textContent = `${ds} ${h} に予約しますか？`;
+  document.getElementById('bk-overlay').classList.add('open');
+}
+function closeModal() { document.getElementById('bk-overlay').classList.remove('open'); pickSlot = null; }
+function onBg(e) { if (e.target===document.getElementById('bk-overlay')) closeModal(); }
+async function confirmBook() {
+  if (!pickSlot) return;
+  try {
+    const r = await fetch('/api/book/kazuto-sana', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ date: pickSlot.ds, hour: pickSlot.h }),
+    });
+    const d = await r.json();
+    if (d.ok) { closeModal(); toast('予約が完了しました'); await loadSlots(); }
+    else { toast(d.error || '予約に失敗しました'); await loadSlots(); }
+  } catch(e) { toast('通信エラーが発生しました'); }
+}
+async function doLogout() {
+  await fetch('/api/availability/logout', { method: 'POST' });
+  location.reload();
+}
+async function checkAuth() {
+  try {
+    const d = await (await fetch('/api/availability/me')).json();
+    if (d.authed) {
+      document.getElementById('pw-overlay').classList.remove('open');
+      loadSlots();
+    }
+  } catch(e) {}
+}
+async function submitPw() {
+  const password = document.getElementById('f-pw').value;
+  try {
+    const r = await fetch('/api/availability/login', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ password }),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      document.getElementById('pw-overlay').classList.remove('open');
+      loadSlots();
+    } else {
+      toast(d.error || 'パスワードが違います');
+      document.getElementById('f-pw').value = '';
+    }
+  } catch(e) { toast('通信エラーが発生しました'); }
+}
+__TOAST_JS__
+checkAuth();
+</script>
+</body>
+</html>
+"""
+
+
 @app.route("/")
 def index():
     cards = ""
@@ -963,6 +1160,13 @@ def index():
             f'<a class="btn-pri" href="/book/{slug}">予約する</a>'
             '</div>'
         )
+    cards += (
+        '<div class="card">'
+        '<div class="card-title">🗓️ kazuto × さな 内部予約</div>'
+        '<div class="card-sub">kazuto とさなの打ち合わせ（パスワード必要）</div>'
+        '<a class="btn-sec" href="/book/kazuto-sana">予約する</a>'
+        '</div>'
+    )
     html = HOME_HTML.replace("__CSS__", CSS).replace("__MEMBER_CARDS__", cards)
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
@@ -986,6 +1190,14 @@ def book_page(slug):
             .replace("__CSS__", CSS)
             .replace("__MEMBER__", member)
             .replace("__SLUG__", json.dumps(slug))
+            .replace("__TOAST_JS__", TOAST_JS))
+    return html, 200, {"Content-Type": "text/html; charset=utf-8"}
+
+
+@app.route("/book/kazuto-sana")
+def book_kazuto_sana_page():
+    html = (KAZUTO_SANA_BOOK_HTML
+            .replace("__CSS__", CSS)
             .replace("__TOAST_JS__", TOAST_JS))
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
