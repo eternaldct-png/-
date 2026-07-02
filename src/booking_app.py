@@ -895,6 +895,15 @@ BOOK_HTML = """<!DOCTYPE html>
     </div>
   </div>
 </div>
+<div class="overlay" id="done-overlay" onclick="onDoneBg(event)">
+  <div class="sheet" style="text-align:center;">
+    <div class="handle"></div>
+    <div style="font-size:40px; margin-bottom:8px;">✅</div>
+    <div class="sheet-title" style="margin-bottom:6px;">予約が完了しました</div>
+    <div class="card-sub" id="done-detail" style="margin-bottom:16px;"></div>
+    <button class="btn-pri" onclick="closeDone()">閉じる</button>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 <script>
 const SLUG = __SLUG__;
@@ -942,19 +951,26 @@ function openModal(ds, h) {
 }
 function closeModal() { document.getElementById('bk-overlay').classList.remove('open'); pickHour = null; }
 function onBg(e) { if (e.target===document.getElementById('bk-overlay')) closeModal(); }
+function showDone(ds, h) {
+  document.getElementById('done-detail').textContent = `${ds} ${h}〜`;
+  document.getElementById('done-overlay').classList.add('open');
+}
+function closeDone() { document.getElementById('done-overlay').classList.remove('open'); }
+function onDoneBg(e) { if (e.target===document.getElementById('done-overlay')) closeDone(); }
 async function confirmBook() {
   const guest_name = document.getElementById('f-name').value.trim();
   if (!guest_name) { toast('名前を入力してください'); return; }
   if (!pickHour) return;
+  const { ds, h } = pickHour;
   try {
     const r = await fetch(`/api/book/${SLUG}`, {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ date: pickHour.ds, hour: pickHour.h, guest_name }),
+      body: JSON.stringify({ date: ds, hour: h, guest_name }),
     });
     const d = await r.json();
-    if (d.ok) { closeModal(); toast('予約が完了しました'); await loadSlots(); }
-    else { toast(d.error || '予約に失敗しました'); await loadSlots(); }
-  } catch(e) { toast('通信エラーが発生しました'); }
+    if (d.ok) { closeModal(); showDone(ds, h); await loadSlots(); }
+    else { toast(d.error || '予約できませんでした'); await loadSlots(); }
+  } catch(e) { toast('通信エラーが発生しました。予約できませんでした'); }
 }
 __TOAST_JS__
 loadSlots();
