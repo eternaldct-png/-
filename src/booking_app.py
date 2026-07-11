@@ -1,14 +1,12 @@
 """
 面談予約アプリ — 独立した Flask アプリ
 
-5人（kazuto / あまりん / さな / しー / かぴのすけ）のうち、
-kazuto と各メンバーの組み合わせ（4ペア）について:
+5人（kazuto / あまりん / さな / しー / かぴのすけ）それぞれについて:
   - 各人がログイン不要で自分の空き時間（1時間単位）を登録
-  - kazuto とメンバー双方が空いている時間だけが予約ページに公開される
+  - その人自身が空けている時間（すでに予約済みの時間は除く）が予約ページに公開される
   - 外部ゲストがログイン不要で名前だけ入力して1時間の面談を予約できる
   - 予約は早い者勝ち（先着順で埋まったら他の人は予約できない）
-  - kazuto は全ペアに共通の参加者なので、kazuto が埋まれば他の3ペアの
-    同時刻も自動的に予約不可になる（同一スロットはシステム全体で一意）
+  - 予約の枠は人ごとに独立している（同じ時間でも別の人になら予約可能）
   - 予約が確定すると eternal.d.c.t@gmail.com の Google カレンダーに同期
 
 環境変数（Render などで設定）:
@@ -84,11 +82,29 @@ def _ensure_tables():
                     CREATE TABLE IF NOT EXISTS interview_bookings (
                         id TEXT PRIMARY KEY,
                         member TEXT NOT NULL,
-                        slot TEXT NOT NULL UNIQUE,
+                        slot TEXT NOT NULL,
                         guest_name TEXT NOT NULL DEFAULT '',
                         created_at TEXT DEFAULT '',
-                        google_calendar_event_id TEXT
+                        google_calendar_event_id TEXT,
+                        UNIQUE(member, slot)
                     )
+                """)
+                # 旧バージョン（slot が全体で一意）からの移行: 人ごとの一意制約に切り替える
+                cur.execute("""
+                    DO $$
+                    BEGIN
+                        IF EXISTS (
+                            SELECT 1 FROM pg_constraint WHERE conname = 'interview_bookings_slot_key'
+                        ) THEN
+                            ALTER TABLE interview_bookings DROP CONSTRAINT interview_bookings_slot_key;
+                        END IF;
+                        IF NOT EXISTS (
+                            SELECT 1 FROM pg_constraint WHERE conname = 'interview_bookings_member_slot_key'
+                        ) THEN
+                            ALTER TABLE interview_bookings
+                                ADD CONSTRAINT interview_bookings_member_slot_key UNIQUE (member, slot);
+                        END IF;
+                    END $$;
                 """)
     except Exception:
         pass
@@ -198,8 +214,7 @@ def _bookings_file_save(rows):
 
 
 def create_booking(member, slot, guest_name):
-    """slot はシステム全体で一意（kazuto が全ペア共通のため）。
-    既に予約済みなら None を返す。"""
+    """slot は member ごとに一意。すでに member 自身が同じ枠で予約済みなら None を返す。"""
     booking = {
         "id": str(uuid.uuid4()), "member": member, "slot": slot,
         "guest_name": guest_name,
@@ -222,7 +237,7 @@ def create_booking(member, slot, guest_name):
         finally:
             conn.close()
     rows = load_bookings()
-    if any(r["slot"] == slot for r in rows):
+    if any(r["slot"] == slot and r["member"] == member for r in rows):
         return None
     rows.append(booking)
     _bookings_file_save(rows)
@@ -326,13 +341,13 @@ def person_available_slots(person):
     return {r["slot"] for r in load_availability() if r["person"] == person}
 
 
-def booked_slots():
-    return {r["slot"] for r in load_bookings()}
+def member_booked_slots(person):
+    return {r["slot"] for r in load_bookings() if r["member"] == person}
 
 
-def pair_open_slots(member_name):
-    """kazuto と member_name の両方が空けていて、まだ誰にも予約されていないスロット集合"""
-    return person_available_slots(ADMIN) & person_available_slots(member_name) - booked_slots()
+def open_slots_for(person):
+    """person 自身が空けている時間から、person 自身の予約済みスロットを除いた集合"""
+    return person_available_slots(person) - member_booked_slots(person)
 
 
 # ── 認証（空き時間登録ページ） ───────────────────────────────────
@@ -387,8 +402,8 @@ def api_availability_get():
     if person not in ALL_PEOPLE or not date:
         return jsonify({"error": "invalid params"}), 400
     avail = person_available_slots(person)
-    booked = booked_slots()
-    booked_by = {r["slot"]: r for r in load_bookings()}
+    person_bookings = [r for r in load_bookings() if r["member"] == person]
+    booked_by = {r["slot"]: r for r in person_bookings}
     hours = []
     for h in HOURS:
         slot = slot_iso(date, h)
@@ -396,8 +411,7 @@ def api_availability_get():
         hours.append({
             "hour": h,
             "available": slot in avail,
-            "booked": slot in booked,
-            "booked_with": b["member"] if b else "",
+            "booked": b is not None,
             "guest_name": b["guest_name"] if b else "",
             "booking_id": b["id"] if b else "",
         })
@@ -415,7 +429,7 @@ def api_availability_toggle():
     if person not in ALL_PEOPLE or not date or hour not in HOURS:
         return jsonify({"error": "invalid params"}), 400
     slot = slot_iso(date, hour)
-    if slot in booked_slots():
+    if slot in member_booked_slots(person):
         return jsonify({"error": "予約済みのため変更できません"}), 409
     currently = slot in person_available_slots(person)
     if currently:
@@ -473,13 +487,14 @@ def api_booking_delete(booking_id):
 # ── API: 面談予約（公開） ────────────────────────────────────────
 
 def _resolve_slug(slug):
-    """slug -> (member_display_name, open_slots_set) または None"""
+    """slug -> (person_display_name, open_slots_set) または None"""
     if slug == ADMIN:
-        return ADMIN, person_available_slots(ADMIN) - booked_slots()
-    member = MEMBER_SLUGS.get(slug)
-    if not member:
+        person = ADMIN
+    else:
+        person = MEMBER_SLUGS.get(slug)
+    if not person:
         return None, None
-    return member, pair_open_slots(member)
+    return person, open_slots_for(person)
 
 
 @app.route("/api/book/<slug>/slots")
@@ -639,6 +654,19 @@ select.fi, input.fi {
   opacity: 0; transition: all 0.28s; white-space: nowrap; z-index: 500; pointer-events: none;
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.nav-loading {
+  position: fixed; inset: 0; background: var(--bg);
+  z-index: 999; display: none; align-items: center; justify-content: center;
+  flex-direction: column; gap: 14px;
+}
+.nav-loading.show { display: flex; }
+.spinner {
+  width: 34px; height: 34px; border: 3px solid var(--border);
+  border-top-color: var(--accent2); border-radius: 50%;
+  animation: nav-spin 0.7s linear infinite;
+}
+@keyframes nav-spin { to { transform: rotate(360deg); } }
+.nav-loading-text { font-size: 13px; color: var(--muted); }
 """
 
 TOAST_JS = """
@@ -647,6 +675,23 @@ function toast(msg) {
   t.textContent = msg; t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 2600);
 }
+"""
+
+NAV_JS = """
+function showNavLoading() {
+  const el = document.getElementById('nav-loading');
+  if (el) el.classList.add('show');
+}
+function hideNavLoading() {
+  const el = document.getElementById('nav-loading');
+  if (el) el.classList.remove('show');
+}
+function goTo(url) {
+  showNavLoading();
+  fetch(url).catch(() => {}).finally(() => { location.href = url; });
+  return false;
+}
+window.addEventListener('pageshow', hideNavLoading);
 """
 
 HOME_HTML = """<!DOCTYPE html>
@@ -669,10 +714,17 @@ HOME_HTML = """<!DOCTYPE html>
   <div class="card">
     <div class="card-title">📝 空き時間を登録する</div>
     <div class="card-sub">kazuto / あまりん / さな / しー / かぴのすけ 共通</div>
-    <a class="btn-pri" href="/availability">空き時間を登録する</a>
+    <a class="btn-pri" href="/availability" onclick="return goTo('/availability')">空き時間を登録する</a>
   </div>
   __MEMBER_CARDS__
 </div>
+<div class="nav-loading" id="nav-loading">
+  <div class="spinner"></div>
+  <div class="nav-loading-text">しばらくお待ちください…</div>
+</div>
+<script>
+__NAV_JS__
+</script>
 </body>
 </html>
 """
@@ -687,7 +739,7 @@ AVAILABILITY_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <div class="header">
-  <a class="back-btn" href="/">‹</a>
+  <a class="back-btn" href="/" onclick="return goTo('/')">‹</a>
   <div class="header-icon">📝</div>
   <div class="header-info">
     <div class="header-title">空き時間登録</div>
@@ -719,7 +771,12 @@ AVAILABILITY_HTML = """<!DOCTYPE html>
   </div>
 </div>
 <div class="toast" id="toast"></div>
+<div class="nav-loading" id="nav-loading">
+  <div class="spinner"></div>
+  <div class="nav-loading-text">しばらくお待ちください…</div>
+</div>
 <script>
+__NAV_JS__
 let curDate = new Date();
 function dateFmt(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 function dayLabel(d) {
@@ -746,7 +803,7 @@ async function render() {
       btn.textContent = h.hour;
       const who = document.createElement('span');
       who.className = 'who';
-      who.textContent = `${h.booked_with}×${h.guest_name}`;
+      who.textContent = h.guest_name;
       btn.appendChild(who);
       const actions = document.createElement('div');
       actions.className = 'booking-actions';
@@ -755,7 +812,7 @@ async function render() {
       editBtn.onclick = (e) => { e.stopPropagation(); editBooking(h.booking_id, h.guest_name); };
       const delBtn = document.createElement('button');
       delBtn.className = 'act-btn danger'; delBtn.textContent = '削除';
-      delBtn.onclick = (e) => { e.stopPropagation(); deleteBooking(h.booking_id, h.hour, h.booked_with); };
+      delBtn.onclick = (e) => { e.stopPropagation(); deleteBooking(h.booking_id, h.hour, h.guest_name); };
       actions.appendChild(editBtn); actions.appendChild(delBtn);
       btn.appendChild(actions);
     } else {
@@ -804,8 +861,8 @@ async function editBooking(bookingId, currentName) {
     else { toast(d.error || '更新に失敗しました'); }
   } catch(e) { toast('通信エラーが発生しました'); }
 }
-async function deleteBooking(bookingId, hour, member) {
-  if (!window.confirm(`${hour} ${member}の予約を削除しますか？`)) return;
+async function deleteBooking(bookingId, hour, guestName) {
+  if (!window.confirm(`${hour} ${guestName}様の予約を削除しますか？`)) return;
   try {
     const r = await fetch(`/api/booking/${bookingId}/delete`, { method: 'POST' });
     const d = await r.json();
@@ -868,7 +925,7 @@ BOOK_HTML = """<!DOCTYPE html>
 </head>
 <body>
 <div class="header">
-  <a class="back-btn" href="/">‹</a>
+  <a class="back-btn" href="/" onclick="return goTo('/')">‹</a>
   <div class="header-icon">🤝</div>
   <div class="header-info">
     <div class="header-title">__MEMBER__ と面談予約</div>
@@ -905,7 +962,12 @@ BOOK_HTML = """<!DOCTYPE html>
   </div>
 </div>
 <div class="toast" id="toast"></div>
+<div class="nav-loading" id="nav-loading">
+  <div class="spinner"></div>
+  <div class="nav-loading-text">しばらくお待ちください…</div>
+</div>
 <script>
+__NAV_JS__
 const SLUG = __SLUG__;
 let curDate = new Date();
 let daysData = [];
@@ -917,6 +979,7 @@ function dayLabel(d) {
 }
 function changeDay(diff) { curDate.setDate(curDate.getDate()+diff); renderGrid(); }
 async function loadSlots() {
+  document.getElementById('hour-grid').innerHTML = '<div class="empty-msg">読み込み中…</div>';
   const r = await fetch(`/api/book/${SLUG}/slots`);
   const d = await r.json();
   if (d.ok) daysData = d.days;
@@ -986,18 +1049,21 @@ def index():
         '<div class="card">'
         '<div class="card-title">🤝 kazuto と面談を予約する</div>'
         '<div class="card-sub">kazuto の空き時間から1時間を選んで予約</div>'
-        '<a class="btn-pri" href="/book/kazuto">予約する</a>'
+        '<a class="btn-pri" href="/book/kazuto" onclick="return goTo(\'/book/kazuto\')">予約する</a>'
         '</div>'
     )
     for slug, name in MEMBER_SLUGS.items():
         cards += (
             '<div class="card">'
             f'<div class="card-title">🤝 {name} と面談を予約する</div>'
-            f'<div class="card-sub">kazuto × {name} の空き時間から1時間を選んで予約</div>'
-            f'<a class="btn-pri" href="/book/{slug}">予約する</a>'
+            f'<div class="card-sub">{name} の空き時間から1時間を選んで予約</div>'
+            f'<a class="btn-pri" href="/book/{slug}" onclick="return goTo(\'/book/{slug}\')">予約する</a>'
             '</div>'
         )
-    html = HOME_HTML.replace("__CSS__", CSS).replace("__MEMBER_CARDS__", cards)
+    html = (HOME_HTML
+            .replace("__CSS__", CSS)
+            .replace("__MEMBER_CARDS__", cards)
+            .replace("__NAV_JS__", NAV_JS))
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
 
@@ -1007,7 +1073,8 @@ def availability_page():
     html = (AVAILABILITY_HTML
             .replace("__CSS__", CSS)
             .replace("__PERSON_OPTIONS__", options)
-            .replace("__TOAST_JS__", TOAST_JS))
+            .replace("__TOAST_JS__", TOAST_JS)
+            .replace("__NAV_JS__", NAV_JS))
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
 
@@ -1016,16 +1083,14 @@ def book_page(slug):
     member, _ = _resolve_slug(slug)
     if member is None:
         return "Not Found", 404
-    if slug == ADMIN:
-        header_sub = "1時間の面談を予約できます"
-    else:
-        header_sub = "1時間の面談を予約できます（kazuto 同席）"
+    header_sub = "1時間の面談を予約できます"
     html = (BOOK_HTML
             .replace("__CSS__", CSS)
             .replace("__MEMBER__", member)
             .replace("__SLUG__", json.dumps(slug))
             .replace("__HEADER_SUB__", header_sub)
-            .replace("__TOAST_JS__", TOAST_JS))
+            .replace("__TOAST_JS__", TOAST_JS)
+            .replace("__NAV_JS__", NAV_JS))
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
 
