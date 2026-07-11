@@ -103,24 +103,25 @@ git push -u origin claude/homepage-payment-spreadsheet-DD1ly
 
 ## 面談予約アプリ（src/booking_app.py）
 
-kazuto と あまりん/さな/しー/かぴのすけ の4ペアそれぞれについて、外部ゲストが
+kazuto / あまりん / さな / しー / かぴのすけ の5人それぞれについて、外部ゲストが
 ログイン不要で1時間の面談を予約できるアプリ。Render では別サービス
 `eternal-interview-booking` としてホスト（`render.yaml` 参照）。
 
 ### 仕組み
 - `/availability`（空き時間登録）はパスワード保護（`AVAILABILITY_PASSWORD`、未設定時のデフォルト: `ETERNALLOVE`）。5人はログイン後、自分の名前を選んで空き時間（1時間単位、9:00〜22:00）を登録する。
-- `/book/<slug>`（外部ゲスト向け予約ページ）はログイン不要・一般公開。
-- 各ペアの予約ページ（`/book/<slug>`）には、kazuto とそのメンバー両方が空けている時間だけが表示される。
-- ゲストは名前だけ入力して予約。**先着順**で、同じスロットは一度しか予約できない。
-- kazuto は全ペア共通の参加者なので、1ペアで埋まると他のペアの同時刻も自動的に予約不可になる。
+- `/book/<slug>`（外部ゲスト向け予約ページ）はログイン不要・一般公開。5人それぞれ独立したページ（`/book/kazuto` `/book/amarin` `/book/sana` `/book/shi` `/book/kapinosuke`）。
+- 各予約ページには、**その人自身が空けている時間**（すでに予約済みの時間は除く）だけが表示される。他の人の空き時間と掛け合わせる（両方が空いている必要がある）ことはしない — 一人ひとり独立して予約を受け付ける。
+- ゲストは名前だけ入力して予約。**先着順**で、同じ人・同じスロットは一度しか予約できない。予約枠は人ごとに独立しているため、同じ時間帯でも別の人になら予約できる。
 - 予約が確定すると `eternal.d.c.t@gmail.com` の Google カレンダーに同期される（`GOOGLE_SERVICE_ACCOUNT_JSON` / `GOOGLE_CALENDAR_ID` をそのカレンダーに合わせて設定し、サービスアカウントのメールアドレスをカレンダー共有に追加しておく必要あり）。
 - `/availability` ページでは確定済みの予約枠に「編集」「削除」ボタンが表示され、ゲスト名の修正や予約取消（枠を再度空けてGoogleカレンダーのイベントも削除）ができる。
+- 予約成功時は消えるトースト通知ではなく、閉じるまで表示され続けるポップアップで完了を知らせる。失敗時は従来通りトーストでエラーメッセージを表示。
+- ページ間の遷移（ホーム → 予約ページなど）では、タップした瞬間に「しばらくお待ちください…」のローディング表示を出し、遷移先ページの応答を待ってから実際に画面を切り替える（Render の低頻度アクセス時のコールドスタート対策）。
 
 ### URL
-- `/` — メニュー（空き時間登録 + 4人分の予約リンク）
+- `/` — メニュー（空き時間登録 + 5人分の予約リンク）
 - `/availability` — 空き時間登録（5人共通、パスワード保護）
-- `/book/amarin` `/book/sana` `/book/shi` `/book/kapinosuke` — 各メンバーとの面談予約ページ（一般公開・ログイン不要）
+- `/book/kazuto` `/book/amarin` `/book/sana` `/book/shi` `/book/kapinosuke` — 各人との面談予約ページ（一般公開・ログイン不要）
 
 ### データ
 - `posts/booking_availability.json` — 各人の空き時間（`DATABASE_URL` 設定時は Postgres の `booking_availability` テーブル）
-- `posts/booking_reservations.json` — 確定した予約（同テーブル構成時は `interview_bookings` テーブル）
+- `posts/booking_reservations.json` — 確定した予約（同テーブル構成時は `interview_bookings` テーブル。予約の一意制約は `(member, slot)` の組み合わせ単位）
