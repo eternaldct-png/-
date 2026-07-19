@@ -132,6 +132,11 @@ kazuto / あまりん / さな / しー / かぴのすけ の5人それぞれに
 ログイン不要で1時間の面談を予約できるアプリ。Render では別サービス
 `eternal-interview-booking` としてホスト（`render.yaml` 参照）。
 
+**設定ファイル: `persona/booking_config.yaml`** — サイト名・アイコン・予約の呼び名
+（面談/レッスン/施術など）・メンバー一覧（slug と表示名）・営業時間・表示日数・
+リマインド時刻はすべてこの YAML で変更できる。コード変更なしで別事業者向けの
+予約ツールとして外販デプロイ可能（手順: `docs/booking_line_setup.md` の「外販するとき」）。
+
 ### 仕組み
 - `/availability`（空き時間登録）はパスワード保護（`AVAILABILITY_PASSWORD`、未設定時のデフォルト: `ETERNALLOVE`）。5人はログイン後、自分の名前を選んで空き時間（1時間単位、9:00〜22:00）を登録する。
 - `/book/<slug>`（外部ゲスト向け予約ページ）はログイン不要・一般公開。5人それぞれ独立したページ（`/book/kazuto` `/book/amarin` `/book/sana` `/book/shi` `/book/kapinosuke`）。
@@ -140,6 +145,8 @@ kazuto / あまりん / さな / しー / かぴのすけ の5人それぞれに
 - 予約が確定すると `eternal.d.c.t@gmail.com` の Google カレンダーに同期される（`GOOGLE_SERVICE_ACCOUNT_JSON` / `GOOGLE_CALENDAR_ID` をそのカレンダーに合わせて設定し、サービスアカウントのメールアドレスをカレンダー共有に追加しておく必要あり）。
 - `/availability` ページでは確定済みの予約枠に「編集」「削除」ボタンが表示され、ゲスト名の修正や予約取消（枠を再度空けてGoogleカレンダーのイベントも削除）ができる。
 - 予約成功時は消えるトースト通知ではなく、閉じるまで表示され続けるポップアップで完了を知らせる。失敗時は従来通りトーストでエラーメッセージを表示。
+- **LINE通知**: LINE公式アカウント（Messaging API）を連携すると、予約確定・キャンセル時に担当メンバーのLINEへ即時通知が届く。メンバーは公式アカウントに「連携 あまりん」のように送るだけで紐づく（「連携 admin」で全員分、「解除」で停止）。連携状況は `/availability` の「💬 LINE通知」カードに表示。環境変数: `LINE_CHANNEL_ACCESS_TOKEN` / `LINE_CHANNEL_SECRET`。Webhook URL は `/line/webhook`。セットアップ手順: `docs/booking_line_setup.md`
+- **LINEリマインド**: `/tasks/send-reminders?token=<REMINDER_SECRET>` を cron（cron-job.org 等）で1時間ごとに叩くと、開始24時間前（`booking_config.yaml` の `line.reminder_hours_before` で変更可）を過ぎた予約に1回だけリマインドを送る。
 - ページ間の遷移（ホーム → 予約ページなど）では、タップした瞬間に「しばらくお待ちください…」のローディング表示を出し、遷移先ページの応答を待ってから実際に画面を切り替える（Render の低頻度アクセス時のコールドスタート対策）。
 
 ### URL
