@@ -1,19 +1,29 @@
 """
-面談予約アプリ — 独立した Flask アプリ
+予約アプリ — 独立した Flask アプリ（設定ファイルで外販可能）
 
-5人（kazuto / あまりん / さな / しー / かぴのすけ）それぞれについて:
+スタッフ（persona/booking_config.yaml の members）それぞれについて:
   - 各人がログイン不要で自分の空き時間（1時間単位）を登録
   - その人自身が空けている時間（すでに予約済みの時間は除く）が予約ページに公開される
-  - 外部ゲストがログイン不要で名前だけ入力して1時間の面談を予約できる
+  - 外部ゲストがログイン不要で名前だけ入力して1時間の予約ができる
   - 予約は早い者勝ち（先着順で埋まったら他の人は予約できない）
   - 予約の枠は人ごとに独立している（同じ時間でも別の人になら予約可能）
-  - 予約が確定すると eternal.d.c.t@gmail.com の Google カレンダーに同期
+  - 予約が確定すると Google カレンダーに同期
+  - LINE 連携済みのスタッフには予約確定・キャンセルの LINE 通知と、
+    開始前の LINE リマインドが届く
+
+サイト名・スタッフ一覧・営業時間・予約の呼び名（面談/レッスン/施術など）は
+persona/booking_config.yaml で変更できる — コード変更なしで別事業者向けの
+予約ツールとしてデプロイできる。
 
 環境変数（Render などで設定）:
   FLASK_SECRET_KEY            セッション用秘密鍵
   DATABASE_URL                Supabase の接続 URI（永続化に必要。未設定時はファイル）
   GOOGLE_SERVICE_ACCOUNT_JSON Google サービスアカウントの JSON キー
-  GOOGLE_CALENDAR_ID          同期先カレンダー ID（eternal.d.c.t@gmail.com と共有したカレンダー）
+  GOOGLE_CALENDAR_ID          同期先カレンダー ID
+  LINE_CHANNEL_ACCESS_TOKEN   LINE Messaging API のチャネルアクセストークン（通知に必要）
+  LINE_CHANNEL_SECRET         LINE チャネルシークレット（Webhook 署名検証に必要）
+  REMINDER_SECRET             /tasks/send-reminders の認証トークン
+                              （未設定時は AVAILABILITY_PASSWORD を使用）
 """
 import os
 import sys
@@ -26,25 +36,79 @@ from flask import Flask, request, jsonify, session
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+import line_messaging
+
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(24))
 
 AVAILABILITY_PASSWORD = os.environ.get("AVAILABILITY_PASSWORD", "ETERNALLOVE")
 
-ADMIN = "kazuto"
-MEMBER_SLUGS = {
-    "amarin": "あまりん",
-    "sana": "さな",
-    "shi": "しー",
-    "kapinosuke": "かぴのすけ",
+
+# ── 設定ファイル読み込み ─────────────────────────────────────────
+
+BOOKING_CONFIG_FILE = Path(__file__).parent.parent / "persona" / "booking_config.yaml"
+
+_DEFAULT_CONFIG = {
+    "site": {
+        "title": "面談スケジュール",
+        "subtitle": "空き時間登録 & 面談予約",
+        "icon": "🤝",
+        "event_label": "面談",
+    },
+    "booking": {"start_hour": 9, "end_hour": 22, "days_ahead": 21},
+    "members": [
+        {"slug": "kazuto", "name": "kazuto"},
+        {"slug": "amarin", "name": "あまりん"},
+        {"slug": "sana", "name": "さな"},
+        {"slug": "shi", "name": "しー"},
+        {"slug": "kapinosuke", "name": "かぴのすけ"},
+    ],
+    "line": {"reminder_hours_before": 24},
 }
-ALL_PEOPLE = [ADMIN] + list(MEMBER_SLUGS.values())
-HOURS = [f"{h:02d}:00" for h in range(9, 22)]  # 09:00〜21:00開始、最終枠21:00-22:00
-DAYS_AHEAD = 21  # 予約ページに表示する日数
+
+
+def _load_config():
+    cfg = {k: (dict(v) if isinstance(v, dict) else list(v)) for k, v in _DEFAULT_CONFIG.items()}
+    try:
+        import yaml
+        with open(BOOKING_CONFIG_FILE, "r", encoding="utf-8") as f:
+            loaded = yaml.safe_load(f) or {}
+        for section in ("site", "booking", "line"):
+            if isinstance(loaded.get(section), dict):
+                cfg[section].update(loaded[section])
+        members = loaded.get("members")
+        if isinstance(members, list) and members:
+            cfg["members"] = [
+                {"slug": str(m["slug"]), "name": str(m["name"])}
+                for m in members if m.get("slug") and m.get("name")
+            ]
+    except Exception as e:
+        print(f"[booking_app] config load failed, using defaults: {e}", file=sys.stderr)
+    return cfg
+
+
+CONFIG = _load_config()
+SITE_TITLE = CONFIG["site"]["title"]
+SITE_SUBTITLE = CONFIG["site"]["subtitle"]
+SITE_ICON = CONFIG["site"]["icon"]
+EVENT_LABEL = CONFIG["site"]["event_label"]
+MEMBERS = CONFIG["members"]
+SLUG_TO_NAME = {m["slug"]: m["name"] for m in MEMBERS}
+NAME_TO_SLUG = {m["name"]: m["slug"] for m in MEMBERS}
+ALL_PEOPLE = [m["name"] for m in MEMBERS]
+# start_hour〜(end_hour-1) 時開始の1時間枠（最終枠は end_hour に終わる）
+HOURS = [f"{h:02d}:00" for h in range(int(CONFIG["booking"]["start_hour"]),
+                                      int(CONFIG["booking"]["end_hour"]))]
+DAYS_AHEAD = int(CONFIG["booking"]["days_ahead"])
+REMINDER_HOURS_BEFORE = int(CONFIG["line"]["reminder_hours_before"])
+
+# LINE 連携で「全予約の通知」を受け取る特別な宛先名
+LINE_ADMIN_KEY = "admin"
 
 
 AVAILABILITY_FILE = Path("posts/booking_availability.json")
 BOOKINGS_FILE = Path("posts/booking_reservations.json")
+LINE_LINKS_FILE = Path("posts/booking_line_links.json")
 JST = timezone(timedelta(hours=9))
 
 
@@ -105,6 +169,19 @@ def _ensure_tables():
                                 ADD CONSTRAINT interview_bookings_member_slot_key UNIQUE (member, slot);
                         END IF;
                     END $$;
+                """)
+                cur.execute("""
+                    ALTER TABLE interview_bookings
+                        ADD COLUMN IF NOT EXISTS reminder_sent_at TEXT
+                """)
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS booking_line_links (
+                        id TEXT PRIMARY KEY,
+                        person TEXT NOT NULL,
+                        line_user_id TEXT NOT NULL,
+                        created_at TEXT DEFAULT '',
+                        UNIQUE(person, line_user_id)
+                    )
                 """)
     except Exception:
         pass
@@ -325,6 +402,186 @@ def delete_booking(booking_id):
     return target
 
 
+def mark_reminder_sent(booking_id):
+    now_iso = datetime.now(timezone.utc).isoformat()
+    conn = _db_conn()
+    if conn:
+        try:
+            with conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "UPDATE interview_bookings SET reminder_sent_at=%s WHERE id=%s",
+                        (now_iso, booking_id),
+                    )
+            return
+        except Exception:
+            pass
+        finally:
+            conn.close()
+    rows = load_bookings()
+    for r in rows:
+        if r["id"] == booking_id:
+            r["reminder_sent_at"] = now_iso
+            break
+    _bookings_file_save(rows)
+
+
+# ── データ管理: LINE 連携 ────────────────────────────────────────
+
+def load_line_links():
+    conn = _db_conn()
+    if conn:
+        try:
+            import psycopg2.extras
+            with conn:
+                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                    cur.execute("SELECT * FROM booking_line_links")
+                    return [dict(r) for r in cur.fetchall()]
+        except Exception:
+            pass
+        finally:
+            conn.close()
+    if LINE_LINKS_FILE.exists():
+        with open(LINE_LINKS_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return []
+
+
+def _line_links_file_save(rows):
+    LINE_LINKS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(LINE_LINKS_FILE, "w", encoding="utf-8") as f:
+        json.dump(rows, f, ensure_ascii=False, indent=2)
+
+
+def add_line_link(person, line_user_id):
+    row = {
+        "id": str(uuid.uuid4()), "person": person, "line_user_id": line_user_id,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    conn = _db_conn()
+    if conn:
+        try:
+            with conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "INSERT INTO booking_line_links (id,person,line_user_id,created_at) "
+                        "VALUES (%s,%s,%s,%s) ON CONFLICT (person,line_user_id) DO NOTHING",
+                        (row["id"], person, line_user_id, row["created_at"]),
+                    )
+            return True
+        except Exception:
+            return False
+        finally:
+            conn.close()
+    rows = load_line_links()
+    if not any(r["person"] == person and r["line_user_id"] == line_user_id for r in rows):
+        rows.append(row)
+        _line_links_file_save(rows)
+    return True
+
+
+def remove_line_links_for_user(line_user_id):
+    """そのLINEユーザーの連携をすべて解除し、解除した宛先名のリストを返す"""
+    rows = load_line_links()
+    removed = sorted({r["person"] for r in rows if r["line_user_id"] == line_user_id})
+    if not removed:
+        return []
+    conn = _db_conn()
+    if conn:
+        try:
+            with conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "DELETE FROM booking_line_links WHERE line_user_id=%s",
+                        (line_user_id,),
+                    )
+            return removed
+        except Exception:
+            return []
+        finally:
+            conn.close()
+    _line_links_file_save([r for r in rows if r["line_user_id"] != line_user_id])
+    return removed
+
+
+def line_user_ids_for(person):
+    """person 本人に連携された LINE ユーザー + 全体通知（admin）の LINE ユーザー"""
+    ids = []
+    for r in load_line_links():
+        if r["person"] in (person, LINE_ADMIN_KEY) and r["line_user_id"] not in ids:
+            ids.append(r["line_user_id"])
+    return ids
+
+
+# ── LINE 通知 ────────────────────────────────────────────────────
+
+def _slot_jp(slot):
+    """'2026-07-20T15:00:00+09:00' → '7月20日(月) 15:00'"""
+    try:
+        dt = datetime.fromisoformat(slot)
+        wd = ["月", "火", "水", "木", "金", "土", "日"][dt.weekday()]
+        return f"{dt.month}月{dt.day}日({wd}) {dt.strftime('%H:%M')}"
+    except Exception:
+        return slot
+
+
+def notify_line(person, text):
+    """person（と全体通知の連携者）にLINE通知。送れた人数を返す。"""
+    if not line_messaging.is_configured():
+        return 0
+    sent = 0
+    for uid in line_user_ids_for(person):
+        if line_messaging.push_text(uid, text):
+            sent += 1
+    return sent
+
+
+def notify_booking_created(booking):
+    notify_line(booking["member"], (
+        f"📅 新しい{EVENT_LABEL}予約が入りました\n"
+        f"担当: {booking['member']}\n"
+        f"日時: {_slot_jp(booking['slot'])}〜（1時間）\n"
+        f"ゲスト: {booking['guest_name']} 様"
+    ))
+
+
+def notify_booking_cancelled(booking):
+    notify_line(booking["member"], (
+        f"❌ {EVENT_LABEL}予約がキャンセルされました\n"
+        f"担当: {booking['member']}\n"
+        f"日時: {_slot_jp(booking['slot'])}〜\n"
+        f"ゲスト: {booking['guest_name']} 様"
+    ))
+
+
+def send_due_reminders():
+    """開始が REMINDER_HOURS_BEFORE 時間以内に迫った未リマインドの予約に
+    LINE リマインドを送る。送った予約IDのリストを返す。"""
+    if not line_messaging.is_configured():
+        return []
+    now = datetime.now(JST)
+    window_end = now + timedelta(hours=REMINDER_HOURS_BEFORE)
+    sent = []
+    for b in load_bookings():
+        if b.get("reminder_sent_at"):
+            continue
+        try:
+            start = datetime.fromisoformat(b["slot"])
+        except Exception:
+            continue
+        if now < start <= window_end:
+            n = notify_line(b["member"], (
+                f"⏰ リマインド: まもなく{EVENT_LABEL}があります\n"
+                f"担当: {b['member']}\n"
+                f"日時: {_slot_jp(b['slot'])}〜（1時間）\n"
+                f"ゲスト: {b['guest_name']} 様"
+            ))
+            if n > 0:
+                mark_reminder_sent(b["id"])
+                sent.append(b["id"])
+    return sent
+
+
 # ── 予約ロジック ─────────────────────────────────────────────────
 
 def slot_iso(date_str, hour_str):
@@ -456,8 +713,8 @@ def api_booking_edit(booking_id):
             slot = booking["slot"]
             date, hour = slot[:10], slot[11:16]
             sync_update(booking["google_calendar_event_id"], {
-                "title": f"面談: {guest_name} × {booking['member']}",
-                "description": f"{booking['member']} との1時間面談（ゲスト: {guest_name}）",
+                "title": f"{EVENT_LABEL}: {guest_name} × {booking['member']}",
+                "description": f"{booking['member']} との1時間{EVENT_LABEL}（ゲスト: {guest_name}）",
                 "event_type": "interview",
                 "start_datetime": slot,
                 "end_datetime": slot_end_iso(date, hour),
@@ -481,6 +738,10 @@ def api_booking_delete(booking_id):
             sync_delete(booking["google_calendar_event_id"])
         except Exception:
             pass
+    try:
+        notify_booking_cancelled(booking)
+    except Exception:
+        pass
     return jsonify({"ok": True})
 
 
@@ -488,10 +749,7 @@ def api_booking_delete(booking_id):
 
 def _resolve_slug(slug):
     """slug -> (person_display_name, open_slots_set) または None"""
-    if slug == ADMIN:
-        person = ADMIN
-    else:
-        person = MEMBER_SLUGS.get(slug)
+    person = SLUG_TO_NAME.get(slug)
     if not person:
         return None, None
     return person, open_slots_for(person)
@@ -535,8 +793,8 @@ def api_book_create(slug):
     try:
         from google_calendar import sync_create
         google_id = sync_create({
-            "title": f"面談: {guest_name} × {member}",
-            "description": f"{member} との1時間面談（ゲスト: {guest_name}）",
+            "title": f"{EVENT_LABEL}: {guest_name} × {member}",
+            "description": f"{member} との1時間{EVENT_LABEL}（ゲスト: {guest_name}）",
             "event_type": "interview",
             "start_datetime": slot,
             "end_datetime": slot_end_iso(date, hour),
@@ -546,9 +804,135 @@ def api_book_create(slug):
             set_booking_google_event_id(booking["id"], google_id)
     except Exception:
         pass
+    try:
+        notify_booking_created(booking)
+    except Exception:
+        pass
     return jsonify({"ok": True})
 
 
+
+
+# ── API: LINE 連携 ───────────────────────────────────────────────
+
+def _line_usage_text():
+    names = " / ".join(ALL_PEOPLE)
+    return (
+        f"友だち追加ありがとうございます🙌\n"
+        f"このアカウントでは{EVENT_LABEL}予約の通知とリマインドを受け取れます。\n\n"
+        f"▼ 通知を受け取るには、名前を送ってください\n"
+        f"例:「連携 {ALL_PEOPLE[0]}」\n"
+        f"（対象: {names}）\n\n"
+        f"▼ 全員分の予約通知を受け取る場合\n"
+        f"「連携 admin」\n\n"
+        f"▼ 通知をやめる場合\n"
+        f"「解除」"
+    )
+
+
+def _match_link_target(arg):
+    """連携コマンドの引数を宛先名に解決する。名前・slug・admin を受け付ける。"""
+    arg = arg.strip()
+    if arg.lower() in (LINE_ADMIN_KEY, "管理者", "全体", "全員"):
+        return LINE_ADMIN_KEY
+    if arg in ALL_PEOPLE:
+        return arg
+    if arg in SLUG_TO_NAME:
+        return SLUG_TO_NAME[arg]
+    return None
+
+
+def _handle_line_text(user_id, reply_token, text):
+    text = text.strip()
+    if text in ("解除", "連携解除"):
+        removed = remove_line_links_for_user(user_id)
+        if removed:
+            line_messaging.reply_text(reply_token, "通知の連携を解除しました。")
+        else:
+            line_messaging.reply_text(reply_token, "連携中の通知はありません。")
+        return
+    if text.startswith("連携"):
+        arg = text[len("連携"):].strip()
+        if not arg:
+            line_messaging.reply_text(reply_token, _line_usage_text())
+            return
+        target = _match_link_target(arg)
+        if not target:
+            line_messaging.reply_text(
+                reply_token,
+                f"「{arg}」が見つかりませんでした。\n対象: {' / '.join(ALL_PEOPLE)} / admin",
+            )
+            return
+        add_line_link(target, user_id)
+        label = "全員分の予約" if target == LINE_ADMIN_KEY else f"{target} の予約"
+        line_messaging.reply_text(
+            reply_token,
+            f"✅ 連携しました！\n{label}の確定・キャンセル通知と、"
+            f"{EVENT_LABEL}の{REMINDER_HOURS_BEFORE}時間前リマインドをお送りします。",
+        )
+        return
+    line_messaging.reply_text(reply_token, _line_usage_text())
+
+
+@app.route("/line/webhook", methods=["POST"])
+def line_webhook():
+    body = request.get_data()
+    signature = request.headers.get("X-Line-Signature", "")
+    if not line_messaging.verify_signature(body, signature):
+        return "bad signature", 400
+    try:
+        events = json.loads(body).get("events", [])
+    except Exception:
+        return "bad request", 400
+    for ev in events:
+        ev_type = ev.get("type", "")
+        reply_token = ev.get("replyToken", "")
+        user_id = (ev.get("source") or {}).get("userId", "")
+        if ev_type == "follow":
+            line_messaging.reply_text(reply_token, _line_usage_text())
+        elif ev_type == "unfollow":
+            if user_id:
+                remove_line_links_for_user(user_id)
+        elif ev_type == "message":
+            msg = ev.get("message") or {}
+            if msg.get("type") == "text" and user_id:
+                try:
+                    _handle_line_text(user_id, reply_token, msg.get("text", ""))
+                except Exception:
+                    pass
+    return "ok", 200
+
+
+@app.route("/tasks/send-reminders", methods=["GET", "POST"])
+def tasks_send_reminders():
+    """cron（cron-job.org / Render Cron など）から定期的に叩くリマインド送信"""
+    token = request.args.get("token", "") or request.headers.get("X-Reminder-Token", "")
+    expected = os.environ.get("REMINDER_SECRET", "") or AVAILABILITY_PASSWORD
+    if not token or token != expected:
+        return jsonify({"error": "unauthorized"}), 401
+    if not line_messaging.is_configured():
+        return jsonify({"ok": True, "sent": 0, "note": "LINE未設定"})
+    sent = send_due_reminders()
+    return jsonify({"ok": True, "sent": len(sent)})
+
+
+@app.route("/api/line/status")
+def api_line_status():
+    if not is_avail_authed():
+        return jsonify({"error": "unauthorized"}), 401
+    links = load_line_links()
+    linked_counts = {}
+    for r in links:
+        linked_counts[r["person"]] = linked_counts.get(r["person"], 0) + 1
+    return jsonify({
+        "ok": True,
+        "configured": line_messaging.is_configured(),
+        "people": [
+            {"name": p, "linked": linked_counts.get(p, 0)} for p in ALL_PEOPLE
+        ],
+        "admin_linked": linked_counts.get(LINE_ADMIN_KEY, 0),
+        "reminder_hours_before": REMINDER_HOURS_BEFORE,
+    })
 
 
 # ── フロントエンド ────────────────────────────────────────────────
@@ -699,21 +1083,21 @@ HOME_HTML = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>面談スケジュール</title>
+<title>__TITLE__</title>
 <style>__CSS__</style>
 </head>
 <body>
 <div class="header">
-  <div class="header-icon">🤝</div>
+  <div class="header-icon">__ICON__</div>
   <div class="header-info">
-    <div class="header-title">面談スケジュール</div>
-    <div class="header-sub">空き時間登録 &amp; 面談予約</div>
+    <div class="header-title">__TITLE__</div>
+    <div class="header-sub">__SUBTITLE__</div>
   </div>
 </div>
 <div class="wrap">
   <div class="card">
     <div class="card-title">📝 空き時間を登録する</div>
-    <div class="card-sub">kazuto / あまりん / さな / しー / かぴのすけ 共通</div>
+    <div class="card-sub">__PEOPLE_LIST__ 共通</div>
     <a class="btn-pri" href="/availability" onclick="return goTo('/availability')">空き時間を登録する</a>
   </div>
   __MEMBER_CARDS__
@@ -758,6 +1142,11 @@ AVAILABILITY_HTML = """<!DOCTYPE html>
     <button class="day-btn" onclick="changeDay(1)">›</button>
   </div>
   <div class="hour-grid" id="hour-grid"></div>
+  <div class="card" id="line-card" style="display:none; margin-top:16px;">
+    <div class="card-title">💬 LINE通知</div>
+    <div class="card-sub" id="line-desc"></div>
+    <div id="line-people" style="font-size:12px; line-height:1.9;"></div>
+  </div>
 </div>
 
 <div class="overlay open" id="pw-overlay">
@@ -881,6 +1270,7 @@ async function checkAuth() {
       document.getElementById('pw-overlay').classList.remove('open');
       render();
       checkStorage();
+      checkLine();
     }
   } catch(e) {}
 }
@@ -888,6 +1278,25 @@ async function checkStorage() {
   try {
     const d = await (await fetch('/api/availability/storage-status')).json();
     document.getElementById('storage-warn').style.display = d.database_connected ? 'none' : 'block';
+  } catch(e) {}
+}
+async function checkLine() {
+  try {
+    const d = await (await fetch('/api/line/status')).json();
+    if (!d.ok) return;
+    const card = document.getElementById('line-card');
+    const desc = document.getElementById('line-desc');
+    const people = document.getElementById('line-people');
+    card.style.display = 'block';
+    if (!d.configured) {
+      desc.textContent = 'LINE通知は未設定です。LINE公式アカウントを作成し、環境変数 LINE_CHANNEL_ACCESS_TOKEN / LINE_CHANNEL_SECRET を設定すると、予約の確定・キャンセル通知とリマインドがLINEに届きます。';
+      people.innerHTML = '';
+      return;
+    }
+    desc.textContent = `公式アカウントを友だち追加して、トークで「連携 名前」と送ると、その人の予約通知と${d.reminder_hours_before}時間前リマインドが届きます。（全員分は「連携 admin」）`;
+    let html = d.people.map(p => `${p.linked > 0 ? '✅' : '⚪️'} ${p.name} ${p.linked > 0 ? '連携済み' : '未連携'}`).join('<br>');
+    if (d.admin_linked > 0) html += `<br>👑 全体通知の受信者: ${d.admin_linked}人`;
+    people.innerHTML = html;
   } catch(e) {}
 }
 async function submitPw() {
@@ -902,6 +1311,7 @@ async function submitPw() {
       document.getElementById('pw-overlay').classList.remove('open');
       render();
       checkStorage();
+      checkLine();
     } else {
       toast(d.error || 'パスワードが違います');
       document.getElementById('f-pw').value = '';
@@ -920,15 +1330,15 @@ BOOK_HTML = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>__MEMBER__と面談予約</title>
+<title>__MEMBER__と__EVENT__予約</title>
 <style>__CSS__</style>
 </head>
 <body>
 <div class="header">
   <a class="back-btn" href="/" onclick="return goTo('/')">‹</a>
-  <div class="header-icon">🤝</div>
+  <div class="header-icon">__ICON__</div>
   <div class="header-info">
-    <div class="header-title">__MEMBER__ と面談予約</div>
+    <div class="header-title">__MEMBER__ と__EVENT__予約</div>
     <div class="header-sub">__HEADER_SUB__</div>
   </div>
 </div>
@@ -1045,23 +1455,22 @@ loadSlots();
 
 @app.route("/")
 def index():
-    cards = (
-        '<div class="card">'
-        '<div class="card-title">🤝 kazuto と面談を予約する</div>'
-        '<div class="card-sub">kazuto の空き時間から1時間を選んで予約</div>'
-        '<a class="btn-pri" href="/book/kazuto" onclick="return goTo(\'/book/kazuto\')">予約する</a>'
-        '</div>'
-    )
-    for slug, name in MEMBER_SLUGS.items():
+    cards = ""
+    for m in MEMBERS:
+        slug, name = m["slug"], m["name"]
         cards += (
             '<div class="card">'
-            f'<div class="card-title">🤝 {name} と面談を予約する</div>'
+            f'<div class="card-title">{SITE_ICON} {name} と{EVENT_LABEL}を予約する</div>'
             f'<div class="card-sub">{name} の空き時間から1時間を選んで予約</div>'
             f'<a class="btn-pri" href="/book/{slug}" onclick="return goTo(\'/book/{slug}\')">予約する</a>'
             '</div>'
         )
     html = (HOME_HTML
             .replace("__CSS__", CSS)
+            .replace("__TITLE__", SITE_TITLE)
+            .replace("__SUBTITLE__", SITE_SUBTITLE)
+            .replace("__ICON__", SITE_ICON)
+            .replace("__PEOPLE_LIST__", " / ".join(ALL_PEOPLE))
             .replace("__MEMBER_CARDS__", cards)
             .replace("__NAV_JS__", NAV_JS))
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
@@ -1083,10 +1492,12 @@ def book_page(slug):
     member, _ = _resolve_slug(slug)
     if member is None:
         return "Not Found", 404
-    header_sub = "1時間の面談を予約できます"
+    header_sub = f"1時間の{EVENT_LABEL}を予約できます"
     html = (BOOK_HTML
             .replace("__CSS__", CSS)
             .replace("__MEMBER__", member)
+            .replace("__EVENT__", EVENT_LABEL)
+            .replace("__ICON__", SITE_ICON)
             .replace("__SLUG__", json.dumps(slug))
             .replace("__HEADER_SUB__", header_sub)
             .replace("__TOAST_JS__", TOAST_JS)

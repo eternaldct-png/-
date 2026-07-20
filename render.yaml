@@ -48,3 +48,9 @@ services:
         sync: false          # Google サービスアカウントの JSON キー（Google Calendar 同期用）
       - key: GOOGLE_CALENDAR_ID
         sync: false          # eternal.d.c.t@gmail.com と共有したカレンダー ID
+      - key: LINE_CHANNEL_ACCESS_TOKEN
+        sync: false          # LINE Messaging API チャネルアクセストークン（LINE通知に必要・任意）
+      - key: LINE_CHANNEL_SECRET
+        sync: false          # LINE チャネルシークレット（Webhook 署名検証に必要・任意）
+      - key: REMINDER_SECRET
+        sync: false          # /tasks/send-reminders 用トークン（未設定時は AVAILABILITY_PASSWORD）
