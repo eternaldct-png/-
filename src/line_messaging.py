@@ -13,6 +13,7 @@ Setup:
      に設定し、Webhook の利用を ON にする
 """
 import os
+import sys
 import hmac
 import base64
 import hashlib
@@ -36,9 +37,16 @@ def _headers():
     }
 
 
+def _log(msg):
+    print(f"[line_messaging] {msg}", file=sys.stderr, flush=True)
+
+
 def push_text(user_id, text):
     """指定ユーザーにテキストメッセージを push 送信。成功で True。"""
-    if not is_configured() or not user_id:
+    if not is_configured():
+        _log("push skipped: LINE_CHANNEL_ACCESS_TOKEN が未設定")
+        return False
+    if not user_id:
         return False
     try:
         r = requests.post(
@@ -47,14 +55,20 @@ def push_text(user_id, text):
             json={"to": user_id, "messages": [{"type": "text", "text": text[:4900]}]},
             timeout=TIMEOUT,
         )
+        if r.status_code != 200:
+            _log(f"push failed: status={r.status_code} body={r.text[:300]}")
         return r.status_code == 200
-    except Exception:
+    except Exception as e:
+        _log(f"push error: {e}")
         return False
 
 
 def reply_text(reply_token, text):
     """Webhook の replyToken に対してテキストで返信。成功で True。"""
-    if not is_configured() or not reply_token:
+    if not is_configured():
+        _log("reply skipped: LINE_CHANNEL_ACCESS_TOKEN が未設定")
+        return False
+    if not reply_token:
         return False
     try:
         r = requests.post(
@@ -63,8 +77,13 @@ def reply_text(reply_token, text):
             json={"replyToken": reply_token, "messages": [{"type": "text", "text": text[:4900]}]},
             timeout=TIMEOUT,
         )
+        if r.status_code != 200:
+            _log(f"reply failed: status={r.status_code} body={r.text[:300]}")
+        else:
+            _log("reply ok")
         return r.status_code == 200
-    except Exception:
+    except Exception as e:
+        _log(f"reply error: {e}")
         return False
 
 

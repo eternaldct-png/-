@@ -896,10 +896,12 @@ def line_webhook():
         elif ev_type == "message":
             msg = ev.get("message") or {}
             if msg.get("type") == "text" and user_id:
+                print(f"[booking_app] LINE message received: {msg.get('text', '')!r} "
+                      f"from {user_id[:8]}...", file=sys.stderr, flush=True)
                 try:
                     _handle_line_text(user_id, reply_token, msg.get("text", ""))
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"[booking_app] handle_line_text error: {e}", file=sys.stderr, flush=True)
     return "ok", 200
 
 
