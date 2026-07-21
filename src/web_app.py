@@ -2012,6 +2012,16 @@ def stickers_zip(job_id):
     return send_file(buf, mimetype="application/zip", as_attachment=True, download_name="line_stickers.zip")
 
 
+# ── アイコンメーカー（写真＋名前でオリジナルアイコン作成 / 完全クライアント動作）──
+_ICON_MAKER_HTML = (Path(__file__).parent / "static" / "icon_maker" / "index.html").read_text(encoding="utf-8")
+
+
+@app.route("/icon-maker")
+@app.route("/icon")
+def icon_maker():
+    return _ICON_MAKER_HTML, 200, {"Content-Type": "text/html; charset=utf-8"}
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)

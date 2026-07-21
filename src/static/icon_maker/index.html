@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ff8fb1">
+<title>うたおしアイコンメーカー</title>
+
+<!-- おしゃれ・かわいいフォント（日本語＋ローマ字） -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700&family=Kosugi+Maru&family=Hachi+Maru+Pop&family=Yomogi&family=Yusei+Magic&family=Mochiy+Pop+One&family=Rampart+One&family=Dela+Gothic+One&family=Reggae+One&family=RocknRoll+One&family=DotGothic16&family=Potta+One&family=Kaisei+Decol:wght@700&family=Stick&family=Klee+One:wght@600&family=Pacifico&family=Lobster&family=Caveat:wght@700&family=Fredoka:wght@600&family=Baloo+2:wght@700&family=Righteous&family=Bungee&family=Shrikhand&family=Permanent+Marker&family=Bangers&family=Chewy&family=Satisfy&family=Great+Vibes&display=swap" rel="stylesheet">
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{
+    margin:0;padding:0;width:100%;max-width:100%;
+    overflow-x:hidden;                 /* ← 左右のブレを完全に止める */
+    overscroll-behavior-x:none;
+    background:#fff2f6;
+    color:#3a2e33;
+    font-family:"Zen Maru Gothic","Kosugi Maru",system-ui,-apple-system,"Hiragino Kaku Gothic ProN",sans-serif;
+    -webkit-text-size-adjust:100%;
+  }
+  body{padding-bottom:40px;}
+  .wrap{width:100%;max-width:560px;margin:0 auto;padding:14px;}
+  img,canvas{max-width:100%;height:auto;display:block;}
+
+  header{text-align:center;padding:10px 0 4px;}
+  header h1{margin:0;font-size:22px;font-family:"Hachi Maru Pop",cursive;color:#ff6a94;letter-spacing:.5px;}
+  header p{margin:4px 0 0;font-size:12px;color:#9a7f88;}
+
+  .card{
+    background:#fff;border-radius:18px;padding:14px;margin:12px 0;
+    box-shadow:0 6px 20px rgba(255,120,160,.12);
+  }
+  .card h2{margin:0 0 10px;font-size:15px;color:#ff6a94;display:flex;align-items:center;gap:6px;}
+  .card h2 .num{background:#ffd7e4;color:#e14b7c;width:22px;height:22px;border-radius:50%;
+    display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;}
+
+  /* プレビュー */
+  .stage{position:relative;width:100%;max-width:360px;margin:0 auto;}
+  #canvas{width:100%;border-radius:16px;background:
+    linear-gradient(45deg,#eee 25%,transparent 25%,transparent 75%,#eee 75%),
+    linear-gradient(45deg,#eee 25%,#fff 25%,#fff 75%,#eee 75%);
+    background-size:20px 20px;background-position:0 0,10px 10px;
+    touch-action:none;                 /* ドラッグ中にページが動かない */
+    box-shadow:0 4px 14px rgba(0,0,0,.08);cursor:grab;}
+  .hint{font-size:11px;color:#b79aa3;text-align:center;margin:6px 0 0;}
+
+  /* ボタン類 */
+  .btn{
+    appearance:none;border:none;border-radius:999px;padding:11px 16px;
+    font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;
+    background:#ff8fb1;color:#fff;box-shadow:0 3px 8px rgba(255,120,160,.35);
+    transition:transform .08s;
+  }
+  .btn:active{transform:scale(.96);}
+  .btn.sub{background:#fff;color:#ff6a94;border:2px solid #ffb9cf;box-shadow:none;}
+  .btn.ghost{background:#f4e9ee;color:#8a6b75;box-shadow:none;}
+  .btn.wide{display:block;width:100%;}
+  .btn.sm{padding:7px 12px;font-size:12px;}
+  .btn:disabled{opacity:.5;cursor:not-allowed;}
+  .row{display:flex;gap:8px;flex-wrap:wrap;}
+  .row.center{justify-content:center;}
+
+  label.field{display:block;font-size:12px;color:#8a6b75;margin:10px 0 4px;font-weight:700;}
+  input[type=text]{
+    width:100%;border:2px solid #ffd7e4;border-radius:12px;padding:10px 12px;
+    font-size:16px;font-family:inherit;background:#fff9fb;color:#3a2e33;
+  }
+  input[type=text]:focus{outline:none;border-color:#ff8fb1;}
+
+  /* サムネイル */
+  .thumbs{display:flex;gap:8px;overflow-x:auto;padding:4px 2px 8px;
+    scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;}
+  .thumb{position:relative;flex:0 0 auto;width:78px;scroll-snap-align:start;}
+  .thumb img{width:78px;height:78px;object-fit:cover;border-radius:12px;border:3px solid transparent;}
+  .thumb.active img{border-color:#ff6a94;}
+  .thumb .del{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;
+    background:#ff6a94;color:#fff;border:none;font-size:13px;line-height:1;cursor:pointer;}
+  .thumb .ocr{display:block;width:100%;margin-top:4px;font-size:10.5px;padding:4px 0;
+    border-radius:8px;border:none;background:#ffe4ee;color:#e14b7c;font-weight:700;cursor:pointer;}
+  .thumb .ocr:active{background:#ffd0e0;}
+
+  /* パレット（背景・スタンプ・フォント） */
+  .palette{display:flex;gap:8px;flex-wrap:wrap;}
+  .swatch{width:44px;height:44px;border-radius:12px;border:3px solid #fff;cursor:pointer;
+    box-shadow:0 0 0 1px #ffd7e4;}
+  .swatch.sel{box-shadow:0 0 0 3px #ff6a94;}
+  .stamp-btn{width:44px;height:44px;border-radius:12px;border:2px solid #ffe0ea;background:#fff9fb;
+    font-size:24px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+  .stamp-btn:active{background:#ffe4ee;}
+
+  .fontgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;}
+  .font-btn{border:2px solid #ffe0ea;background:#fff;border-radius:12px;padding:8px 4px;
+    font-size:17px;cursor:pointer;text-align:center;color:#3a2e33;overflow:hidden;white-space:nowrap;}
+  .font-btn.sel{border-color:#ff6a94;background:#fff0f5;}
+
+  .slider{width:100%;accent-color:#ff8fb1;}
+  .mini{font-size:11px;color:#9a7f88;}
+  .seg{display:flex;border:2px solid #ffd7e4;border-radius:12px;overflow:hidden;}
+  .seg button{flex:1;border:none;background:#fff;padding:8px 4px;font-size:12px;font-family:inherit;
+    color:#8a6b75;cursor:pointer;font-weight:700;}
+  .seg button.on{background:#ff8fb1;color:#fff;}
+
+  /* OCR オーバーレイ */
+  #ocrMask{position:fixed;inset:0;background:rgba(58,46,51,.55);display:none;
+    align-items:center;justify-content:center;z-index:50;padding:20px;}
+  #ocrMask .box{background:#fff;border-radius:18px;padding:22px;max-width:320px;text-align:center;}
+  #ocrMask .spin{width:44px;height:44px;border-radius:50%;border:5px solid #ffe0ea;
+    border-top-color:#ff6a94;margin:0 auto 12px;animation:sp 1s linear infinite;}
+  @keyframes sp{to{transform:rotate(360deg);}}
+  #ocrMsg{font-size:13px;color:#6a565d;line-height:1.6;}
+
+  /* トースト */
+  #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);
+    background:#3a2e33;color:#fff;padding:11px 18px;border-radius:999px;font-size:13px;
+    opacity:0;pointer-events:none;transition:.25s;z-index:60;max-width:88%;text-align:center;}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  .del-sel{margin-top:8px;}
+  details summary{cursor:pointer;font-size:13px;color:#ff6a94;font-weight:700;list-style:none;}
+  details summary::-webkit-details-marker{display:none;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>うたおしアイコンメーカー</h1>
+    <p>写真とお名前でオリジナルアイコンをつくろう ♪</p>
+  </header>
+
+  <!-- プレビュー -->
+  <div class="card">
+    <div class="stage">
+      <canvas id="canvas" width="720" height="720"></canvas>
+    </div>
+    <p class="hint">スタンプ・文字はプレビュー上で指でドラッグして動かせます</p>
+    <button class="btn wide" id="download" style="margin-top:10px;">⬇️ アイコンを保存する</button>
+  </div>
+
+  <!-- 1. 写真 -->
+  <div class="card">
+    <h2><span class="num">1</span>写真をえらぶ（最大10枚）</h2>
+    <div class="row">
+      <button class="btn sub sm" id="addPhoto">＋ 写真を追加</button>
+      <button class="btn ghost sm" id="clearPhoto">背景を写真なしにする</button>
+    </div>
+    <input type="file" id="photoInput" accept="image/*" multiple hidden>
+    <div class="thumbs" id="thumbs"></div>
+    <label class="field">写真の形</label>
+    <div class="seg" id="shapeSeg">
+      <button data-shape="circle" class="on">まる</button>
+      <button data-shape="rounded">かどまる四角</button>
+      <button data-shape="full">全面</button>
+    </div>
+    <label class="field">写真の大きさ</label>
+    <input type="range" class="slider" id="photoScale" min="0.5" max="2" step="0.01" value="1">
+  </div>
+
+  <!-- 2. お名前抽出 -->
+  <div class="card">
+    <h2><span class="num">2</span>お名前（写真から自動抽出）</h2>
+    <p class="mini">写真のサムネイルの「🔤名前を抽出」を押すと、写真の文字から<b>ひらがな・カタカナ・漢字・ローマ字の名前だけ</b>を読み取ります。記号や余分な英字は自動で除きます。うまくいかない時は下で手直しできます。</p>
+    <label class="field">お名前</label>
+    <input type="text" id="nameText" placeholder="例）うたおし" autocomplete="off">
+    <div class="row" style="margin-top:8px;">
+      <button class="btn ghost sm" id="ocrCurrent">選択中の写真から抽出</button>
+    </div>
+  </div>
+
+  <!-- 3. サブ文字 -->
+  <div class="card">
+    <h2><span class="num">3</span>ひとこと文字（名前とは別に入れられます）</h2>
+    <label class="field">ひとこと・肩書き・日付など</label>
+    <input type="text" id="subText" placeholder="例）Happy Birthday / 推し活中" autocomplete="off">
+  </div>
+
+  <!-- 4. 文字の見た目 -->
+  <div class="card">
+    <h2><span class="num">4</span>文字のデザイン</h2>
+    <div class="seg" id="textTargetSeg">
+      <button data-target="name" class="on">お名前を編集</button>
+      <button data-target="sub">ひとことを編集</button>
+    </div>
+
+    <label class="field">フォント（20種類）</label>
+    <div class="fontgrid" id="fontGrid"></div>
+
+    <label class="field">文字の色</label>
+    <div class="palette" id="textColors"></div>
+
+    <label class="field">大きさ</label>
+    <input type="range" class="slider" id="textSize" min="20" max="180" step="1" value="84">
+
+    <label class="field">ふちどり</label>
+    <div class="seg" id="strokeSeg">
+      <button data-stroke="none">なし</button>
+      <button data-stroke="white" class="on">白</button>
+      <button data-stroke="black">黒</button>
+      <button data-stroke="pink">ピンク</button>
+    </div>
+  </div>
+
+  <!-- 5. 背景デザイン -->
+  <div class="card">
+    <h2><span class="num">5</span>背景デザイン</h2>
+    <label class="field">色・グラデーション</label>
+    <div class="palette" id="bgColors"></div>
+    <label class="field">もよう</label>
+    <div class="palette" id="bgPatterns"></div>
+  </div>
+
+  <!-- 6. スタンプ -->
+  <div class="card">
+    <h2><span class="num">6</span>スタンプ・かざり</h2>
+    <p class="mini">タップでプレビューに追加。追加後はドラッグで移動、下のスライダーで大きさ変更できます。</p>
+    <div class="palette" id="stampPalette"></div>
+    <details style="margin-top:10px;">
+      <summary>もっと見る ▾</summary>
+      <div class="palette" id="stampPalette2" style="margin-top:8px;"></div>
+    </details>
+    <div id="stampCtrl" style="display:none;margin-top:10px;">
+      <label class="field">選択中スタンプの大きさ</label>
+      <input type="range" class="slider" id="stampSize" min="30" max="260" step="1" value="110">
+      <button class="btn ghost sm del-sel" id="delStamp">🗑 このスタンプを削除</button>
+    </div>
+  </div>
+
+  <div class="row center" style="margin:6px 0 20px;">
+    <button class="btn" id="download2">⬇️ アイコンを保存する</button>
+    <button class="btn ghost" id="resetAll">最初からやり直す</button>
+  </div>
+</div>
+
+<div id="ocrMask"><div class="box"><div class="spin"></div><div id="ocrMsg"></div></div></div>
+<div id="toast"></div>
+
+<script>
+"use strict";
+/* ============================================================
+   うたおしアイコンメーカー — 描画エンジン
+   ============================================================ */
+const SIZE = 720;
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+const state = {
+  photo: null,          // {img}
+  shape: 'circle',
+  photoScale: 1,
+  bg: {kind:'gradient', value:['#ffd3e0','#ffe9c7']},
+  pattern: 'none',
+  stamps: [],           // {id, emoji, x, y, size}
+  texts: {
+    name: {content:'', font:'Hachi Maru Pop', size:84, color:'#ff5c8a', stroke:'white', x:SIZE/2, y:SIZE-120},
+    sub:  {content:'', font:'Pacifico',       size:56, color:'#ffffff', stroke:'pink',  x:SIZE/2, y:110}
+  },
+  target: 'name',       // 編集対象
+  selected: null        // {kind:'stamp'|'name'|'sub', id?}
+};
+let stampSeq = 1;
+
+/* ---------- フォント一覧（日本語＋ローマ字・おしゃれ/かわいい） ---------- */
+const FONTS = [
+  // 日本語系
+  {f:'Hachi Maru Pop', s:'あa'}, {f:'Zen Maru Gothic', s:'あa'},
+  {f:'Kosugi Maru', s:'あa'},    {f:'Yomogi', s:'あa'},
+  {f:'Yusei Magic', s:'あa'},    {f:'Mochiy Pop One', s:'あa'},
+  {f:'Rampart One', s:'あa'},    {f:'Dela Gothic One', s:'あa'},
+  {f:'Reggae One', s:'あa'},     {f:'RocknRoll One', s:'あa'},
+  {f:'DotGothic16', s:'あa'},    {f:'Potta One', s:'あa'},
+  {f:'Kaisei Decol', s:'あa'},   {f:'Stick', s:'あa'},
+  {f:'Klee One', s:'あa'},
+  // ローマ字系
+  {f:'Pacifico', s:'Aa'},        {f:'Lobster', s:'Aa'},
+  {f:'Caveat', s:'Aa'},          {f:'Fredoka', s:'Aa'},
+  {f:'Baloo 2', s:'Aa'},         {f:'Righteous', s:'Aa'},
+  {f:'Bungee', s:'Aa'},          {f:'Shrikhand', s:'Aa'},
+  {f:'Permanent Marker', s:'Aa'},{f:'Bangers', s:'Aa'},
+  {f:'Chewy', s:'Aa'},           {f:'Satisfy', s:'Aa'},
+  {f:'Great Vibes', s:'Aa'}
+];
+
+/* ---------- 背景・色パレット ---------- */
+const BG_COLORS = [
+  {kind:'solid', value:'#ffffff'}, {kind:'solid', value:'#ffd3e0'},
+  {kind:'solid', value:'#c9e9ff'}, {kind:'solid', value:'#d8f5d0'},
+  {kind:'solid', value:'#fff1b8'}, {kind:'solid', value:'#e7dcff'},
+  {kind:'solid', value:'#3a2e33'},
+  {kind:'gradient', value:['#ffd3e0','#ffe9c7']},
+  {kind:'gradient', value:['#a1c4fd','#c2e9fb']},
+  {kind:'gradient', value:['#fbc2eb','#a6c1ee']},
+  {kind:'gradient', value:['#84fab0','#8fd3f4']},
+  {kind:'gradient', value:['#fddb92','#d1fdff']},
+  {kind:'gradient', value:['#ff9a9e','#fecfef']},
+  {kind:'gradient', value:['#f6d365','#fda085']},
+  {kind:'transparent', value:null}
+];
+const PATTERNS = ['none','dots','stripe','check','hearts','stars','sparkle','confetti'];
+const PATTERN_LABEL = {none:'なし',dots:'水玉',stripe:'ストライプ',check:'チェック',
+  hearts:'ハート',stars:'スター',sparkle:'キラキラ',confetti:'紙吹雪'};
+
+const TEXT_COLORS = ['#ff5c8a','#ff8fb1','#ffffff','#3a2e33','#ffd400','#ff7a00',
+  '#8a5cff','#00b3a4','#2f80ed','#ff3b3b','#7bd60a','#8a6b75'];
+
+const STAMPS_1 = ['🌸','⭐️','💖','✨','👑','🎀','🌈','🍀','🎵','🔥','💫','🌟'];
+const STAMPS_2 = ['🐱','🐰','🐻','🦄','🌷','🌻','🍓','🍰','🧁','☁️','💐','🕊️',
+  '💎','🎧','🎤','🎸','⚡️','❄️','🍭','🫧','🩷','💛'];
+
+/* ============================================================
+   描画
+   ============================================================ */
+function roundRectPath(x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+}
+
+function drawBackground(){
+  const b = state.bg;
+  if(b.kind==='transparent'){
+    return; // 透明（何も描かない）
+  }
+  if(b.kind==='solid'){
+    ctx.fillStyle=b.value; ctx.fillRect(0,0,SIZE,SIZE);
+  }else if(b.kind==='gradient'){
+    const g=ctx.createLinearGradient(0,0,SIZE,SIZE);
+    g.addColorStop(0,b.value[0]); g.addColorStop(1,b.value[1]);
+    ctx.fillStyle=g; ctx.fillRect(0,0,SIZE,SIZE);
+  }
+  drawPattern();
+}
+
+function drawPattern(){
+  const p=state.pattern;
+  if(p==='none') return;
+  ctx.save();
+  if(p==='dots'){
+    ctx.fillStyle='rgba(255,255,255,.35)';
+    for(let y=40;y<SIZE;y+=64) for(let x=40;x<SIZE;x+=64){ctx.beginPath();ctx.arc(x,y,10,0,7);ctx.fill();}
+  }else if(p==='stripe'){
+    ctx.strokeStyle='rgba(255,255,255,.3)';ctx.lineWidth=14;
+    for(let i=-SIZE;i<SIZE*2;i+=48){ctx.beginPath();ctx.moveTo(i,0);ctx.lineTo(i+SIZE,SIZE);ctx.stroke();}
+  }else if(p==='check'){
+    ctx.fillStyle='rgba(255,255,255,.28)';
+    for(let y=0;y<SIZE;y+=60) for(let x=0;x<SIZE;x+=60) if(((x/60)+(y/60))%2===0) ctx.fillRect(x,y,60,60);
+  }else{
+    const map={hearts:'🩷',stars:'⭐️',sparkle:'✨',confetti:'🎊'};
+    const e=map[p]; ctx.font='34px serif'; ctx.globalAlpha=.5;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    let r=0;
+    for(let y=50;y<SIZE;y+=88){ r++; for(let x=(r%2?50:94);x<SIZE;x+=88){ctx.fillText(e,x,y);} }
+  }
+  ctx.restore();
+}
+
+function drawPhoto(){
+  if(!state.photo) return;
+  const img=state.photo.img;
+  const sc=state.photoScale;
+  ctx.save();
+  if(state.shape==='circle'){
+    ctx.beginPath();ctx.arc(SIZE/2,SIZE/2,SIZE/2-8,0,7);ctx.clip();
+  }else if(state.shape==='rounded'){
+    roundRectPath(20,20,SIZE-40,SIZE-40,60);ctx.clip();
+  }
+  // cover fit
+  const iw=img.naturalWidth, ih=img.naturalHeight;
+  const base=Math.max(SIZE/iw, SIZE/ih);
+  const scale=base*sc;
+  const w=iw*scale, h=ih*scale;
+  ctx.drawImage(img,(SIZE-w)/2,(SIZE-h)/2,w,h);
+  ctx.restore();
+}
+
+function drawStamps(){
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  for(const s of state.stamps){
+    ctx.font=s.size+'px serif';
+    ctx.fillText(s.emoji,s.x,s.y);
+    if(state.selected&&state.selected.kind==='stamp'&&state.selected.id===s.id){
+      ctx.save();ctx.strokeStyle='#ff6a94';ctx.lineWidth=3;ctx.setLineDash([8,6]);
+      const r=s.size*0.62;roundRectPath(s.x-r,s.y-r,r*2,r*2,14);ctx.stroke();ctx.restore();
+    }
+  }
+}
+
+function strokeColorOf(k){return k==='white'?'#ffffff':k==='black'?'#2b2126':k==='pink'?'#ff6a94':null;}
+
+function drawText(key){
+  const t=state.texts[key];
+  if(!t.content) return;
+  ctx.save();
+  ctx.font=`${t.size}px "${t.font}"`;
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.lineJoin='round';
+  const sc=strokeColorOf(t.stroke);
+  if(sc){ctx.strokeStyle=sc;ctx.lineWidth=Math.max(6,t.size*0.16);ctx.strokeText(t.content,t.x,t.y);}
+  ctx.fillStyle=t.color;ctx.fillText(t.content,t.x,t.y);
+  if(state.selected&&state.selected.kind===key){
+    const m=ctx.measureText(t.content);
+    const w=m.width+30,h=t.size*1.2;
+    ctx.strokeStyle='#ff6a94';ctx.lineWidth=3;ctx.setLineDash([8,6]);
+    roundRectPath(t.x-w/2,t.y-h/2,w,h,12);ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function render(){
+  ctx.clearRect(0,0,SIZE,SIZE);
+  drawBackground();
+  drawPhoto();
+  drawStamps();
+  drawText('sub');
+  drawText('name');
+}
+
+/* フォントを読み込んでから描画（Webフォントのちらつき対策） */
+function renderWithFont(font,size){
+  render();
+  if(font && document.fonts){
+    document.fonts.load(`${size||80}px "${font}"`).then(()=>render()).catch(()=>{});
+  }
+}
+
+/* ============================================================
+   ヒットテスト＆ドラッグ（スタンプ・文字の移動）
+   ============================================================ */
+function toCanvasXY(ev){
+  const r=canvas.getBoundingClientRect();
+  const x=(ev.clientX-r.left)*(SIZE/r.width);
+  const y=(ev.clientY-r.top)*(SIZE/r.height);
+  return {x,y};
+}
+function hitText(key,x,y){
+  const t=state.texts[key];
+  if(!t.content) return false;
+  ctx.font=`${t.size}px "${t.font}"`;
+  const w=ctx.measureText(t.content).width+30, h=t.size*1.2;
+  return x>=t.x-w/2&&x<=t.x+w/2&&y>=t.y-h/2&&y<=t.y+h/2;
+}
+function hitStamp(s,x,y){const r=s.size*0.62;return x>=s.x-r&&x<=s.x+r&&y>=s.y-r&&y<=s.y+r;}
+
+let drag=null;
+canvas.addEventListener('pointerdown',ev=>{
+  const {x,y}=toCanvasXY(ev);
+  // 上に描かれている順（name → sub → stamps）でヒット判定
+  let picked=null;
+  if(hitText('name',x,y)) picked={kind:'name'};
+  else if(hitText('sub',x,y)) picked={kind:'sub'};
+  else{
+    for(let i=state.stamps.length-1;i>=0;i--){ if(hitStamp(state.stamps[i],x,y)){picked={kind:'stamp',id:state.stamps[i].id};break;} }
+  }
+  if(!picked){state.selected=null;syncStampCtrl();render();return;}
+  state.selected=picked;
+  if(picked.kind==='name'||picked.kind==='sub'){
+    setTarget(picked.kind);
+    drag={kind:picked.kind,dx:x-state.texts[picked.kind].x,dy:y-state.texts[picked.kind].y};
+  }else{
+    const s=state.stamps.find(z=>z.id===picked.id);
+    drag={kind:'stamp',id:picked.id,dx:x-s.x,dy:y-s.y};
+  }
+  syncStampCtrl();
+  canvas.setPointerCapture(ev.pointerId);
+  render();
+});
+canvas.addEventListener('pointermove',ev=>{
+  if(!drag) return;
+  const {x,y}=toCanvasXY(ev);
+  if(drag.kind==='stamp'){const s=state.stamps.find(z=>z.id===drag.id);if(s){s.x=x-drag.dx;s.y=y-drag.dy;}}
+  else{const t=state.texts[drag.kind];t.x=x-drag.dx;t.y=y-drag.dy;}
+  render();
+});
+function endDrag(ev){if(drag){drag=null;try{canvas.releasePointerCapture(ev.pointerId);}catch(e){}}}
+canvas.addEventListener('pointerup',endDrag);
+canvas.addEventListener('pointercancel',endDrag);
+
+/* ============================================================
+   UI 構築
+   ============================================================ */
+function buildFonts(){
+  const g=document.getElementById('fontGrid');
+  FONTS.forEach(o=>{
+    const b=document.createElement('button');
+    b.className='font-btn';b.textContent=o.s;b.style.fontFamily=`"${o.f}"`;b.title=o.f;
+    b.dataset.font=o.f;
+    b.onclick=()=>{state.texts[state.target].font=o.f;markSel(g,b);renderWithFont(o.f,state.texts[state.target].size);};
+    g.appendChild(b);
+  });
+  syncFontSel();
+}
+function buildTextColors(){
+  const c=document.getElementById('textColors');
+  TEXT_COLORS.forEach(col=>{
+    const s=document.createElement('div');s.className='swatch';s.style.background=col;s.dataset.col=col;
+    s.onclick=()=>{state.texts[state.target].color=col;markSel(c,s);render();};
+    c.appendChild(s);
+  });
+  syncTextColorSel();
+}
+function buildBgColors(){
+  const c=document.getElementById('bgColors');
+  BG_COLORS.forEach((b,i)=>{
+    const s=document.createElement('div');s.className='swatch';s.dataset.i=i;
+    if(b.kind==='solid')s.style.background=b.value;
+    else if(b.kind==='gradient')s.style.background=`linear-gradient(135deg,${b.value[0]},${b.value[1]})`;
+    else{s.style.background='conic-gradient(#eee 0 25%,#fff 0 50%,#eee 0 75%,#fff 0)';s.style.backgroundSize='16px 16px';s.title='透明';}
+    s.onclick=()=>{state.bg=BG_COLORS[i];markSel(c,s);render();};
+    c.appendChild(s);
+    if(JSON.stringify(b)===JSON.stringify(state.bg))s.classList.add('sel');
+  });
+}
+function buildBgPatterns(){
+  const c=document.getElementById('bgPatterns');
+  PATTERNS.forEach(p=>{
+    const s=document.createElement('button');s.className='stamp-btn';s.style.fontSize='11px';
+    s.style.width='auto';s.style.padding='0 10px';s.textContent=PATTERN_LABEL[p];s.dataset.p=p;
+    s.onclick=()=>{state.pattern=p;markSel(c,s);render();};
+    c.appendChild(s);
+    if(p===state.pattern)s.classList.add('sel');
+  });
+}
+function buildStamps(){
+  const mk=(arr,box)=>arr.forEach(e=>{
+    const b=document.createElement('button');b.className='stamp-btn';b.textContent=e;
+    b.onclick=()=>addStamp(e);box.appendChild(b);
+  });
+  mk(STAMPS_1,document.getElementById('stampPalette'));
+  mk(STAMPS_2,document.getElementById('stampPalette2'));
+}
+function markSel(container,el){container.querySelectorAll('.sel').forEach(n=>n.classList.remove('sel'));el.classList.add('sel');}
+
+function syncFontSel(){
+  const g=document.getElementById('fontGrid');const f=state.texts[state.target].font;
+  g.querySelectorAll('.font-btn').forEach(b=>b.classList.toggle('sel',b.dataset.font===f));
+}
+function syncTextColorSel(){
+  const c=document.getElementById('textColors');const col=state.texts[state.target].color;
+  c.querySelectorAll('.swatch').forEach(s=>s.classList.toggle('sel',s.dataset.col===col));
+}
+function syncStrokeSel(){
+  const seg=document.getElementById('strokeSeg');const st=state.texts[state.target].stroke;
+  seg.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.stroke===st));
+}
+function syncSizeSlider(){document.getElementById('textSize').value=state.texts[state.target].size;}
+
+function addStamp(emoji){
+  const s={id:stampSeq++,emoji,x:SIZE/2,y:SIZE/2,size:110};
+  state.stamps.push(s);state.selected={kind:'stamp',id:s.id};
+  syncStampCtrl();render();
+  toast('スタンプを追加しました。ドラッグで移動できます');
+}
+function syncStampCtrl(){
+  const ctrl=document.getElementById('stampCtrl');
+  if(state.selected&&state.selected.kind==='stamp'){
+    const s=state.stamps.find(z=>z.id===state.selected.id);
+    if(s){ctrl.style.display='block';document.getElementById('stampSize').value=s.size;return;}
+  }
+  ctrl.style.display='none';
+}
+
+function setTarget(tgt){
+  state.target=tgt;
+  document.querySelectorAll('#textTargetSeg button').forEach(b=>b.classList.toggle('on',b.dataset.target===tgt));
+  syncFontSel();syncTextColorSel();syncStrokeSel();syncSizeSlider();
+}
+
+/* ============================================================
+   イベント配線
+   ============================================================ */
+// 写真アップロード
+document.getElementById('addPhoto').onclick=()=>document.getElementById('photoInput').click();
+document.getElementById('clearPhoto').onclick=()=>{state.photo=null;render();syncThumbActive();};
+const photos=[]; // {img, dataURL}
+document.getElementById('photoInput').addEventListener('change',ev=>{
+  const files=[...ev.target.files];
+  for(const file of files){
+    if(photos.length>=10){toast('写真は最大10枚までです');break;}
+    const url=URL.createObjectURL(file);
+    const img=new Image();
+    img.onload=()=>{
+      const rec={img,file};photos.push(rec);addThumb(rec);
+      if(!state.photo){state.photo={img};render();syncThumbActive();}
+    };
+    img.src=url;
+  }
+  ev.target.value='';
+});
+function addThumb(rec){
+  const box=document.getElementById('thumbs');
+  const wrap=document.createElement('div');wrap.className='thumb';
+  const im=document.createElement('img');im.src=rec.img.src;
+  im.onclick=()=>{state.photo={img:rec.img};render();syncThumbActive();};
+  const del=document.createElement('button');del.className='del';del.textContent='×';
+  del.onclick=()=>{const i=photos.indexOf(rec);if(i>=0)photos.splice(i,1);wrap.remove();
+    if(state.photo&&state.photo.img===rec.img){state.photo=photos[0]?{img:photos[0].img}:null;render();syncThumbActive();}};
+  const ocr=document.createElement('button');ocr.className='ocr';ocr.textContent='🔤名前を抽出';
+  ocr.onclick=()=>runOCR(rec.img);
+  wrap.appendChild(del);wrap.appendChild(im);wrap.appendChild(ocr);
+  wrap.dataset.src=rec.img.src;
+  box.appendChild(wrap);
+}
+function syncThumbActive(){
+  document.querySelectorAll('#thumbs .thumb').forEach(w=>{
+    w.classList.toggle('active',!!state.photo&&w.dataset.src===state.photo.img.src);
+  });
+}
+
+// 写真の形・大きさ
+document.getElementById('shapeSeg').addEventListener('click',ev=>{
+  const b=ev.target.closest('button');if(!b)return;
+  state.shape=b.dataset.shape;
+  document.querySelectorAll('#shapeSeg button').forEach(x=>x.classList.toggle('on',x===b));
+  render();
+});
+document.getElementById('photoScale').addEventListener('input',ev=>{state.photoScale=parseFloat(ev.target.value);render();});
+
+// 文字入力
+document.getElementById('nameText').addEventListener('input',ev=>{state.texts.name.content=ev.target.value;render();});
+document.getElementById('subText').addEventListener('input',ev=>{state.texts.sub.content=ev.target.value;render();});
+
+// 編集対象切替
+document.getElementById('textTargetSeg').addEventListener('click',ev=>{
+  const b=ev.target.closest('button');if(!b)return;setTarget(b.dataset.target);
+});
+// 文字サイズ
+document.getElementById('textSize').addEventListener('input',ev=>{
+  state.texts[state.target].size=parseInt(ev.target.value);render();
+});
+// ふちどり
+document.getElementById('strokeSeg').addEventListener('click',ev=>{
+  const b=ev.target.closest('button');if(!b)return;
+  state.texts[state.target].stroke=b.dataset.stroke;syncStrokeSel();render();
+});
+// スタンプサイズ・削除
+document.getElementById('stampSize').addEventListener('input',ev=>{
+  if(state.selected&&state.selected.kind==='stamp'){
+    const s=state.stamps.find(z=>z.id===state.selected.id);if(s){s.size=parseInt(ev.target.value);render();}
+  }
+});
+document.getElementById('delStamp').onclick=()=>{
+  if(state.selected&&state.selected.kind==='stamp'){
+    state.stamps=state.stamps.filter(z=>z.id!==state.selected.id);
+    state.selected=null;syncStampCtrl();render();
+  }
+};
+
+// 保存
+function download(){
+  // 透明背景でもPNGで書き出せるようそのまま toDataURL
+  const url=canvas.toDataURL('image/png');
+  const a=document.createElement('a');a.href=url;
+  a.download=(state.texts.name.content||'icon')+'.png';
+  document.body.appendChild(a);a.click();a.remove();
+  toast('保存しました 🎉');
+}
+document.getElementById('download').onclick=download;
+document.getElementById('download2').onclick=download;
+
+// リセット
+document.getElementById('resetAll').onclick=()=>{
+  if(!confirm('最初からやり直しますか？'))return;
+  location.reload();
+};
+
+// 選択中の写真からOCR
+document.getElementById('ocrCurrent').onclick=()=>{
+  if(!state.photo){toast('先に写真を追加してください');return;}
+  runOCR(state.photo.img);
+};
+
+/* ============================================================
+   OCR（名前抽出）— スマホ対応
+   ============================================================ */
+let _worker=null, _workerReady=null;
+function getWorker(){
+  if(_workerReady) return _workerReady;
+  _workerReady=(async()=>{
+    setOcr('文字認識の準備をしています…<br><span style="font-size:11px;color:#9a7f88">初回は辞書のダウンロードで<br>数十秒かかることがあります</span>');
+    _worker=await Tesseract.createWorker('jpn',1,{
+      logger:m=>{ if(m.status==='recognizing text'){setOcr('文字を読み取り中… '+Math.round(m.progress*100)+'%');}
+        else if(m.status&&m.status.indexOf('load')>=0){setOcr('辞書を読み込み中…');} }
+    });
+    return _worker;
+  })();
+  return _workerReady;
+}
+
+// 前処理：拡大＋グレースケール＋コントラスト強調（スマホ写真の精度UP）
+function preprocess(img){
+  const long=Math.max(img.naturalWidth,img.naturalHeight);
+  const scale=Math.min(2.2, Math.max(1, 1400/long));
+  const w=Math.round(img.naturalWidth*scale), h=Math.round(img.naturalHeight*scale);
+  const cv=document.createElement('canvas');cv.width=w;cv.height=h;
+  const c=cv.getContext('2d');
+  c.drawImage(img,0,0,w,h);
+  const d=c.getImageData(0,0,w,h),p=d.data;
+  // グレースケール＋コントラスト
+  const contrast=1.5, inter=128*(1-contrast);
+  for(let i=0;i<p.length;i+=4){
+    let g=0.299*p[i]+0.587*p[i+1]+0.114*p[i+2];
+    g=g*contrast+inter;
+    g=g<0?0:g>255?255:g;
+    p[i]=p[i+1]=p[i+2]=g;
+  }
+  c.putImageData(d,0,0);
+  return cv;
+}
+
+/* 抽出結果から「名前」だけを取り出す。
+   許可：ひらがな/カタカナ/漢字/長音符/ローマ字。
+   記号・数字・その他の英数字以外の特殊文字は除去。 */
+const KEEP_RE = /[぀-ゟ゠-ヿ一-鿿々ーｦ-ﾟa-zA-Z]/;
+const JP_RE   = /[぀-ゟ゠-ヿ一-鿿ｦ-ﾟ]/;
+function cleanLine(line){
+  // 許可文字だけ残す（間の記号・空白・数字を除去）
+  let out='';
+  for(const ch of line){ if(KEEP_RE.test(ch)) out+=ch; }
+  // ローマ字だけの塊が複数語なら空白1つでつなぐため、元の空白は語区切りとして考慮
+  return out;
+}
+function scoreName(s){
+  if(!s) return -1;
+  const len=[...s].length;
+  if(len<1||len>14) return -1;                 // 名前として不自然な長さは除外
+  let jp=0,latin=0;
+  for(const ch of s){ if(JP_RE.test(ch))jp++; else if(/[a-zA-Z]/.test(ch))latin++; }
+  // 日本語を強く優先、ローマ字のみも許容。適度な長さにボーナス。
+  let score=jp*3+latin*1;
+  if(len>=2&&len<=8) score+=3;
+  return score;
+}
+function pickName(raw){
+  const lines=raw.split(/\r?\n/).map(cleanLine).filter(Boolean);
+  let best='',bestScore=-1;
+  for(const ln of lines){
+    // 行内にローマ字の語がある場合、日本語塊を優先的に抜き出す
+    const jpChunk=(ln.match(/[぀-ゟ゠-ヿ一-鿿ｦ-ﾟー々]+/g)||[]);
+    const candidates=[ln, ...jpChunk];
+    for(const cand of candidates){
+      const sc=scoreName(cand);
+      if(sc>bestScore){bestScore=sc;best=cand;}
+    }
+  }
+  return best;
+}
+
+async function runOCR(img){
+  showOcrMask(true);
+  try{
+    const worker=await getWorker();
+    const pre=preprocess(img);
+    const {data}=await worker.recognize(pre);
+    const name=pickName(data.text||'');
+    if(name){
+      state.texts.name.content=name;
+      document.getElementById('nameText').value=name;
+      render();
+      toast('「'+name+'」を抽出しました。必要なら手直ししてください');
+    }else{
+      toast('名前を読み取れませんでした。手入力してください');
+    }
+  }catch(e){
+    console.error(e);
+    toast('文字認識に失敗しました。手入力してください');
+  }finally{
+    showOcrMask(false);
+  }
+}
+
+function showOcrMask(v){document.getElementById('ocrMask').style.display=v?'flex':'none';}
+function setOcr(html){document.getElementById('ocrMsg').innerHTML=html;}
+
+/* ---------- トースト ---------- */
+let _tT=null;
+function toast(msg){
+  const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');
+  clearTimeout(_tT);_tT=setTimeout(()=>t.classList.remove('show'),2600);
+}
+
+/* ============================================================
+   初期化
+   ============================================================ */
+buildFonts();buildTextColors();buildBgColors();buildBgPatterns();buildStamps();
+setTarget('name');
+// Webフォント読み込み後に一度再描画
+if(document.fonts&&document.fonts.ready){document.fonts.ready.then(render);}
+render();
+</script>
+</body>
+</html>
