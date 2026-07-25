@@ -126,6 +126,43 @@ git push -u origin claude/homepage-payment-spreadsheet-DD1ly
 
 ---
 
+## /diagnosis ページ（AI診断・有料レポート販売）
+
+12問に無料で答えるとタイプ判定が出て、**詳細レポートだけを有料（既定480円）で売る**自動収益ツール。
+発送も在庫もサポートもなく、決済後の納品まで全自動で完結する。
+
+**設定ファイル:** `persona/diagnosis_config.yaml`
+**コード:** `src/diagnosis.py`（Blueprint。`src/web_app.py` に登録済み）
+
+### 仕組み
+1. `/diagnosis` で診断を選び、`/diagnosis/<quiz_id>` で12問に回答（無料・ログイン不要）
+2. 回答を軸ごとに集計し、各タイプの `weights` との内積が最大のタイプを結果とする
+3. 無料では「タイプ名＋短い要約」だけ表示し、詳細レポートを有料で案内
+4. 購入すると Stripe Checkout に遷移。回答内容は Stripe の metadata に保存する
+5. 決済完了後 `/diagnosis/report?session_id=...` に戻り、**支払い済みかを Stripe に問い合わせて確認してから** Claude API でその人専用のレポートを生成して表示
+
+### 診断ジャンルを追加する（コード変更は不要）
+`persona/diagnosis_config.yaml` の `quizzes` に1ブロック足すだけ。
+1. `axes` に軸名を3〜4個決める
+2. `questions` を12問、各4択で書く（`choices` の `scores` は `axes` のキーを使う）
+3. `types` を5〜6個書く（`weights` は `axes` のキーを使う）
+4. コミットして push すれば公開される
+
+**タイプ設計のコツ:** 受け皿的な「バランス型」を作ると回答が偏ってそこに集中し、
+結果がありきたりになって課金されなくなる。各タイプは軸の組み合わせが重ならないように散らす。
+
+### 価格を変える
+`persona/diagnosis_config.yaml` の `report.price` の1行だけ。
+
+### 注意
+- **新しい環境変数は不要**。既存の `STRIPE_SECRET_KEY` と `ANTHROPIC_API_KEY` だけで動く。
+- レポートは `posts/diagnosis_reports/` にキャッシュするが、これは高速化のためだけ。
+  Render のファイルシステムは揮発するので、消えても Stripe の metadata から再生成される。
+- レポート1件あたりの原価は Claude API 分の十数円程度。480円に対して十分小さい。
+- `report.max_tokens` は「思考＋本文」の合計上限。減らしすぎるとレポートが途中で切れる。
+
+---
+
 ## 面談予約アプリ（src/booking_app.py）
 
 kazuto / あまりん / さな / しー / かぴのすけ の5人それぞれについて、外部ゲストが
