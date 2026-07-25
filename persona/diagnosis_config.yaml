@@ -25,6 +25,28 @@ report:
   max_tokens: 8000
   effort: "low"           # low / medium / high / xhigh / max（診断レポートは low で十分）
 
+# 自動投稿への告知設定（src/promo.py）
+#
+# 既存の投稿文に URL を継ぎ足すと 140字前提の文章が壊れるため、
+# 告知は「通常投稿を every_n_posts 件出したら1回だけ挟む独立した投稿」にする。
+promo:
+  enabled: true
+  base_url: "https://kazuto-post-generator.onrender.com"
+  # Instagram はキャプション内のリンクが押せないため入れない。
+  # note / TikTok は記事・台本なので対象外。
+  platforms: ["x"]
+  # 通常投稿を何件出したら告知を1回挟むか。
+  # X は1日3回投稿なので、6 ならおおよそ2日に1回になる。
+  every_n_posts: 6
+  # {title} {catch} {emoji} {url} が置き換わる。
+  # 同じ文面が続かないよう、診断 × 文面の組み合わせを履歴で散らす。
+  templates:
+    - "{emoji}{title}つくった。\n12問答えるだけなので、通勤中とかにどうぞ。\n{url}"
+    - "{catch}\n気になる人向けに{title}を用意しました。所要2分くらい。\n{url}"
+    - "自分がどのタイプか、意外とわかってないもので。\n{emoji}{title} → {url}"
+    - "{title}、思ったより結果が分かれます。\nやったらどのタイプだったか教えてほしい。\n{url}"
+    - "12問でわかる{emoji}{title}。\n{catch}\n{url}"
+
 quizzes:
   # ───────────────────────────────────────────────────────────
   - id: "streamer-type"

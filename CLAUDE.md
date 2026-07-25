@@ -154,6 +154,21 @@ git push -u origin claude/homepage-payment-spreadsheet-DD1ly
 ### 価格を変える
 `persona/diagnosis_config.yaml` の `report.price` の1行だけ。
 
+### 自動投稿での告知（`src/promo.py`）
+X の自動投稿に診断ページの告知を混ぜて集客する。設定は同じ YAML の `promo` セクション。
+
+- 既存の投稿文に URL を継ぎ足すと 140字前提の文章が壊れるので、**告知は独立した1投稿**にする
+- 通常投稿を `every_n_posts` 件（既定6）出したら1回だけ告知に差し替わる。X は1日3回投稿なので約2日に1回
+- 診断 × 文面の組み合わせを履歴で散らすため、同じ文面が続かない
+- 告知回はトレンドリサーチも文章生成も走らないので、Claude API の費用がかからない
+- 対象は X のみ。Instagram はキャプションのリンクが押せず、note / TikTok は記事・台本なので入れていない
+- 止めたいときは `promo.enabled: false`
+
+**カウンターは `posts/promo_state.json` に保存し、ワークフローでコミットしている。**
+GitHub Actions は毎回クリーンに checkout するため、これをコミットしないと
+カウンターが毎回0に戻って告知が永久に発火しない。投稿ワークフローの `git add` に
+このファイルが含まれていることを確認すること。
+
 ### 注意
 - **新しい環境変数は不要**。既存の `STRIPE_SECRET_KEY` と `ANTHROPIC_API_KEY` だけで動く。
 - レポートは `posts/diagnosis_reports/` にキャッシュするが、これは高速化のためだけ。
