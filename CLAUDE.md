@@ -8,6 +8,34 @@ eternaldct-png/- は ETERNAL d.c.t の投稿自動化 & グッズ販売サイト
 
 ---
 
+## テスト
+
+PR を出すと `.github/workflows/test.yml` が自動でテストを走らせる。
+**赤くなったらマージしない**（Render に壊れたものがデプロイされる）。
+
+```bash
+pip install -r requirements.txt -r requirements-dev.txt
+pytest -m "not browser"   # 高速（数秒）。普段はこれで十分
+playwright install chromium
+pytest                    # ブラウザテスト込み
+```
+
+| ファイル | 守っているもの |
+|---|---|
+| `tests/test_diagnosis.py` | 診断設定の書き間違い、判定の偏り、生成文経由のXSS |
+| `tests/test_payment_flow.py` | **未払いでレポートが出ないこと**、二重課金しないこと |
+| `tests/test_promo.py` | 告知の頻度と文面のローテーション |
+| `tests/test_main_integration.py` | 告知が投稿フローに正しく挟まること |
+| `tests/test_browser.py` | 実ブラウザで12問答えて結果が出ること（JSの動作） |
+
+**`diagnosis_config.yaml` に診断を足したら必ず `pytest` を通すこと。**
+軸名の打ち間違いや、特定のタイプに回答が偏る設計をその場で検出できる。
+
+**本番の依存（`requirements.txt`）は増やしていない。** テスト用は
+`requirements-dev.txt` に分けてあるので、Render のデプロイには影響しない。
+
+---
+
 ## /goods ページ（グッズ販売）のルーティン
 
 ### 商品を追加・編集する
