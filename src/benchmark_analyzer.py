@@ -328,8 +328,9 @@ def synthesize_with_claude(
 """
 
     message = client.messages.create(
-        model="claude-opus-4-6",
+        model="claude-opus-5",
         max_tokens=2500,
+        thinking={"type": "disabled"},
         messages=[{"role": "user", "content": prompt}],
     )
     return message.content[0].text

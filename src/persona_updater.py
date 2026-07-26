@@ -127,8 +127,9 @@ def generate_persona_update(
 """
 
     message = client.messages.create(
-        model="claude-opus-4-6",
+        model="claude-opus-5",
         max_tokens=4000,
+        thinking={"type": "disabled"},
         messages=[{"role": "user", "content": prompt}],
     )
     raw = message.content[0].text.strip()

@@ -402,8 +402,9 @@ kazutoペルソナとして、Instagram投稿のキャプションを書いて�
     system_prompt = build_system_prompt(persona, constraints, platform)
 
     message = client.messages.create(
-        model="claude-opus-4-6",
+        model="claude-opus-5",
         max_tokens=max_tokens,
+        thinking={"type": "disabled"},
         system=system_prompt,
         messages=[{"role": "user", "content": user_prompt}],
     )

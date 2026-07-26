@@ -5,6 +5,40 @@ eternaldct-png/- は ETERNAL d.c.t の投稿自動化 & グッズ販売サイト
 - Flask アプリ（`src/web_app.py`）を Render でホスト
 - 本番URL: `https://kazuto-post-generator.onrender.com`
 - ホームページ: `https://eternaldct.net`（WordPress、別管理）
+- 文章生成・分析には Claude API（`claude-opus-5`）を使用（`ANTHROPIC_API_KEY`）
+
+### 目次
+1. [投稿自動化エンジン](#投稿自動化エンジン)
+2. [/goods ページ（グッズ販売）のルーティン](#goods-ページグッズ販売のルーティン)
+3. [現在の商品ラインナップ](#現在の商品ラインナップ)
+4. [Render 環境変数](#render-環境変数)
+5. [管理画面](#管理画面)
+6. [/stickers ページ（LINEスタンプメーカー）](#stickers-ページlineスタンプメーカー)
+7. [面談予約アプリ](#面談予約アプリsrcbooking_apppy)
+
+---
+
+## 投稿自動化エンジン
+
+X / Instagram / note / TikTok 向けに、ペルソナ設定を元に投稿文・スクリプトを自動生成し、
+エンゲージメントを分析してペルソナを自動改善する仕組み。GitHub Actions が定期実行する
+（`.github/workflows/` 配下: `auto_post.yml` `kazuto_post.yml` `instagram_post.yml`
+`tiktok_script.yml` `note_generate.yml` `analyze_engagement.yml`
+`benchmark_and_update.yml` `monetization_report.yml` 等）。
+
+| ファイル | 役割 |
+|---|---|
+| `src/generate.py` | ペルソナ設定＋直近の状況からSNS投稿文・note記事・動画台本などを生成 |
+| `src/analyze.py` | 過去の投稿のエンゲージメントを分析しレポート化 |
+| `src/persona_updater.py` | 分析結果を踏まえてペルソナYAMLを自動改善（提案→反映） |
+| `src/benchmark_analyzer.py` | 他アカウントの成功パターンを調査し、勝ちパターンをレポート化 |
+
+- ペルソナ設定: `persona/config.yaml`（木村來未）, `persona/kazuto_config.yaml`（kazuto）
+- 上記4ファイルはすべて Claude API（`client.messages.create`, `model="claude-opus-5"`）を呼んでいる。
+  **opus-5はデフォルトで思考(thinking)がONで `max_tokens` が思考＋本文の合計上限になるため、
+  この4ファイルは軽量な文章生成用途として `thinking={"type": "disabled"}` を明示している**
+  （旧 `claude-opus-4-6` 時代と同じ「思考なし」の挙動に揃えるため）。モデルを差し替える場合は
+  この4箇所をまとめて確認すること。
 
 ---
 

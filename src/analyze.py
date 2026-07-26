@@ -160,8 +160,9 @@ def analyze_with_claude(tweets: list[dict], persona: dict) -> str:
 """
 
     message = client.messages.create(
-        model="claude-opus-4-6",
+        model="claude-opus-5",
         max_tokens=2000,
+        thinking={"type": "disabled"},
         messages=[{"role": "user", "content": prompt}],
     )
     return message.content[0].text
