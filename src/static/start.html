@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>スタートページ</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #ffffff;
+    --text: #202124;
+    --text-muted: #5f6368;
+    --card-bg: #f8f9fa;
+    --card-hover: #eef0f2;
+    --border: #dfe1e5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #202124;
+      --text: #e8eaed;
+      --text-muted: #9aa0a6;
+      --card-bg: #2d2e30;
+      --card-hover: #3c4043;
+      --border: #3c4043;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 10vh 16px 40px;
+  }
+
+  .logo {
+    font-size: 56px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    margin-bottom: 28px;
+    user-select: none;
+  }
+  .logo span:nth-child(1) { color: #4285F4; }
+  .logo span:nth-child(2) { color: #EA4335; }
+  .logo span:nth-child(3) { color: #FBBC05; }
+  .logo span:nth-child(4) { color: #4285F4; }
+  .logo span:nth-child(5) { color: #34A853; }
+  .logo span:nth-child(6) { color: #EA4335; }
+
+  .search-form {
+    width: 100%;
+    max-width: 560px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    padding: 10px 18px;
+    margin-bottom: 48px;
+  }
+  .search-form:focus-within {
+    box-shadow: 0 1px 6px rgba(32,33,36,0.28);
+    border-color: transparent;
+  }
+  .search-icon { color: var(--text-muted); flex-shrink: 0; }
+  .search-form input[type="text"] {
+    flex: 1;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: var(--text);
+    font-size: 16px;
+  }
+
+  .grid {
+    width: 100%;
+    max-width: 720px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 14px;
+  }
+  .tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 18px 8px;
+    border-radius: 12px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    text-decoration: none;
+    color: var(--text);
+    transition: background 0.15s ease;
+  }
+  .tile:hover { background: var(--card-hover); }
+  .tile .icon { font-size: 28px; }
+  .tile .label { font-size: 13px; text-align: center; color: var(--text-muted); }
+
+  .section-title {
+    width: 100%;
+    max-width: 720px;
+    font-size: 13px;
+    color: var(--text-muted);
+    margin: 32px 0 12px;
+    padding-left: 4px;
+  }
+  .section-title:first-of-type { margin-top: 0; }
+</style>
+</head>
+<body>
+
+  <div class="logo" aria-hidden="true">
+    <span>G</span><span>o</span><span>o</span><span>g</span><span>l</span><span>e</span>
+  </div>
+
+  <form class="search-form" action="https://www.google.com/search" method="GET" role="search">
+    <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/>
+      <line x1="16.65" y1="16.65" x2="21" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+    <input type="text" name="q" placeholder="Google 検索" autofocus autocomplete="off">
+  </form>
+
+  <div class="section-title">Google サービス</div>
+  <div class="grid">
+    <a class="tile" href="https://mail.google.com/">
+      <span class="icon">✉️</span><span class="label">Gmail</span>
+    </a>
+    <a class="tile" href="https://calendar.google.com/">
+      <span class="icon">📅</span><span class="label">カレンダー</span>
+    </a>
+    <a class="tile" href="https://drive.google.com/">
+      <span class="icon">📁</span><span class="label">ドライブ</span>
+    </a>
+    <a class="tile" href="https://www.youtube.com/">
+      <span class="icon">▶️</span><span class="label">YouTube</span>
+    </a>
+    <a class="tile" href="https://translate.google.com/">
+      <span class="icon">🌐</span><span class="label">翻訳</span>
+    </a>
+  </div>
+
+  <div class="section-title">ETERNAL d.c.t</div>
+  <div class="grid">
+    <a class="tile" href="https://kazuto-post-generator.onrender.com/goods/admin">
+      <span class="icon">🛍️</span><span class="label">グッズ管理画面</span>
+    </a>
+    <a class="tile" href="https://kazuto-post-generator.onrender.com/goods">
+      <span class="icon">🧾</span><span class="label">グッズ販売ページ</span>
+    </a>
+    <a class="tile" href="https://eternal-interview-booking.onrender.com/">
+      <span class="icon">🗓️</span><span class="label">面談予約メニュー</span>
+    </a>
+    <a class="tile" href="https://eternal-interview-booking.onrender.com/availability">
+      <span class="icon">🔓</span><span class="label">空き時間登録</span>
+    </a>
+  </div>
+
+</body>
+</html>
