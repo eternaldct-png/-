@@ -2,9 +2,9 @@
 予約アプリ — 独立した Flask アプリ（設定ファイルで外販可能）
 
 スタッフ（persona/booking_config.yaml の members）それぞれについて:
-  - 各人がログイン不要で自分の空き時間（1時間単位）を登録
+  - 各人がログイン不要で自分の空き時間（30分単位）を登録
   - その人自身が空けている時間（すでに予約済みの時間は除く）が予約ページに公開される
-  - 外部ゲストがログイン不要で名前だけ入力して1時間の予約ができる
+  - 外部ゲストがログイン不要で名前だけ入力して30分の予約ができる
   - 予約は早い者勝ち（先着順で埋まったら他の人は予約できない）
   - 予約の枠は人ごとに独立している（同じ時間でも別の人になら予約可能）
   - 予約が確定すると Google カレンダーに同期
@@ -96,9 +96,12 @@ MEMBERS = CONFIG["members"]
 SLUG_TO_NAME = {m["slug"]: m["name"] for m in MEMBERS}
 NAME_TO_SLUG = {m["name"]: m["slug"] for m in MEMBERS}
 ALL_PEOPLE = [m["name"] for m in MEMBERS]
-# start_hour〜(end_hour-1) 時開始の1時間枠（最終枠は end_hour に終わる）
-HOURS = [f"{h:02d}:00" for h in range(int(CONFIG["booking"]["start_hour"]),
-                                      int(CONFIG["booking"]["end_hour"]))]
+# start_hour〜end_hour の間を30分刻みにした枠（最終枠は end_hour に終わる）
+HOURS = [
+    f"{h:02d}:{m:02d}"
+    for h in range(int(CONFIG["booking"]["start_hour"]), int(CONFIG["booking"]["end_hour"]))
+    for m in (0, 30)
+]
 DAYS_AHEAD = int(CONFIG["booking"]["days_ahead"])
 REMINDER_HOURS_BEFORE = int(CONFIG["line"]["reminder_hours_before"])
 
@@ -540,7 +543,7 @@ def notify_booking_created(booking):
     notify_line(booking["member"], (
         f"📅 新しい{EVENT_LABEL}予約が入りました\n"
         f"担当: {booking['member']}\n"
-        f"日時: {_slot_jp(booking['slot'])}〜（1時間）\n"
+        f"日時: {_slot_jp(booking['slot'])}〜（30分）\n"
         f"ゲスト: {booking['guest_name']} 様"
     ))
 
@@ -573,7 +576,7 @@ def send_due_reminders():
             n = notify_line(b["member"], (
                 f"⏰ リマインド: まもなく{EVENT_LABEL}があります\n"
                 f"担当: {b['member']}\n"
-                f"日時: {_slot_jp(b['slot'])}〜（1時間）\n"
+                f"日時: {_slot_jp(b['slot'])}〜（30分）\n"
                 f"ゲスト: {b['guest_name']} 様"
             ))
             if n > 0:
@@ -589,8 +592,9 @@ def slot_iso(date_str, hour_str):
 
 
 def slot_end_iso(date_str, hour_str):
-    h = int(hour_str[:2])
-    dt = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=JST) + timedelta(hours=h + 1)
+    h, m = int(hour_str[:2]), int(hour_str[3:5])
+    dt = (datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=JST)
+          + timedelta(hours=h, minutes=m + 30))
     return dt.strftime("%Y-%m-%dT%H:%M:00+09:00")
 
 
@@ -714,7 +718,7 @@ def api_booking_edit(booking_id):
             date, hour = slot[:10], slot[11:16]
             sync_update(booking["google_calendar_event_id"], {
                 "title": f"{EVENT_LABEL}: {guest_name} × {booking['member']}",
-                "description": f"{booking['member']} との1時間{EVENT_LABEL}（ゲスト: {guest_name}）",
+                "description": f"{booking['member']} との30分{EVENT_LABEL}（ゲスト: {guest_name}）",
                 "event_type": "interview",
                 "start_datetime": slot,
                 "end_datetime": slot_end_iso(date, hour),
@@ -794,7 +798,7 @@ def api_book_create(slug):
         from google_calendar import sync_create
         google_id = sync_create({
             "title": f"{EVENT_LABEL}: {guest_name} × {member}",
-            "description": f"{member} との1時間{EVENT_LABEL}（ゲスト: {guest_name}）",
+            "description": f"{member} との30分{EVENT_LABEL}（ゲスト: {guest_name}）",
             "event_type": "interview",
             "start_datetime": slot,
             "end_datetime": slot_end_iso(date, hour),
@@ -1004,7 +1008,7 @@ select.fi, input.fi {
   display: flex; align-items: center; justify-content: center; text-decoration: none; flex-shrink: 0;
 }
 .day-label { font-size: 15px; font-weight: 700; }
-.hour-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.hour-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .hour-btn {
   padding: 12px 4px; background: var(--surface2); border: 1.5px solid var(--border);
   border-radius: 10px; color: var(--muted); font-size: 13px; font-weight: 600; cursor: pointer;
@@ -1463,7 +1467,7 @@ def index():
         cards += (
             '<div class="card">'
             f'<div class="card-title">{SITE_ICON} {name} と{EVENT_LABEL}を予約する</div>'
-            f'<div class="card-sub">{name} の空き時間から1時間を選んで予約</div>'
+            f'<div class="card-sub">{name} の空き時間から30分を選んで予約</div>'
             f'<a class="btn-pri" href="/book/{slug}" onclick="return goTo(\'/book/{slug}\')">予約する</a>'
             '</div>'
         )
@@ -1494,7 +1498,7 @@ def book_page(slug):
     member, _ = _resolve_slug(slug)
     if member is None:
         return "Not Found", 404
-    header_sub = f"1時間の{EVENT_LABEL}を予約できます"
+    header_sub = f"30分の{EVENT_LABEL}を予約できます"
     html = (BOOK_HTML
             .replace("__CSS__", CSS)
             .replace("__MEMBER__", member)

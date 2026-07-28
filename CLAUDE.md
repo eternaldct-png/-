@@ -129,7 +129,7 @@ git push -u origin claude/homepage-payment-spreadsheet-DD1ly
 ## 面談予約アプリ（src/booking_app.py）
 
 kazuto / あまりん / さな / しー / かぴのすけ の5人それぞれについて、外部ゲストが
-ログイン不要で1時間の面談を予約できるアプリ。Render では別サービス
+ログイン不要で30分の面談を予約できるアプリ。Render では別サービス
 `eternal-interview-booking` としてホスト（`render.yaml` 参照）。
 
 **設定ファイル: `persona/booking_config.yaml`** — サイト名・アイコン・予約の呼び名
@@ -138,7 +138,7 @@ kazuto / あまりん / さな / しー / かぴのすけ の5人それぞれに
 予約ツールとして外販デプロイ可能（手順: `docs/booking_line_setup.md` の「外販するとき」）。
 
 ### 仕組み
-- `/availability`（空き時間登録）はパスワード保護（`AVAILABILITY_PASSWORD`、未設定時のデフォルト: `ETERNALLOVE`）。5人はログイン後、自分の名前を選んで空き時間（1時間単位、9:00〜22:00）を登録する。
+- `/availability`（空き時間登録）はパスワード保護（`AVAILABILITY_PASSWORD`、未設定時のデフォルト: `ETERNALLOVE`）。5人はログイン後、自分の名前を選んで空き時間（30分単位、9:00〜22:00）を登録する。
 - `/book/<slug>`（外部ゲスト向け予約ページ）はログイン不要・一般公開。5人それぞれ独立したページ（`/book/kazuto` `/book/amarin` `/book/sana` `/book/shi` `/book/kapinosuke`）。
 - 各予約ページには、**その人自身が空けている時間**（すでに予約済みの時間は除く）だけが表示される。他の人の空き時間と掛け合わせる（両方が空いている必要がある）ことはしない — 一人ひとり独立して予約を受け付ける。
 - ゲストは名前だけ入力して予約。**先着順**で、同じ人・同じスロットは一度しか予約できない。予約枠は人ごとに独立しているため、同じ時間帯でも別の人になら予約できる。
