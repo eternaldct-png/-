@@ -679,25 +679,39 @@ def api_availability_get():
     return jsonify({"ok": True, "hours": hours})
 
 
-@app.route("/api/availability/toggle", methods=["POST"])
-def api_availability_toggle():
+@app.route("/api/availability/save", methods=["POST"])
+def api_availability_save():
+    """複数の枠のON/OFFをまとめて保存する（先に画面上で選択 → 完了ボタンで一括反映）。"""
     if not is_avail_authed():
         return jsonify({"error": "unauthorized"}), 401
     data = request.get_json(force=True)
     person = data.get("person", "")
     date = data.get("date", "")
-    hour = data.get("hour", "")
-    if person not in ALL_PEOPLE or not date or hour not in HOURS:
+    changes = data.get("changes", {})
+    if person not in ALL_PEOPLE or not date or not isinstance(changes, dict):
         return jsonify({"error": "invalid params"}), 400
-    slot = slot_iso(date, hour)
-    if slot in member_booked_slots(person):
-        return jsonify({"error": "予約済みのため変更できません"}), 409
-    currently = slot in person_available_slots(person)
-    if currently:
-        remove_availability(person, slot)
-        return jsonify({"ok": True, "available": False})
-    add_availability(person, slot)
-    return jsonify({"ok": True, "available": True})
+    booked = member_booked_slots(person)
+    avail = person_available_slots(person)
+    skipped = []
+    for hour, want in changes.items():
+        if hour not in HOURS:
+            continue
+        slot = slot_iso(date, hour)
+        if slot in booked:
+            skipped.append(hour)
+            continue
+        want = bool(want)
+        currently = slot in avail
+        if want and not currently:
+            add_availability(person, slot)
+        elif not want and currently:
+            remove_availability(person, slot)
+    if skipped:
+        return jsonify({
+            "ok": True,
+            "error": f"予約済みのため反映できなかった枠があります（{', '.join(skipped)}）",
+        })
+    return jsonify({"ok": True})
 
 
 @app.route("/api/booking/<booking_id>/edit", methods=["POST"])
@@ -1016,7 +1030,13 @@ select.fi, input.fi {
 }
 .hour-btn.on { border-color: var(--ok); color: var(--ok); background: rgba(34,197,94,0.12); }
 .hour-btn.busy { border-color: var(--busy); color: var(--busy); background: rgba(239,68,68,0.1); cursor: not-allowed; }
+.hour-btn.pending { border-style: dashed; }
 .hour-btn .who { display: block; font-size: 10px; font-weight: 500; margin-top: 2px; opacity: 0.85; }
+.save-bar {
+  position: sticky; bottom: calc(14px + var(--safe-bottom)); margin-top: 16px;
+  display: none;
+}
+.save-bar.show { display: block; }
 .booking-actions { display: flex; gap: 4px; margin-top: 5px; justify-content: center; }
 .act-btn {
   font-size: 10px; padding: 3px 6px; border-radius: 6px; border: 1px solid var(--border);
@@ -1133,7 +1153,7 @@ AVAILABILITY_HTML = """<!DOCTYPE html>
   <div class="header-icon">📝</div>
   <div class="header-info">
     <div class="header-title">空き時間登録</div>
-    <div class="header-sub">タップで空き時間をON/OFF</div>
+    <div class="header-sub">タップで選択 → 完了で登録</div>
   </div>
   <button class="back-btn" onclick="doLogout()" title="ログアウト">🔒</button>
 </div>
@@ -1148,6 +1168,9 @@ AVAILABILITY_HTML = """<!DOCTYPE html>
     <button class="day-btn" onclick="changeDay(1)">›</button>
   </div>
   <div class="hour-grid" id="hour-grid"></div>
+  <div class="save-bar" id="save-bar">
+    <button class="btn-pri" id="save-btn" onclick="saveChanges()">完了</button>
+  </div>
   <div class="card" id="line-card" style="display:none; margin-top:16px;">
     <div class="card-title">💬 LINE通知</div>
     <div class="card-sub" id="line-desc"></div>
@@ -1178,22 +1201,51 @@ function dayLabel(d) {
   const wd = ['日','月','火','水','木','金','土'][d.getDay()];
   return `${d.getMonth()+1}月${d.getDate()}日(${wd})`;
 }
-function changeDay(diff) { curDate.setDate(curDate.getDate()+diff); render(); }
-function onPersonChange() { render(); }
+let loadedHours = [];
+let pending = {};
+function hasPending() { return Object.keys(pending).length > 0; }
+function confirmDiscardIfPending(message) {
+  return !hasPending() || window.confirm(message);
+}
+function changeDay(diff) {
+  if (!confirmDiscardIfPending('保存されていない変更があります。移動すると破棄されます。よろしいですか？')) return;
+  curDate.setDate(curDate.getDate()+diff); render();
+}
+let prevPerson = null;
+function onPersonChange() {
+  const sel = document.getElementById('f-person');
+  if (!confirmDiscardIfPending('保存されていない変更があります。切り替えると破棄されます。よろしいですか？')) {
+    sel.value = prevPerson;
+    return;
+  }
+  prevPerson = sel.value;
+  render();
+}
+function effectiveAvailable(h) {
+  return pending.hasOwnProperty(h.hour) ? pending[h.hour] : h.available;
+}
 async function render() {
   document.getElementById('day-label').textContent = dayLabel(curDate);
   const person = document.getElementById('f-person').value;
+  if (prevPerson === null) prevPerson = person;
   const ds = dateFmt(curDate);
   const r = await fetch(`/api/availability?person=${encodeURIComponent(person)}&date=${ds}`);
   const d = await r.json();
+  if (!d.ok) return;
+  loadedHours = d.hours;
+  pending = {};
+  renderGrid();
+}
+function renderGrid() {
   const grid = document.getElementById('hour-grid');
   grid.innerHTML = '';
   grid.style.opacity = '1';
   grid.style.pointerEvents = 'auto';
-  if (!d.ok) return;
-  d.hours.forEach(h => {
+  loadedHours.forEach(h => {
     const btn = document.createElement('div');
-    btn.className = 'hour-btn' + (h.booked ? ' busy' : h.available ? ' on' : '');
+    const avail = effectiveAvailable(h);
+    const isPending = pending.hasOwnProperty(h.hour);
+    btn.className = 'hour-btn' + (h.booked ? ' busy' : avail ? ' on' : '') + (isPending ? ' pending' : '');
     if (h.booked) {
       btn.textContent = h.hour;
       const who = document.createElement('span');
@@ -1212,33 +1264,51 @@ async function render() {
       btn.appendChild(actions);
     } else {
       btn.textContent = h.hour;
-      btn.onclick = () => toggle(person, ds, h.hour);
+      btn.onclick = () => toggleLocal(h.hour);
     }
     grid.appendChild(btn);
   });
+  updateSaveBar();
 }
-let toggling = false;
-async function toggle(person, date, hour) {
-  if (toggling) return;
-  toggling = true;
+function toggleLocal(hour) {
+  const h = loadedHours.find(x => x.hour === hour);
+  if (!h) return;
+  const next = !effectiveAvailable(h);
+  if (next === h.available) delete pending[hour];
+  else pending[hour] = next;
+  renderGrid();
+}
+function updateSaveBar() {
+  const bar = document.getElementById('save-bar');
+  const btn = document.getElementById('save-btn');
+  const count = Object.keys(pending).length;
+  bar.classList.toggle('show', count > 0);
+  btn.textContent = `完了（${count}件を保存）`;
+}
+let saving = false;
+async function saveChanges() {
+  if (saving || !hasPending()) return;
+  saving = true;
+  const person = document.getElementById('f-person').value;
+  const ds = dateFmt(curDate);
   const grid = document.getElementById('hour-grid');
   grid.style.opacity = '0.5';
   grid.style.pointerEvents = 'none';
-  toast('更新中…');
+  toast('保存中…');
   try {
-    const r = await fetch('/api/availability/toggle', {
+    const r = await fetch('/api/availability/save', {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ person, date, hour }),
+      body: JSON.stringify({ person, date: ds, changes: pending }),
     });
     const d = await r.json();
-    if (d.ok) { await render(); }
-    else { toast(d.error || '更新に失敗しました'); await render(); }
+    if (d.ok) { toast(d.error || '保存しました'); await render(); }
+    else { toast(d.error || '保存に失敗しました'); }
   } catch(e) {
     toast('通信エラーが発生しました（サーバー起動中の可能性があります。少し待って再度お試しください）');
     grid.style.opacity = '1';
     grid.style.pointerEvents = 'auto';
   } finally {
-    toggling = false;
+    saving = false;
   }
 }
 async function editBooking(bookingId, currentName) {
