@@ -780,7 +780,7 @@ def api_book_slots(slug):
         return jsonify({"error": "not found"}), 404
     today = datetime.now(JST).date()
     days = []
-    for i in range(DAYS_AHEAD):
+    for i in range(1, DAYS_AHEAD + 1):
         d = today + timedelta(days=i)
         ds = d.strftime("%Y-%m-%d")
         hours = [h for h in HOURS if slot_iso(ds, h) in open_slots]
@@ -802,6 +802,12 @@ def api_book_create(slug):
         return jsonify({"error": "invalid params"}), 400
     if not guest_name:
         return jsonify({"error": "名前を入力してください"}), 400
+    try:
+        booking_date = datetime.strptime(date, "%Y-%m-%d").date()
+    except ValueError:
+        return jsonify({"error": "invalid params"}), 400
+    if booking_date <= datetime.now(JST).date():
+        return jsonify({"error": "当日の予約はできません"}), 409
     slot = slot_iso(date, hour)
     if slot not in open_slots:
         return jsonify({"error": "この時間はすでに予約できません"}), 409
