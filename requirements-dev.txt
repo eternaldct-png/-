@@ -1,0 +1,8 @@
+# テスト用の依存（本番デプロイには不要）
+# ローカルで動かすとき:
+#   pip install -r requirements.txt -r requirements-dev.txt
+#   pytest -m "not browser"        # ブラウザなしの高速なテストだけ
+#   playwright install chromium    # ブラウザテストも動かす場合
+#   pytest                         # 全部
+pytest>=8.0.0
+playwright>=1.40.0

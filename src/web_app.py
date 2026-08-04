@@ -15,6 +15,10 @@ sys.path.insert(0, str(Path(__file__).parent))
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(24))
 
+# AI診断アプリ（/diagnosis）— 診断ジャンルの追加は persona/diagnosis_config.yaml で行う
+from diagnosis import diagnosis_bp  # noqa: E402
+app.register_blueprint(diagnosis_bp)
+
 
 # ── 生成 API ──────────────────────────────────────────────────────
 

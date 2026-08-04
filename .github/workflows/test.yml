@@ -1,0 +1,55 @@
+name: Test
+
+# PR を出したときと main に入ったときにテストを走らせる。
+# 自動投稿のコミットは [skip ci] が付いているのでここは動かない。
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: テスト（ロジック・決済・告知）
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run tests
+        run: pytest -m "not browser" -v
+
+  browser:
+    name: テスト（実ブラウザ）
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      # 診断ページのJSはテストクライアントでは検証できないため、
+      # 実際に Chromium で12問クリックして結果画面まで到達するか確認する
+      - name: Install Chromium
+        run: playwright install --with-deps chromium
+
+      - name: Run browser tests
+        run: pytest -m browser -v

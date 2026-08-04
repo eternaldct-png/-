@@ -62,20 +62,39 @@ def run(dry_run: bool = False, generate_only: bool = False, platform: str = "x",
     adapter = adapters[platform](persona=persona)
     constraints = adapter.get_constraints()
 
+    # 診断ページの告知を挟むタイミングか（通常投稿を N 件出したら1回）
+    # 既存の投稿文に URL を継ぎ足すと文章が壊れるため、告知は独立した1投稿にする
+    promo = None
+    if not generate_only:
+        from promo import should_post_promo, build_promo_post
+
+        if should_post_promo(platform):
+            promo = build_promo_post(platform, is_duplicate=adapter.is_duplicate)
+            if promo is not None:
+                print(f"[main] [{platform}] 今回は診断ページの告知を投稿します")
+
     # キューに該当プラットフォームの投稿があればそちらを優先
     # --generate モードは常に新規生成（キューへの追加が目的のため）
     item = None
-    if not generate_only and has_pending_posts(platform=platform):
+    if promo is None and not generate_only and has_pending_posts(platform=platform):
         print(f"[main] [{platform}] キューから次の投稿を取得します...")
         item = pop_next_post(platform=platform)
 
     # Instagram Job2: キューが空の場合はスキップ（未コミット画像を使わないため）
-    if item is None and not generate_only and platform == "instagram":
+    if promo is None and item is None and not generate_only and platform == "instagram":
         print("[main] [instagram] キューに有効な投稿がありません。スキップします。")
         print("[main] （Job1 のコミットが反映されていないか、既に投稿済みです）")
         sys.exit(0)
 
-    if item is not None:
+    if promo is not None:
+        content = {"text": promo["text"], "platform": platform}
+        post_text = promo["text"]
+        print(f"\n{'='*50}")
+        print(f"診断ページの告知 ({len(post_text)}文字):")
+        print(f"{'='*50}")
+        print(post_text)
+        print(f"{'='*50}\n")
+    elif item is not None:
         content = {"text": item.get("text", ""), "platform": platform}
         if item.get("media_path"):
             content["media_path"] = item["media_path"]
@@ -160,7 +179,8 @@ def run(dry_run: bool = False, generate_only: bool = False, platform: str = "x",
         return
 
     # 投稿実行（Xのみ重複再生成ロジックを適用）
-    if platform == "x":
+    # 告知は組み立て時に重複チェック済みなので、再生成ループには乗せない
+    if platform == "x" and promo is None:
         max_retries = 3
         for attempt in range(max_retries):
             result = adapter.post(content, dry_run=dry_run)
@@ -186,6 +206,14 @@ def run(dry_run: bool = False, generate_only: bool = False, platform: str = "x",
         pid = result.get("platform_id")
         if pid and pid not in ("skipped_duplicate",):
             print(f"[main] 完了！ platform_id: {pid}")
+            # 実際に投稿できたときだけ告知カウンターを進める
+            from promo import record_post
+
+            record_post(
+                platform,
+                was_promo=promo is not None,
+                combo_key=promo["combo_key"] if promo is not None else "",
+            )
     else:
         print("[main] ドライランが完了しました。")
 

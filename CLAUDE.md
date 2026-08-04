@@ -8,6 +8,34 @@ eternaldct-png/- は ETERNAL d.c.t の投稿自動化 & グッズ販売サイト
 
 ---
 
+## テスト
+
+PR を出すと `.github/workflows/test.yml` が自動でテストを走らせる。
+**赤くなったらマージしない**（Render に壊れたものがデプロイされる）。
+
+```bash
+pip install -r requirements.txt -r requirements-dev.txt
+pytest -m "not browser"   # 高速（数秒）。普段はこれで十分
+playwright install chromium
+pytest                    # ブラウザテスト込み
+```
+
+| ファイル | 守っているもの |
+|---|---|
+| `tests/test_diagnosis.py` | 診断設定の書き間違い、判定の偏り、生成文経由のXSS |
+| `tests/test_payment_flow.py` | **未払いでレポートが出ないこと**、二重課金しないこと |
+| `tests/test_promo.py` | 告知の頻度と文面のローテーション |
+| `tests/test_main_integration.py` | 告知が投稿フローに正しく挟まること |
+| `tests/test_browser.py` | 実ブラウザで12問答えて結果が出ること（JSの動作） |
+
+**`diagnosis_config.yaml` に診断を足したら必ず `pytest` を通すこと。**
+軸名の打ち間違いや、特定のタイプに回答が偏る設計をその場で検出できる。
+
+**本番の依存（`requirements.txt`）は増やしていない。** テスト用は
+`requirements-dev.txt` に分けてあるので、Render のデプロイには影響しない。
+
+---
+
 ## /goods ページ（グッズ販売）のルーティン
 
 ### 商品を追加・編集する
@@ -123,6 +151,58 @@ git push -u origin claude/homepage-payment-spreadsheet-DD1ly
 ### 注意
 - 元画像（ChatGPT生成画像）の背景が無地・単色だと背景透過の精度が高い。背景が複雑だと透過がうまくいかない場合がある。
 - 新しい環境変数は不要（既存のRender環境変数だけで動く）。
+
+---
+
+## /diagnosis ページ（AI診断・有料レポート販売）
+
+12問に無料で答えるとタイプ判定が出て、**詳細レポートだけを有料（既定480円）で売る**自動収益ツール。
+発送も在庫もサポートもなく、決済後の納品まで全自動で完結する。
+
+**設定ファイル:** `persona/diagnosis_config.yaml`
+**コード:** `src/diagnosis.py`（Blueprint。`src/web_app.py` に登録済み）
+
+### 仕組み
+1. `/diagnosis` で診断を選び、`/diagnosis/<quiz_id>` で12問に回答（無料・ログイン不要）
+2. 回答を軸ごとに集計し、各タイプの `weights` との内積が最大のタイプを結果とする
+3. 無料では「タイプ名＋短い要約」だけ表示し、詳細レポートを有料で案内
+4. 購入すると Stripe Checkout に遷移。回答内容は Stripe の metadata に保存する
+5. 決済完了後 `/diagnosis/report?session_id=...` に戻り、**支払い済みかを Stripe に問い合わせて確認してから** Claude API でその人専用のレポートを生成して表示
+
+### 診断ジャンルを追加する（コード変更は不要）
+`persona/diagnosis_config.yaml` の `quizzes` に1ブロック足すだけ。
+1. `axes` に軸名を3〜4個決める
+2. `questions` を12問、各4択で書く（`choices` の `scores` は `axes` のキーを使う）
+3. `types` を5〜6個書く（`weights` は `axes` のキーを使う）
+4. コミットして push すれば公開される
+
+**タイプ設計のコツ:** 受け皿的な「バランス型」を作ると回答が偏ってそこに集中し、
+結果がありきたりになって課金されなくなる。各タイプは軸の組み合わせが重ならないように散らす。
+
+### 価格を変える
+`persona/diagnosis_config.yaml` の `report.price` の1行だけ。
+
+### 自動投稿での告知（`src/promo.py`）
+X の自動投稿に診断ページの告知を混ぜて集客する。設定は同じ YAML の `promo` セクション。
+
+- 既存の投稿文に URL を継ぎ足すと 140字前提の文章が壊れるので、**告知は独立した1投稿**にする
+- 通常投稿を `every_n_posts` 件（既定6）出したら1回だけ告知に差し替わる。X は1日3回投稿なので約2日に1回
+- 診断 × 文面の組み合わせを履歴で散らすため、同じ文面が続かない
+- 告知回はトレンドリサーチも文章生成も走らないので、Claude API の費用がかからない
+- 対象は X のみ。Instagram はキャプションのリンクが押せず、note / TikTok は記事・台本なので入れていない
+- 止めたいときは `promo.enabled: false`
+
+**カウンターは `posts/promo_state.json` に保存し、ワークフローでコミットしている。**
+GitHub Actions は毎回クリーンに checkout するため、これをコミットしないと
+カウンターが毎回0に戻って告知が永久に発火しない。投稿ワークフローの `git add` に
+このファイルが含まれていることを確認すること。
+
+### 注意
+- **新しい環境変数は不要**。既存の `STRIPE_SECRET_KEY` と `ANTHROPIC_API_KEY` だけで動く。
+- レポートは `posts/diagnosis_reports/` にキャッシュするが、これは高速化のためだけ。
+  Render のファイルシステムは揮発するので、消えても Stripe の metadata から再生成される。
+- レポート1件あたりの原価は Claude API 分の十数円程度。480円に対して十分小さい。
+- `report.max_tokens` は「思考＋本文」の合計上限。減らしすぎるとレポートが途中で切れる。
 
 ---
 

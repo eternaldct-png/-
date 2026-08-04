@@ -1,0 +1,417 @@
+# ─────────────────────────────────────────────────────────────
+# AI診断アプリ設定ファイル（src/diagnosis.py）
+#
+# 診断ジャンルの追加・編集はこのファイルだけで完結する（コード変更は不要）。
+#
+# 【仕組み】
+#   1. 各設問の選択肢には axes（軸）ごとのスコアが入っている
+#   2. 回答されたスコアを軸ごとに合計する
+#   3. 各 type の weights との内積が最も大きいタイプを結果とする
+#
+# 【新しい診断を追加する手順】
+#   1. quizzes に 1 ブロック追加する
+#   2. axes に軸名を 3〜4 個決める
+#   3. questions を 12 問、各 4 択で書く（choices の scores は axes のキーを使う）
+#   4. types を 5〜6 個書く（weights は axes のキーを使う）
+#   5. コミットして push するだけで公開される
+# ─────────────────────────────────────────────────────────────
+
+# 有料レポートの共通設定
+report:
+  price: 480              # 詳細レポートの価格（円・税込）。変更はこの1行だけ
+  model: "claude-opus-5"
+  # Opus 5 は思考がデフォルトONで、max_tokens は「思考＋本文」の合計上限になる。
+  # 本文2000字ぶんだけ確保すると途中で切れるため、思考の余裕を含めて多めに取る。
+  max_tokens: 8000
+  effort: "low"           # low / medium / high / xhigh / max（診断レポートは low で十分）
+
+# 自動投稿への告知設定（src/promo.py）
+#
+# 既存の投稿文に URL を継ぎ足すと 140字前提の文章が壊れるため、
+# 告知は「通常投稿を every_n_posts 件出したら1回だけ挟む独立した投稿」にする。
+promo:
+  enabled: true
+  base_url: "https://kazuto-post-generator.onrender.com"
+  # Instagram はキャプション内のリンクが押せないため入れない。
+  # note / TikTok は記事・台本なので対象外。
+  platforms: ["x"]
+  # 通常投稿を何件出したら告知を1回挟むか。
+  # X は1日3回投稿なので、6 ならおおよそ2日に1回になる。
+  every_n_posts: 6
+  # {title} {catch} {emoji} {url} が置き換わる。
+  # 同じ文面が続かないよう、診断 × 文面の組み合わせを履歴で散らす。
+  templates:
+    - "{emoji}{title}つくった。\n12問答えるだけなので、通勤中とかにどうぞ。\n{url}"
+    - "{catch}\n気になる人向けに{title}を用意しました。所要2分くらい。\n{url}"
+    - "自分がどのタイプか、意外とわかってないもので。\n{emoji}{title} → {url}"
+    - "{title}、思ったより結果が分かれます。\nやったらどのタイプだったか教えてほしい。\n{url}"
+    - "12問でわかる{emoji}{title}。\n{catch}\n{url}"
+
+quizzes:
+  # ───────────────────────────────────────────────────────────
+  - id: "streamer-type"
+    title: "配信者タイプ診断"
+    emoji: "🎤"
+    catch: "あなたが伸びる配信スタイルは？"
+    description: "12個の質問に答えるだけで、あなたに向いている配信スタイルと、伸ばし方の方向性がわかります。"
+    axes: [energy, calm, talk, create]
+
+    questions:
+      - text: "配信を始める直前、自分の状態に一番近いのは？"
+        choices:
+          - label: "とりあえずテンション上げてから入る"
+            scores: {energy: 2}
+          - label: "飲み物を用意してゆっくり入る"
+            scores: {calm: 2}
+          - label: "今日話すネタを頭で整理してから入る"
+            scores: {talk: 2}
+          - label: "配信画面やBGMの設定を最終チェックする"
+            scores: {create: 2}
+
+      - text: "コメントが少ない日、どうする？"
+        choices:
+          - label: "自分から盛り上げてテンションで押し切る"
+            scores: {energy: 2}
+          - label: "気にせずいつも通りのペースで続ける"
+            scores: {calm: 2}
+          - label: "一人語りでも話し続けられる"
+            scores: {talk: 2}
+          - label: "企画や見せ方を変えてみる"
+            scores: {create: 2}
+
+      - text: "リスナーに一番言われたい言葉は？"
+        choices:
+          - label: "元気もらった！"
+            scores: {energy: 2}
+          - label: "ずっと聞いていられる"
+            scores: {calm: 2}
+          - label: "話が面白すぎる"
+            scores: {talk: 2}
+          - label: "クオリティすごい"
+            scores: {create: 2}
+
+      - text: "コラボ配信でのポジションは？"
+        choices:
+          - label: "場を回して盛り上げる"
+            scores: {energy: 2, talk: 1}
+          - label: "聞き役に回って空気を和ませる"
+            scores: {calm: 2}
+          - label: "ボケもツッコミもやる"
+            scores: {talk: 2, energy: 1}
+          - label: "進行台本や企画を用意しておく"
+            scores: {create: 2}
+
+      - text: "配信の準備にかける時間は？"
+        choices:
+          - label: "ほぼゼロ。思い立ったら始める"
+            scores: {energy: 2}
+          - label: "短め。ゆるく始めたい"
+            scores: {calm: 2}
+          - label: "ネタ探しに少し時間をかける"
+            scores: {talk: 2}
+          - label: "しっかり作り込む"
+            scores: {create: 2}
+
+      - text: "伸びている配信者を見たとき、最初に思うことは？"
+        choices:
+          - label: "自分も負けてられない"
+            scores: {energy: 2}
+          - label: "この人の空気感いいな"
+            scores: {calm: 2}
+          - label: "この話の運び方うまいな"
+            scores: {talk: 2}
+          - label: "この演出どうやってるんだろう"
+            scores: {create: 2}
+
+      - text: "配信で一番つらいのは？"
+        choices:
+          - label: "反応が薄くて空回りすること"
+            scores: {energy: 2}
+          - label: "無理にテンションを上げること"
+            scores: {calm: 2}
+          - label: "話すことが尽きること"
+            scores: {talk: 2}
+          - label: "納得いかない状態で出すこと"
+            scores: {create: 2}
+
+      - text: "配信時間の理想は？"
+        choices:
+          - label: "短時間で一気に駆け抜ける"
+            scores: {energy: 2}
+          - label: "長時間ダラダラ流しておきたい"
+            scores: {calm: 2}
+          - label: "話が乗るまで続けたい"
+            scores: {talk: 2}
+          - label: "決めた構成通りにきっちり終える"
+            scores: {create: 2}
+
+      - text: "新しい企画を思いついたときは？"
+        choices:
+          - label: "その日のうちにやってみる"
+            scores: {energy: 2}
+          - label: "気が向いたときにやる"
+            scores: {calm: 2}
+          - label: "まず雑談で反応を見る"
+            scores: {talk: 2}
+          - label: "準備が整うまで温める"
+            scores: {create: 2}
+
+      - text: "自分の武器はどれに近い？"
+        choices:
+          - label: "勢いと熱量"
+            scores: {energy: 2}
+          - label: "安心感と居心地"
+            scores: {calm: 2}
+          - label: "言葉選びとテンポ"
+            scores: {talk: 2}
+          - label: "企画力と作り込み"
+            scores: {create: 2}
+
+      - text: "アンチコメントが来たら？"
+        choices:
+          - label: "その場で言い返す"
+            scores: {energy: 2}
+          - label: "スルーして流す"
+            scores: {calm: 2}
+          - label: "うまく笑いに変える"
+            scores: {talk: 2}
+          - label: "後で対策を考える"
+            scores: {create: 2}
+
+      - text: "配信を続ける一番の理由は？"
+        choices:
+          - label: "盛り上がる瞬間が好きだから"
+            scores: {energy: 2}
+          - label: "自分の居場所だから"
+            scores: {calm: 2}
+          - label: "人と話すのが好きだから"
+            scores: {talk: 2}
+          - label: "作ったものを見てほしいから"
+            scores: {create: 2}
+
+    types:
+      - id: "leader"
+        name: "熱狂リーダー型"
+        emoji: "🔥"
+        weights: {energy: 3, talk: 2}
+        summary: "その場の温度を一気に上げられるタイプ。あなたが乗っている日は、視聴者の熱量もそのまま連動します。短い配信でも印象が濃く残るのが強みです。"
+        hint: "熱量で人を巻き込めるが、テンションの波と燃え尽きが最大のリスク。"
+
+      - id: "healing"
+        name: "沼らせ癒し型"
+        emoji: "🌙"
+        weights: {calm: 3, talk: 2}
+        summary: "居心地のよさで人を離さないタイプ。派手さより「ずっと居たくなる空気」で勝負でき、固定ファンが最もつきやすい形です。"
+        hint: "初速は遅いが定着率が高い。新規との接点をどう作るかが課題。"
+
+      - id: "creator"
+        name: "職人クリエイター型"
+        emoji: "🎬"
+        weights: {create: 3, calm: 2}
+        summary: "作り込みの質で評価されるタイプ。配信そのものより「出したもの」で語れる強さがあり、切り抜きやアーカイブが効きます。"
+        hint: "クオリティは武器だが、更新頻度が落ちやすいのが弱点。"
+
+      - id: "planner"
+        name: "企画ヒットメーカー型"
+        emoji: "💡"
+        weights: {create: 3, energy: 2}
+        summary: "企画の切り口で跳ねるタイプ。通常配信よりも「その回だけの仕掛け」で数字を作れるため、当たったときの伸び幅が大きい形です。"
+        hint: "一発の爆発力はあるが、平常回との落差が出やすい。"
+
+      - id: "talker"
+        name: "雑談マエストロ型"
+        emoji: "🗣️"
+        weights: {talk: 3, calm: 1, energy: 1}
+        summary: "話術だけで時間を持たせられるタイプ。準備ゼロでも成立する再現性の高さが最大の資産で、配信頻度を武器にできます。"
+        hint: "安定感が強み。一方で「刺さる一本」が生まれにくい。"
+
+      - id: "onoff"
+        name: "緩急スイッチ型"
+        emoji: "🎚"
+        weights: {energy: 2, calm: 2}
+        summary: "熱く盛り上げる日と、静かに流す日の落差が大きいタイプ。その振り幅自体が個性になり、どちらの顔も見せられるのが強みです。ただし「今日はどっちなのか」が読めないと、視聴者が離れる原因にもなります。"
+        hint: "振り幅が武器。一方で配信の予測可能性が低く、習慣化されにくい。"
+
+  # ───────────────────────────────────────────────────────────
+  - id: "love-type"
+    title: "恋愛タイプ診断"
+    emoji: "💘"
+    catch: "あなたの恋の動き方は？"
+    description: "12個の質問で、あなたが恋愛で無意識にとっている行動パターンと、噛み合う相手の傾向がわかります。"
+    axes: [romantic, realist, active, devoted]
+
+    questions:
+      - text: "気になる人ができたとき、最初にすることは？"
+        choices:
+          - label: "頭の中で理想の展開を想像する"
+            scores: {romantic: 2}
+          - label: "相手の状況や条件をそれとなく調べる"
+            scores: {realist: 2}
+          - label: "とりあえず連絡してみる"
+            scores: {active: 2}
+          - label: "相手が何を好きか知ろうとする"
+            scores: {devoted: 2}
+
+      - text: "連絡の返信が遅いとき、どう感じる？"
+        choices:
+          - label: "何かあったのか色々想像してしまう"
+            scores: {romantic: 2}
+          - label: "忙しいだけだと割り切る"
+            scores: {realist: 2}
+          - label: "もう一度こちらから送る"
+            scores: {active: 2}
+          - label: "邪魔しないように待つ"
+            scores: {devoted: 2}
+
+      - text: "デートで大事にしたいのは？"
+        choices:
+          - label: "雰囲気と特別感"
+            scores: {romantic: 2}
+          - label: "無理のない予算と距離"
+            scores: {realist: 2}
+          - label: "行きたい場所に行けること"
+            scores: {active: 2}
+          - label: "相手が楽しんでいること"
+            scores: {devoted: 2}
+
+      - text: "告白するとしたら？"
+        choices:
+          - label: "タイミングと場所にこだわる"
+            scores: {romantic: 2}
+          - label: "脈がある確信を持ってから"
+            scores: {realist: 2}
+          - label: "気持ちが固まったらすぐ"
+            scores: {active: 2}
+          - label: "相手から言ってくれるのを待つ"
+            scores: {devoted: 2}
+
+      - text: "付き合ったあと、連絡の頻度は？"
+        choices:
+          - label: "毎日やりとりしたい"
+            scores: {romantic: 2}
+          - label: "必要なときだけでいい"
+            scores: {realist: 2}
+          - label: "自分のペースで送る"
+            scores: {active: 2}
+          - label: "相手に合わせる"
+            scores: {devoted: 2}
+
+      - text: "相手の欠点が見えたときは？"
+        choices:
+          - label: "それも含めて好きだと思う"
+            scores: {romantic: 2}
+          - label: "許せる範囲か冷静に考える"
+            scores: {realist: 2}
+          - label: "はっきり本人に伝える"
+            scores: {active: 2}
+          - label: "自分が我慢すればいいと思う"
+            scores: {devoted: 2}
+
+      - text: "記念日について、本音は？"
+        choices:
+          - label: "絶対に祝いたいし祝われたい"
+            scores: {romantic: 2}
+          - label: "正直そこまで重要ではない"
+            scores: {realist: 2}
+          - label: "自分が祝いたいときに祝う"
+            scores: {active: 2}
+          - label: "相手が喜ぶならやる"
+            scores: {devoted: 2}
+
+      - text: "けんかになったとき、あなたは？"
+        choices:
+          - label: "気持ちを全部わかってほしい"
+            scores: {romantic: 2}
+          - label: "何が問題か整理したい"
+            scores: {realist: 2}
+          - label: "その場で決着をつけたい"
+            scores: {active: 2}
+          - label: "自分から先に折れる"
+            scores: {devoted: 2}
+
+      - text: "相手との将来について？"
+        choices:
+          - label: "具体的に思い描くのが好き"
+            scores: {romantic: 2}
+          - label: "現実的な条件から考える"
+            scores: {realist: 2}
+          - label: "早めに話し合いたい"
+            scores: {active: 2}
+          - label: "相手の希望に合わせたい"
+            scores: {devoted: 2}
+
+      - text: "恋愛が終わるときの自分は？"
+        choices:
+          - label: "しばらく引きずる"
+            scores: {romantic: 2}
+          - label: "気持ちを切り替えるのが早い"
+            scores: {realist: 2}
+          - label: "自分から見切りをつける"
+            scores: {active: 2}
+          - label: "最後まで相手を待ってしまう"
+            scores: {devoted: 2}
+
+      - text: "友人に恋愛相談をされたら？"
+        choices:
+          - label: "気持ちに寄り添って一緒に盛り上がる"
+            scores: {romantic: 2}
+          - label: "客観的な意見を言う"
+            scores: {realist: 2}
+          - label: "行動するよう背中を押す"
+            scores: {active: 2}
+          - label: "とにかく話を聞く"
+            scores: {devoted: 2}
+
+      - text: "恋愛において一番怖いのは？"
+        choices:
+          - label: "気持ちが冷めること"
+            scores: {romantic: 2}
+          - label: "時間を無駄にすること"
+            scores: {realist: 2}
+          - label: "何も動けないまま終わること"
+            scores: {active: 2}
+          - label: "相手に嫌われること"
+            scores: {devoted: 2}
+
+    types:
+      - id: "dreamer"
+        name: "ロマンス没入型"
+        emoji: "🌹"
+        weights: {romantic: 3, devoted: 1}
+        summary: "恋に入り込む力が強いタイプ。相手を大切にできる一方、理想と現実のギャップで一人苦しくなりやすい傾向があります。"
+        hint: "感情の振れ幅が大きい。期待値の置き方が課題。"
+
+      - id: "strategist"
+        name: "現実派クレバー型"
+        emoji: "🧭"
+        weights: {realist: 3, active: 1}
+        summary: "感情に流されず判断できるタイプ。無駄な恋愛で消耗しない強さがある反面、相手には「冷たい」と映ることがあります。"
+        hint: "判断は速いが、伝え方次第で誤解されやすい。"
+
+      - id: "hunter"
+        name: "直進アタック型"
+        emoji: "🏹"
+        weights: {active: 3, romantic: 1}
+        summary: "気持ちが決まったら動けるタイプ。関係が前に進みやすい一方、相手のペースを追い越してしまうことがあります。"
+        hint: "行動力が武器。速度差の調整が鍵。"
+
+      - id: "giver"
+        name: "尽くし支え型"
+        emoji: "🤲"
+        weights: {devoted: 3, romantic: 1}
+        summary: "相手を優先できるタイプ。安心感を与えられますが、自分の希望を飲み込みすぎて関係が偏りやすい形です。"
+        hint: "与える力が強い。自分の要求を出す練習が要る。"
+
+      - id: "guarded"
+        name: "慎重マイペース型"
+        emoji: "🔒"
+        weights: {realist: 2, devoted: 2}
+        summary: "距離の詰め方が丁寧なタイプ。失敗が少ない代わりに、チャンスを逃してから気づくことが多い傾向があります。"
+        hint: "安全志向。踏み込むタイミングの見極めが課題。"
+
+      - id: "oscillator"
+        name: "理想と現実の往復型"
+        emoji: "🎢"
+        weights: {romantic: 3, realist: 2}
+        summary: "理想を思い描きながら、同時に相手の条件も冷静に見てしまうタイプ。人を見る目は確かですが、その二つが噛み合わないときに動けなくなりやすい傾向があります。"
+        hint: "理想と計算が同居する。決断が遅れやすいのが最大の課題。"
