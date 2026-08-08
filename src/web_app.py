@@ -1701,6 +1701,51 @@ def _save_audition_application(entry):
         json.dump(rows, f, ensure_ascii=False, indent=2)
 
 
+def _audition_line_admin_user_ids():
+    """面談予約アプリ（booking_app）と共有のDBから、「連携 admin」済みのLINEユーザーIDを取得する。
+    DATABASE_URL未設定・テーブル未作成・接続失敗の場合は空リストを返す（通知はスキップ）。"""
+    url = os.environ.get("DATABASE_URL", "")
+    if not url:
+        return []
+    try:
+        import psycopg2
+        conn = psycopg2.connect(url, sslmode="require")
+        try:
+            with conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT line_user_id FROM booking_line_links WHERE person=%s",
+                        ("admin",),
+                    )
+                    return [row[0] for row in cur.fetchall()]
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f"[audition] LINE admin lookup failed: {e}")
+        return []
+
+
+def _notify_audition_line(entry, admin_url):
+    import line_messaging
+
+    if not line_messaging.is_configured():
+        return
+    user_ids = _audition_line_admin_user_ids()
+    if not user_ids:
+        return
+    text = (
+        f"🎤 新しいオーディション応募がありました\n\n"
+        f"お名前: {entry['name']}（{entry['furigana']}）\n"
+        f"メール: {entry['email']}\n"
+        f"都道府県: {entry['prefecture']}\n"
+        f"経験: {entry['experience']}\n"
+        f"得意ジャンル: {entry['genre']}\n\n"
+        f"詳細は管理画面で確認できます:\n{admin_url}"
+    )
+    for uid in user_ids:
+        line_messaging.push_text(uid, text)
+
+
 AUDITION_HTML = r"""<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -2089,6 +2134,13 @@ def api_audition_submit():
         "other": str(data.get("other", "")).strip(),
     }
     _save_audition_application(entry)
+
+    admin_url = f"{request.url_root.rstrip('/')}/audition/admin"
+    try:
+        _notify_audition_line(entry, admin_url)
+    except Exception as e:
+        print(f"[audition] LINE notify failed: {e}")
+
     return jsonify({"ok": True})
 
 
