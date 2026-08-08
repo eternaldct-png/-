@@ -1662,6 +1662,485 @@ def goods_admin_logout():
     return redirect("/goods/admin")
 
 
+# ── オーディション申請フォーム /audition ─────────────────────────
+
+AUDITION_FILE = Path("posts/audition_applications.json")
+
+PREFECTURES = [
+    "北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県",
+    "茨城県", "栃木県", "群馬県", "埼玉県", "千葉県", "東京都", "神奈川県",
+    "新潟県", "富山県", "石川県", "福井県", "山梨県", "長野県", "岐阜県",
+    "静岡県", "愛知県", "三重県", "滋賀県", "京都府", "大阪府", "兵庫県",
+    "奈良県", "和歌山県", "鳥取県", "島根県", "岡山県", "広島県", "山口県",
+    "徳島県", "香川県", "愛媛県", "高知県", "福岡県", "佐賀県", "長崎県",
+    "熊本県", "大分県", "宮崎県", "鹿児島県", "沖縄県",
+]
+
+AUDITION_REQUIRED_FIELDS = [
+    "name", "furigana", "email", "prefecture", "minor_consent",
+    "experience", "genre", "frequency", "self_pr", "motivation",
+]
+
+
+def _load_audition_applications():
+    import json
+
+    if AUDITION_FILE.exists():
+        with open(AUDITION_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return []
+
+
+def _save_audition_application(entry):
+    import json
+
+    AUDITION_FILE.parent.mkdir(parents=True, exist_ok=True)
+    rows = _load_audition_applications()
+    rows.append(entry)
+    with open(AUDITION_FILE, "w", encoding="utf-8") as f:
+        json.dump(rows, f, ensure_ascii=False, indent=2)
+
+
+AUDITION_HTML = r"""<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>ライバー・配信者オーディション応募 | ETERNALd.c.t</title>
+<style>
+:root {
+  --bg: #f7f7fb; --surface: #ffffff; --surface2: #f1f0fa;
+  --grad: linear-gradient(135deg, #7c3aed, #d946ef, #ec4899);
+  --accent-text: #9333ea; --text: #1f2333; --muted: #6b7280; --border: #eceaf5;
+  --shadow: 0 6px 24px rgba(124,58,237,0.08);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body {
+  background: var(--bg); color: var(--text); min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
+  padding-bottom: 40px;
+}
+.header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 28px 18px 24px; text-align: center; }
+.header .badge {
+  display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+  color: white; background: var(--grad); padding: 4px 14px; border-radius: 999px; margin-bottom: 10px;
+}
+.header h1 { font-size: 19px; font-weight: 800; }
+.header p { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.6; }
+.main { padding: 22px 16px; max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 20px; box-shadow: var(--shadow); }
+.card h2 { font-size: 14px; font-weight: 800; margin-bottom: 14px; }
+.field { margin-bottom: 14px; }
+.field:last-child { margin-bottom: 0; }
+.field label { display: block; font-size: 12.5px; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
+.field .req { color: #ec4899; margin-left: 2px; }
+.field input[type=text], .field input[type=email], .field select, .field textarea {
+  width: 100%; padding: 11px 12px; border: 1.5px solid var(--border); border-radius: 10px;
+  font-size: 14px; background: var(--surface2); color: var(--text); font-family: inherit;
+  -webkit-appearance: none; appearance: none;
+}
+.field textarea { min-height: 84px; resize: vertical; line-height: 1.6; }
+.field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--accent-text); }
+.radio-row { display: flex; gap: 16px; flex-wrap: wrap; }
+.radio-row label { display: flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 500; color: var(--text); }
+.radio-row input { width: auto; }
+.agree-row { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; color: var(--muted); line-height: 1.7; }
+.agree-row input { width: auto; margin-top: 3px; }
+.submit-btn {
+  width: 100%; padding: 15px; border: none; border-radius: 12px;
+  background: var(--grad); color: white;
+  font-size: 15px; font-weight: 800; cursor: pointer; letter-spacing: 0.02em;
+  transition: opacity 0.2s, transform 0.1s;
+  box-shadow: 0 6px 18px rgba(217,70,239,0.28);
+}
+.submit-btn:active { opacity: 0.85; transform: scale(0.98); }
+.submit-btn:disabled { opacity: 0.4; cursor: not-allowed; box-shadow: none; }
+.toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(10px);
+  background: var(--surface); border: 1px solid #ef4444; color: #ef4444; box-shadow: var(--shadow);
+  padding: 10px 20px; border-radius: 999px; font-size: 13px; font-weight: 600;
+  white-space: nowrap; opacity: 0; transition: all 0.2s; pointer-events: none; z-index: 999;
+  max-width: 90vw; overflow: hidden; text-overflow: ellipsis;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.success-card { text-align: center; padding: 40px 24px; }
+.success-card .icon { font-size: 40px; margin-bottom: 14px; }
+.success-card h2 { font-size: 17px; margin-bottom: 8px; }
+.success-card p { font-size: 13px; color: var(--muted); line-height: 1.8; }
+</style>
+</head>
+<body>
+<div class="header">
+  <span class="badge">ETERNAL d.c.t</span>
+  <h1>🎤 ライバー・配信者オーディション応募</h1>
+  <p>下記フォームに必要事項をご記入のうえ送信してください。<br>審査結果はご入力いただいたメールアドレスへご連絡します。</p>
+</div>
+<div class="main" id="main">
+  <form id="auditionForm">
+    <div class="card">
+      <h2>基本情報</h2>
+      <div class="field">
+        <label>お名前（本名）<span class="req">*</span></label>
+        <input type="text" name="name" required>
+      </div>
+      <div class="field">
+        <label>ふりがな<span class="req">*</span></label>
+        <input type="text" name="furigana" required>
+      </div>
+      <div class="field">
+        <label>性別</label>
+        <select name="gender">
+          <option value=""></option>
+          <option value="男性">男性</option>
+          <option value="女性">女性</option>
+          <option value="その他">その他</option>
+          <option value="回答しない">回答しない</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>メールアドレス<span class="req">*</span></label>
+        <input type="email" name="email" required>
+      </div>
+      <div class="field">
+        <label>お住まいの都道府県<span class="req">*</span></label>
+        <select name="prefecture" required>
+          <option value=""></option>
+          __PREFECTURE_OPTIONS__
+        </select>
+      </div>
+      <div class="field">
+        <label>未成年の方のみ：保護者の同意<span class="req">*</span></label>
+        <select name="minor_consent" required>
+          <option value="該当しない（成人）">該当しない（成人）</option>
+          <option value="同意している">同意している</option>
+          <option value="まだ得ていない">まだ得ていない</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>活動について</h2>
+      <div class="field">
+        <label>活動名（希望する名前があれば）</label>
+        <input type="text" name="activity_name">
+      </div>
+      <div class="field">
+        <label>配信・ライバー活動の経験<span class="req">*</span></label>
+        <div class="radio-row">
+          <label><input type="radio" name="experience" value="あり" required>あり</label>
+          <label><input type="radio" name="experience" value="なし">なし</label>
+        </div>
+      </div>
+      <div class="field">
+        <label>経験がある場合、活動歴・実績（プラットフォーム名／フォロワー数など）</label>
+        <textarea name="history"></textarea>
+      </div>
+      <div class="field">
+        <label>得意なジャンル・企画<span class="req">*</span></label>
+        <textarea name="genre" required placeholder="例）雑談、ゲーム実況、歌枠 など"></textarea>
+      </div>
+      <div class="field">
+        <label>週にどのくらい配信・活動できますか<span class="req">*</span></label>
+        <select name="frequency" required>
+          <option value=""></option>
+          <option value="週1回未満">週1回未満</option>
+          <option value="週1〜2回">週1〜2回</option>
+          <option value="週3〜4回">週3〜4回</option>
+          <option value="週5回以上">週5回以上</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>SNSアカウント（X / Instagram / TikTok など）</label>
+        <textarea name="sns"></textarea>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>アピール</h2>
+      <div class="field">
+        <label>自己PR（400字程度）<span class="req">*</span></label>
+        <textarea name="self_pr" required></textarea>
+      </div>
+      <div class="field">
+        <label>応募動機<span class="req">*</span></label>
+        <textarea name="motivation" required></textarea>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>確認事項</h2>
+      <div class="field">
+        <label class="agree-row">
+          <input type="checkbox" name="agree" required>
+          <span>応募規約・プライバシーポリシーの内容を確認し、同意します<span class="req">*</span></span>
+        </label>
+      </div>
+      <div class="field">
+        <label>その他ご質問・ご要望</label>
+        <textarea name="other"></textarea>
+      </div>
+    </div>
+
+    <button type="submit" class="submit-btn" id="submitBtn">応募する</button>
+  </form>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const PREFECTURE_OPTIONS_MARK = '__PREFECTURE_OPTIONS__';
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3200);
+}
+
+document.getElementById('auditionForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const btn = document.getElementById('submitBtn');
+  const data = Object.fromEntries(new FormData(form).entries());
+  data.agree = form.agree.checked;
+
+  btn.disabled = true;
+  btn.textContent = '送信中…';
+  try {
+    const res = await fetch('/api/audition/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    const result = await res.json();
+    if (result.ok) {
+      document.getElementById('main').innerHTML = `
+        <div class="card success-card">
+          <div class="icon">✅</div>
+          <h2>応募ありがとうございます</h2>
+          <p>内容を確認のうえ、ご入力いただいたメールアドレスへ<br>審査結果をご連絡いたします。</p>
+        </div>`;
+      return;
+    }
+    toast(result.error || '送信に失敗しました');
+  } catch (err) {
+    toast('通信エラーが発生しました');
+  }
+  btn.disabled = false;
+  btn.textContent = '応募する';
+});
+</script>
+</body>
+</html>"""
+
+
+AUDITION_ADMIN_LOGIN_HTML = r"""<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>応募一覧ログイン | ETERNALd.c.t</title>
+<style>
+:root {
+  --bg: #f7f7fb; --surface: #ffffff;
+  --grad: linear-gradient(135deg, #7c3aed, #d946ef, #ec4899);
+  --accent: #9333ea; --text: #1f2333; --muted: #6b7280; --border: #eceaf5;
+  --shadow: 0 6px 24px rgba(124,58,237,0.08);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg); color: var(--text); min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; box-shadow: var(--shadow); padding: 36px 28px; max-width: 340px; width: 100%; }
+h1 { font-size: 17px; margin-bottom: 20px; text-align: center; font-weight: 800; }
+input {
+  width: 100%; padding: 13px 14px; margin-bottom: 14px;
+  background: var(--bg); border: 1.5px solid var(--border); border-radius: 10px;
+  color: var(--text); font-size: 15px; outline: none;
+}
+input:focus { border-color: var(--accent); }
+button {
+  width: 100%; padding: 14px; border: none; border-radius: 10px;
+  background: var(--grad); color: white;
+  font-size: 15px; font-weight: 700; cursor: pointer;
+  box-shadow: 0 6px 18px rgba(217,70,239,0.28);
+}
+.error { color: #ef4444; font-size: 13px; text-align: center; margin-top: 14px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🔒 応募一覧ログイン</h1>
+  <form method="POST">
+    <input type="password" name="password" placeholder="パスワード" autofocus required>
+    <button type="submit">ログイン</button>
+  </form>
+  __ERROR__
+</div>
+</body>
+</html>"""
+
+
+AUDITION_ADMIN_HTML = r"""<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>オーディション応募一覧 | ETERNALd.c.t</title>
+<style>
+:root {
+  --bg: #f7f7fb; --surface: #ffffff;
+  --grad: linear-gradient(135deg, #7c3aed, #d946ef, #ec4899);
+  --accent-text: #9333ea; --text: #1f2333; --muted: #6b7280; --border: #eceaf5;
+  --shadow: 0 6px 24px rgba(124,58,237,0.08);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg); color: var(--text); min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
+  padding: 22px;
+}
+.header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; flex-wrap: wrap; gap: 10px; }
+.header h1 { font-size: 19px; font-weight: 800; }
+.header .count { font-size: 13px; color: var(--muted); }
+.header a {
+  font-size: 13px; font-weight: 700; color: white; text-decoration: none;
+  background: var(--grad); padding: 8px 16px; border-radius: 999px;
+  box-shadow: 0 6px 18px rgba(217,70,239,0.22);
+}
+.table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); }
+table { border-collapse: collapse; width: 100%; min-width: 1100px; font-size: 13px; }
+th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; vertical-align: top; }
+th { background: var(--surface2, #f7f5fc); color: var(--muted); font-weight: 700; position: sticky; top: 0; }
+td { background: var(--surface); }
+tr:last-child td { border-bottom: none; }
+td.wrap { white-space: normal; min-width: 200px; max-width: 320px; }
+.empty-row { text-align: center; color: var(--muted); padding: 48px 16px; white-space: normal; }
+.note { font-size: 12px; color: var(--muted); margin-top: 16px; line-height: 1.8; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>🎤 オーディション応募一覧</h1>
+  <span class="count">__COUNT__ 件</span>
+  <a href="/audition/admin/logout">ログアウト</a>
+</div>
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr>
+      <th>応募日時</th><th>お名前</th><th>ふりがな</th><th>性別</th><th>メール</th><th>都道府県</th>
+      <th>活動名</th><th>経験</th><th>得意ジャンル</th><th>頻度</th><th>SNS</th>
+      <th>自己PR</th><th>応募動機</th><th>その他</th>
+    </tr>
+  </thead>
+  <tbody>
+    __ROWS__
+  </tbody>
+</table>
+</div>
+<p class="note">
+  ⚠️ この一覧はサーバー上のファイルに保存しています。Renderの無料プランは再デプロイ時にファイルが消える場合があるため、
+  応募が増えてきたら Postgres（DATABASE_URL）連携への切り替えをご検討ください。
+</p>
+</body>
+</html>"""
+
+
+@app.route("/audition")
+def audition_index():
+    prefecture_options = "".join(f'<option value="{p}">{p}</option>' for p in PREFECTURES)
+    html = AUDITION_HTML.replace("__PREFECTURE_OPTIONS__", prefecture_options)
+    return html, 200, {"Content-Type": "text/html; charset=utf-8"}
+
+
+@app.route("/api/audition/submit", methods=["POST"])
+def api_audition_submit():
+    import uuid
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    data = request.get_json(force=True) or {}
+
+    for field in AUDITION_REQUIRED_FIELDS:
+        if not str(data.get(field, "")).strip():
+            return jsonify({"error": "必須項目が未入力です"}), 400
+    if not data.get("agree"):
+        return jsonify({"error": "応募規約への同意が必要です"}), 400
+
+    JST = ZoneInfo("Asia/Tokyo")
+    entry = {
+        "id": str(uuid.uuid4()),
+        "created_at": datetime.now(JST).strftime("%Y-%m-%d %H:%M"),
+        "name": str(data.get("name", "")).strip(),
+        "furigana": str(data.get("furigana", "")).strip(),
+        "gender": str(data.get("gender", "")).strip(),
+        "email": str(data.get("email", "")).strip(),
+        "prefecture": str(data.get("prefecture", "")).strip(),
+        "minor_consent": str(data.get("minor_consent", "")).strip(),
+        "activity_name": str(data.get("activity_name", "")).strip(),
+        "experience": str(data.get("experience", "")).strip(),
+        "history": str(data.get("history", "")).strip(),
+        "genre": str(data.get("genre", "")).strip(),
+        "frequency": str(data.get("frequency", "")).strip(),
+        "sns": str(data.get("sns", "")).strip(),
+        "self_pr": str(data.get("self_pr", "")).strip(),
+        "motivation": str(data.get("motivation", "")).strip(),
+        "other": str(data.get("other", "")).strip(),
+    }
+    _save_audition_application(entry)
+    return jsonify({"ok": True})
+
+
+@app.route("/audition/admin", methods=["GET", "POST"])
+def audition_admin():
+    web_password = os.environ.get("WEB_PASSWORD", "")
+    error_html = ""
+
+    if request.method == "POST":
+        if web_password and request.form.get("password", "") == web_password:
+            session["audition_admin_ok"] = True
+        else:
+            error_html = '<p class="error">パスワードが違います</p>'
+
+    if not session.get("audition_admin_ok"):
+        html = AUDITION_ADMIN_LOGIN_HTML.replace("__ERROR__", error_html)
+        return html, (200 if not error_html else 401), {"Content-Type": "text/html; charset=utf-8"}
+
+    applications = list(reversed(_load_audition_applications()))
+    if applications:
+        rows = "".join(
+            "<tr>"
+            f"<td>{escape(a.get('created_at',''))}</td>"
+            f"<td>{escape(a.get('name',''))}</td>"
+            f"<td>{escape(a.get('furigana',''))}</td>"
+            f"<td>{escape(a.get('gender',''))}</td>"
+            f"<td>{escape(a.get('email',''))}</td>"
+            f"<td>{escape(a.get('prefecture',''))}</td>"
+            f"<td>{escape(a.get('activity_name',''))}</td>"
+            f"<td>{escape(a.get('experience',''))}</td>"
+            f"<td class='wrap'>{escape(a.get('genre',''))}</td>"
+            f"<td>{escape(a.get('frequency',''))}</td>"
+            f"<td class='wrap'>{escape(a.get('sns',''))}</td>"
+            f"<td class='wrap'>{escape(a.get('self_pr',''))}</td>"
+            f"<td class='wrap'>{escape(a.get('motivation',''))}</td>"
+            f"<td class='wrap'>{escape(a.get('other',''))}</td>"
+            "</tr>"
+            for a in applications
+        )
+    else:
+        rows = '<tr><td colspan="14" class="empty-row">応募はまだありません</td></tr>'
+
+    html = AUDITION_ADMIN_HTML.replace("__ROWS__", rows).replace("__COUNT__", str(len(applications)))
+    return html, 200, {"Content-Type": "text/html; charset=utf-8"}
+
+
+@app.route("/audition/admin/logout")
+def audition_admin_logout():
+    session.pop("audition_admin_ok", None)
+    return redirect("/audition/admin")
+
+
 # ── LINEスタンプメーカー ──────────────────────────────────────────
 # ChatGPT などで手動生成したキャラクターのポーズ違い画像（最大16枚）をアップロードすると、
 # 背景透過・白ふち・セリフ合成・LINEスタンプサイズ調整をまとめて行う。外部APIキーは不要。
