@@ -126,6 +126,28 @@ git push -u origin claude/homepage-payment-spreadsheet-DD1ly
 
 ---
 
+## /audition ページ（ライバー・配信者オーディション応募）
+
+Googleフォームの代わりに、サイト内に応募フォームを実装したもの。`persona/goods_config.yaml` のような
+設定ファイルはなく、質問項目は `src/web_app.py` の `AUDITION_HTML` に直接埋め込み。
+
+### 仕組み
+- `/audition` — 応募フォーム（基本情報・活動について・アピール・確認事項の4セクション）
+- `/api/audition/submit` — POST、`posts/audition_applications.json` に保存
+- `/audition/admin` — `WEB_PASSWORD` でログインして応募一覧を確認（`/goods/admin` と同じパスワード）
+- 応募があると、面談予約アプリ（`eternal-interview-booking`）と共有の `DATABASE_URL`（Postgres/Supabase）から
+  `booking_line_links` テーブルの `person='admin'` で連携済みのLINEユーザーへ通知を送る
+  （`kazuto-post-generator` 側にも同じ `DATABASE_URL` と `LINE_CHANNEL_ACCESS_TOKEN` の設定が必要。
+  未設定なら通知は静かにスキップされ、応募自体は保存される）
+
+### 注意
+- `posts/audition_applications.json` はRenderの無料プランでは再デプロイ時に消える可能性がある。
+  応募が増えてきたらPostgres連携への切り替えを検討する。
+- LINE通知を受け取るには、面談予約アプリの公式LINEアカウントで「連携 admin」を送っておく必要がある
+  （手順: `docs/booking_line_setup.md`）。
+
+---
+
 ## 面談予約アプリ（src/booking_app.py）
 
 kazuto / あまりん / さな / しー / かぴのすけ の5人それぞれについて、外部ゲストが

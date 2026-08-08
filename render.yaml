@@ -14,6 +14,10 @@ services:
         sync: false          # 商品購入ページ /goods の決済に必要（https://dashboard.stripe.com/apikeys）
       - key: FLASK_SECRET_KEY
         sync: false          # /goods/admin のログインセッション用（任意の文字列を設定）
+      - key: DATABASE_URL
+        sync: false          # /audition のLINE通知に必要（eternal-interview-bookingと同じ値。未設定時は通知スキップ）
+      - key: LINE_CHANNEL_ACCESS_TOKEN
+        sync: false          # /audition のLINE通知に必要（eternal-interview-bookingと同じ値。未設定時は通知スキップ）
 
   - type: web
     name: eternal-schedule
