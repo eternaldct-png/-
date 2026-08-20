@@ -13,9 +13,11 @@ services:
       - key: STRIPE_SECRET_KEY
         sync: false          # 商品購入ページ /goods の決済に必要（https://dashboard.stripe.com/apikeys）
       - key: FLASK_SECRET_KEY
-        sync: false          # /goods/admin のログインセッション用（任意の文字列を設定）
+        sync: false          # /goods/admin・/audition/admin のログインセッション用（任意の文字列を設定）
+                             # 未設定だと再起動のたびにログインし直しになる
       - key: DATABASE_URL
-        sync: false          # /audition のLINE通知に必要（eternal-interview-bookingと同じ値。未設定時は通知スキップ）
+        sync: false          # /audition の応募データ保存とLINE通知に必要（eternal-interview-bookingと同じ値）
+                             # 未設定だと応募がファイル保存のみとなり、再デプロイ・スリープ復帰で消える
       - key: LINE_CHANNEL_ACCESS_TOKEN
         sync: false          # /audition のLINE通知に必要（eternal-interview-bookingと同じ値。未設定時は通知スキップ）
 

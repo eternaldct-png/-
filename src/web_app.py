@@ -1682,23 +1682,166 @@ AUDITION_REQUIRED_FIELDS = [
 ]
 
 
-def _load_audition_applications():
+AUDITION_COLUMNS = [
+    "id", "created_at", "name", "furigana", "gender", "email", "prefecture",
+    "minor_consent", "activity_name", "experience", "history", "genre",
+    "frequency", "sns", "self_pr", "motivation", "other",
+]
+
+_audition_table_ready = False
+
+
+def _audition_db_conn():
+    """Supabase(Postgres) への接続。DATABASE_URL 未設定・接続失敗時は None。"""
+    url = os.environ.get("DATABASE_URL", "")
+    if not url:
+        return None
+    try:
+        import psycopg2
+        return psycopg2.connect(url, sslmode="require")
+    except Exception as e:
+        print(f"[audition] DB connection failed: {e}", file=sys.stderr)
+        return None
+
+
+def _audition_db_ready():
+    """管理画面の表示用。DBに接続できて表が用意できていれば True。"""
+    conn = _audition_db_conn()
+    if not conn:
+        return False
+    try:
+        return _ensure_audition_table(conn)
+    finally:
+        conn.close()
+
+
+def _insert_audition_row(cur, entry):
+    import uuid
+
+    values = []
+    for col in AUDITION_COLUMNS:
+        v = entry.get(col, "")
+        values.append(str(v).strip() if v is not None else "")
+    if not values[0]:
+        values[0] = str(uuid.uuid4())
+    placeholders = ", ".join(["%s"] * len(AUDITION_COLUMNS))
+    cols = ", ".join(AUDITION_COLUMNS)
+    cur.execute(
+        f"INSERT INTO audition_applications ({cols}) VALUES ({placeholders}) "
+        "ON CONFLICT (id) DO NOTHING",
+        values,
+    )
+
+
+def _ensure_audition_table(conn):
+    """応募テーブルを作成し、旧方式（JSONファイル）の応募をDBへ取り込む。"""
+    global _audition_table_ready
+    if _audition_table_ready:
+        return True
+    try:
+        col_defs = ",\n                        ".join(
+            f"{c} TEXT NOT NULL DEFAULT ''" for c in AUDITION_COLUMNS[1:]
+        )
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"""
+                    CREATE TABLE IF NOT EXISTS audition_applications (
+                        id TEXT PRIMARY KEY,
+                        {col_defs},
+                        seq BIGSERIAL
+                    )
+                    """
+                )
+        # ファイルに残っている応募をDBへ移行（重複はスキップ）
+        legacy = _load_audition_file()
+        if legacy:
+            with conn:
+                with conn.cursor() as cur:
+                    for row in legacy:
+                        _insert_audition_row(cur, row)
+        _audition_table_ready = True
+        return True
+    except Exception as e:
+        print(f"[audition] table setup failed: {e}", file=sys.stderr)
+        return False
+
+
+def _load_audition_file():
     import json
 
-    if AUDITION_FILE.exists():
-        with open(AUDITION_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+    try:
+        if AUDITION_FILE.exists():
+            with open(AUDITION_FILE, "r", encoding="utf-8") as f:
+                rows = json.load(f)
+            return rows if isinstance(rows, list) else []
+    except Exception as e:
+        print(f"[audition] file load failed: {e}", file=sys.stderr)
     return []
 
 
-def _save_audition_application(entry):
+def _append_audition_file(entry):
     import json
 
-    AUDITION_FILE.parent.mkdir(parents=True, exist_ok=True)
-    rows = _load_audition_applications()
-    rows.append(entry)
-    with open(AUDITION_FILE, "w", encoding="utf-8") as f:
-        json.dump(rows, f, ensure_ascii=False, indent=2)
+    try:
+        rows = _load_audition_file()
+        rows.append(entry)
+        AUDITION_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(AUDITION_FILE, "w", encoding="utf-8") as f:
+            json.dump(rows, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception as e:
+        print(f"[audition] file save failed: {e}", file=sys.stderr)
+        return False
+
+
+def _load_audition_applications():
+    """古い順に応募を返す。DBが使えるときはDBを正とする。"""
+    conn = _audition_db_conn()
+    if conn:
+        try:
+            if _ensure_audition_table(conn):
+                import psycopg2.extras
+                with conn:
+                    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                        cur.execute(
+                            "SELECT * FROM audition_applications ORDER BY seq ASC"
+                        )
+                        return [dict(r) for r in cur.fetchall()]
+        except Exception as e:
+            print(f"[audition] DB load failed: {e}", file=sys.stderr)
+        finally:
+            conn.close()
+    return _load_audition_file()
+
+
+def _save_audition_application(entry):
+    """応募を保存する。DBに入れば True、ファイルにしか残せなければ False を返す。
+    どちらにも保存できなかった場合は例外を送出する（呼び出し側でエラー応答する）。"""
+    global _audition_table_ready
+
+    saved_db = False
+    conn = _audition_db_conn()
+    if conn:
+        try:
+            if _ensure_audition_table(conn):
+                with conn:
+                    with conn.cursor() as cur:
+                        _insert_audition_row(cur, entry)
+                saved_db = True
+        except Exception as e:
+            print(f"[audition] DB save failed: {e}", file=sys.stderr)
+            # 次にDBへつながったときに、ファイルに残った分をまとめて取り込み直す
+            _audition_table_ready = False
+        finally:
+            conn.close()
+
+    # DBの有無にかかわらずファイルにも控えを残す（DB障害時の保険）
+    saved_file = _append_audition_file(entry)
+
+    if not saved_db and not saved_file:
+        raise RuntimeError("応募データを保存できませんでした")
+    return saved_db
 
 
 def _audition_line_admin_user_ids():
@@ -2062,6 +2205,9 @@ tr:last-child td { border-bottom: none; }
 td.wrap { white-space: normal; min-width: 200px; max-width: 320px; }
 .empty-row { text-align: center; color: var(--muted); padding: 48px 16px; white-space: normal; }
 .note { font-size: 12px; color: var(--muted); margin-top: 16px; line-height: 1.8; }
+.status { font-size: 13px; margin-top: 16px; line-height: 1.8; padding: 12px 16px; border-radius: 12px; }
+.status.ok { background: #edfaf1; border: 1px solid #b7e6c6; color: #1a7f45; }
+.status.warn { background: #fff6e8; border: 1px solid #f3d3a1; color: #9a5b00; }
 </style>
 </head>
 <body>
@@ -2084,10 +2230,7 @@ td.wrap { white-space: normal; min-width: 200px; max-width: 320px; }
   </tbody>
 </table>
 </div>
-<p class="note">
-  ⚠️ この一覧はサーバー上のファイルに保存しています。Renderの無料プランは再デプロイ時にファイルが消える場合があるため、
-  応募が増えてきたら Postgres（DATABASE_URL）連携への切り替えをご検討ください。
-</p>
+__STORAGE_NOTE__
 </body>
 </html>"""
 
@@ -2133,7 +2276,11 @@ def api_audition_submit():
         "motivation": str(data.get("motivation", "")).strip(),
         "other": str(data.get("other", "")).strip(),
     }
-    _save_audition_application(entry)
+    try:
+        _save_audition_application(entry)
+    except Exception as e:
+        print(f"[audition] save failed: {e}", file=sys.stderr)
+        return jsonify({"error": "応募の保存に失敗しました。時間をおいて再度お試しください。"}), 500
 
     admin_url = f"{request.url_root.rstrip('/')}/audition/admin"
     try:
@@ -2183,7 +2330,31 @@ def audition_admin():
     else:
         rows = '<tr><td colspan="14" class="empty-row">応募はまだありません</td></tr>'
 
-    html = AUDITION_ADMIN_HTML.replace("__ROWS__", rows).replace("__COUNT__", str(len(applications)))
+    if _audition_db_ready():
+        storage_note = (
+            '<p class="status ok">✅ 応募データはデータベース（Postgres）に保存されています。'
+            'サーバーの再起動・再デプロイでも消えません。</p>'
+        )
+    elif os.environ.get("DATABASE_URL", ""):
+        storage_note = (
+            '<p class="status warn">⚠️ データベースに接続できていません。'
+            '現在の応募はサーバー上のファイルにのみ保存されており、再デプロイやスリープ復帰で消える可能性があります。'
+            'Render の環境変数 DATABASE_URL の値をご確認ください。</p>'
+        )
+    else:
+        storage_note = (
+            '<p class="status warn">⚠️ データベース未設定のため、応募はサーバー上のファイルにのみ保存されています。'
+            'Render 無料プランではスリープ復帰・再デプロイでファイルが消えるため、応募も消えます。'
+            'Render の環境変数に DATABASE_URL（面談予約アプリ eternal-interview-booking と同じ値）を設定してください。'
+            '設定すると、その時点でファイルに残っている応募は自動でデータベースへ移行されます。</p>'
+        )
+
+    html = (
+        AUDITION_ADMIN_HTML
+        .replace("__ROWS__", rows)
+        .replace("__COUNT__", str(len(applications)))
+        .replace("__STORAGE_NOTE__", storage_note)
+    )
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
 

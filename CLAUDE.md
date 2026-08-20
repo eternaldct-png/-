@@ -133,7 +133,8 @@ Googleフォームの代わりに、サイト内に応募フォームを実装�
 
 ### 仕組み
 - `/audition` — 応募フォーム（基本情報・活動について・アピール・確認事項の4セクション）
-- `/api/audition/submit` — POST、`posts/audition_applications.json` に保存
+- `/api/audition/submit` — POST、`DATABASE_URL`（Postgres/Supabase）の `audition_applications` テーブルに保存
+  （併せて `posts/audition_applications.json` にも控えを書き出す。DBが未設定・接続不可のときはファイルのみ）
 - `/audition/admin` — `WEB_PASSWORD` でログインして応募一覧を確認（`/goods/admin` と同じパスワード）
 - 応募があると、面談予約アプリ（`eternal-interview-booking`）と共有の `DATABASE_URL`（Postgres/Supabase）から
   `booking_line_links` テーブルの `person='admin'` で連携済みのLINEユーザーへ通知を送る
@@ -141,8 +142,13 @@ Googleフォームの代わりに、サイト内に応募フォームを実装�
   未設定なら通知は静かにスキップされ、応募自体は保存される）
 
 ### 注意
-- `posts/audition_applications.json` はRenderの無料プランでは再デプロイ時に消える可能性がある。
-  応募が増えてきたらPostgres連携への切り替えを検討する。
+- **応募データの永続化には `DATABASE_URL` が必須**。Renderの無料プランはファイルが再デプロイ・スリープ復帰で
+  消えるため、未設定だと応募が消える。`eternal-interview-booking` と同じ値を設定すればよい。
+  設定した時点でファイルに残っている応募は、初回アクセス時に自動でDBへ移行される（`id` で重複スキップ）。
+- `/audition/admin` の下部に保存先のステータス（DB保存中／ファイルのみ）が表示される。
+  「⚠️ データベース未設定」と出ていたらRenderの環境変数を確認する。
+- 管理画面のログインセッションを再起動後も保つには `FLASK_SECRET_KEY` の設定が必要
+  （未設定だと起動ごとにランダム値になり、再起動のたびに再ログインが必要になる）。
 - LINE通知を受け取るには、面談予約アプリの公式LINEアカウントで「連携 admin」を送っておく必要がある
   （手順: `docs/booking_line_setup.md`）。
 
