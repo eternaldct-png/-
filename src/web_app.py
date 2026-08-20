@@ -1868,7 +1868,75 @@ def _audition_line_admin_user_ids():
         return []
 
 
-def _notify_audition_line(entry, admin_url):
+def _format_audition_line_text(entry):
+    """応募内容を全項目LINE本文に整形する。未入力の任意項目も「（未記入）」として残す。"""
+
+    def v(key):
+        s = str(entry.get(key, "") or "").strip()
+        return s if s else "（未記入）"
+
+    lines = [
+        "🎤 新しいオーディション応募がありました",
+        "",
+        f"📅 応募日時: {v('created_at')}",
+        "",
+        "―― 基本情報 ――",
+        f"お名前: {v('name')}（{v('furigana')}）",
+        f"性別: {v('gender')}",
+        f"メール: {v('email')}",
+        f"都道府県: {v('prefecture')}",
+        f"保護者の同意（未成年のみ）: {v('minor_consent')}",
+        "",
+        "―― 活動について ――",
+        f"活動名: {v('activity_name')}",
+        f"配信・ライバー活動の経験: {v('experience')}",
+        "【活動歴・実績】",
+        v("history"),
+        "【得意なジャンル・企画】",
+        v("genre"),
+        f"活動できる頻度: {v('frequency')}",
+        "【SNSアカウント】",
+        v("sns"),
+        "",
+        "―― アピール ――",
+        "【自己PR】",
+        v("self_pr"),
+        "",
+        "【応募動機】",
+        v("motivation"),
+        "",
+        "―― その他ご質問・ご要望 ――",
+        v("other"),
+    ]
+    return "\n".join(lines)
+
+
+def _split_line_text(text, limit=4800):
+    """LINEの1通あたりの文字数上限を超える場合、行単位で分割して (1/2) 等の見出しを付ける。"""
+    if len(text) <= limit:
+        return [text]
+
+    chunks, cur = [], ""
+    for line in text.split("\n"):
+        while len(line) > limit:
+            if cur:
+                chunks.append(cur)
+                cur = ""
+            chunks.append(line[:limit])
+            line = line[limit:]
+        if cur and len(cur) + 1 + len(line) > limit:
+            chunks.append(cur)
+            cur = line
+        else:
+            cur = f"{cur}\n{line}" if cur else line
+    if cur:
+        chunks.append(cur)
+
+    total = len(chunks)
+    return [f"({i}/{total})\n{c}" for i, c in enumerate(chunks, 1)]
+
+
+def _notify_audition_line(entry):
     import line_messaging
 
     if not line_messaging.is_configured():
@@ -1876,17 +1944,10 @@ def _notify_audition_line(entry, admin_url):
     user_ids = _audition_line_admin_user_ids()
     if not user_ids:
         return
-    text = (
-        f"🎤 新しいオーディション応募がありました\n\n"
-        f"お名前: {entry['name']}（{entry['furigana']}）\n"
-        f"メール: {entry['email']}\n"
-        f"都道府県: {entry['prefecture']}\n"
-        f"経験: {entry['experience']}\n"
-        f"得意ジャンル: {entry['genre']}\n\n"
-        f"詳細は管理画面で確認できます:\n{admin_url}"
-    )
+    messages = _split_line_text(_format_audition_line_text(entry))
     for uid in user_ids:
-        line_messaging.push_text(uid, text)
+        for msg in messages:
+            line_messaging.push_text(uid, msg)
 
 
 AUDITION_HTML = r"""<!DOCTYPE html>
@@ -2282,9 +2343,8 @@ def api_audition_submit():
         print(f"[audition] save failed: {e}", file=sys.stderr)
         return jsonify({"error": "応募の保存に失敗しました。時間をおいて再度お試しください。"}), 500
 
-    admin_url = f"{request.url_root.rstrip('/')}/audition/admin"
     try:
-        _notify_audition_line(entry, admin_url)
+        _notify_audition_line(entry)
     except Exception as e:
         print(f"[audition] LINE notify failed: {e}")
 
