@@ -1682,6 +1682,12 @@ AUDITION_REQUIRED_FIELDS = [
 ]
 
 
+def _audition_is_open():
+    """Render の環境変数で、保存済みフォームの公開・停止を切り替える。"""
+    status = os.environ.get("AUDITION_STATUS", "closed").strip().lower()
+    return status in {"open", "true", "1", "on"}
+
+
 AUDITION_COLUMNS = [
     "id", "created_at", "name", "furigana", "gender", "email", "prefecture",
     "minor_consent", "activity_name", "experience", "history", "genre",
@@ -1950,7 +1956,9 @@ def _notify_audition_line(entry):
             line_messaging.push_text(uid, msg)
 
 
-AUDITION_HTML = r"""<!DOCTYPE html>
+# 次回の募集でも再利用する受付フォーム本体。
+# AUDITION_STATUS=open のときだけ /audition で公開する。
+AUDITION_FORM_TEMPLATE_HTML = r"""<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
@@ -2181,6 +2189,71 @@ document.getElementById('auditionForm').addEventListener('submit', async (e) => 
 </html>"""
 
 
+AUDITION_CLOSED_HTML = r"""<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#f7f7fb">
+<title>オーディション受付終了 | ETERNALd.c.t</title>
+<style>
+:root {
+  --bg: #f7f7fb; --surface: #ffffff;
+  --grad: linear-gradient(135deg, #7c3aed, #d946ef, #ec4899);
+  --text: #1f2333; --muted: #6b7280; --border: #eceaf5;
+  --shadow: 0 16px 48px rgba(124,58,237,0.12);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg); color: var(--text); min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
+  display: grid; place-items: center; padding: 24px 16px;
+}
+.card {
+  width: 100%; max-width: 480px; background: var(--surface);
+  border: 1px solid var(--border); border-radius: 24px;
+  box-shadow: var(--shadow); overflow: hidden; text-align: center;
+}
+.accent { height: 7px; background: var(--grad); }
+.content { padding: 46px 28px 42px; }
+.brand {
+  display: inline-block; font-size: 11px; font-weight: 800; letter-spacing: 0.12em;
+  color: white; background: var(--grad); padding: 5px 15px; border-radius: 999px;
+  margin-bottom: 24px;
+}
+.icon {
+  width: 74px; height: 74px; margin: 0 auto 22px; border-radius: 50%;
+  display: grid; place-items: center; background: #f5efff; font-size: 34px;
+}
+h1 { font-size: 23px; font-weight: 850; letter-spacing: 0.02em; margin-bottom: 14px; }
+.lead { font-size: 15px; font-weight: 700; line-height: 1.8; margin-bottom: 18px; }
+.note { font-size: 13px; color: var(--muted); line-height: 1.9; }
+.divider { width: 44px; height: 2px; margin: 26px auto; background: var(--grad); border-radius: 2px; }
+.thanks { font-size: 13px; color: var(--muted); line-height: 1.8; }
+@media (max-width: 380px) {
+  .content { padding: 38px 22px 34px; }
+  h1 { font-size: 21px; }
+}
+</style>
+</head>
+<body>
+<main class="card" aria-labelledby="page-title">
+  <div class="accent"></div>
+  <div class="content">
+    <span class="brand">ETERNAL d.c.t</span>
+    <div class="icon" aria-hidden="true">🎤</div>
+    <h1 id="page-title">受付は終了しました</h1>
+    <p class="lead">ライバー・配信者オーディションの<br>新規受付は終了いたしました。</p>
+    <p class="note">次回の募集が決まりましたら、<br>ETERNAL d.c.tの公式案内にてお知らせします。</p>
+    <div class="divider"></div>
+    <p class="thanks">たくさんのご応募をいただき、<br>ありがとうございました。</p>
+  </div>
+</main>
+</body>
+</html>"""
+
+
 AUDITION_ADMIN_LOGIN_HTML = r"""<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -2298,9 +2371,16 @@ __STORAGE_NOTE__
 
 @app.route("/audition")
 def audition_index():
+    headers = {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store, max-age=0",
+    }
+    if not _audition_is_open():
+        return AUDITION_CLOSED_HTML, 200, headers
+
     prefecture_options = "".join(f'<option value="{p}">{p}</option>' for p in PREFECTURES)
-    html = AUDITION_HTML.replace("__PREFECTURE_OPTIONS__", prefecture_options)
-    return html, 200, {"Content-Type": "text/html; charset=utf-8"}
+    html = AUDITION_FORM_TEMPLATE_HTML.replace("__PREFECTURE_OPTIONS__", prefecture_options)
+    return html, 200, headers
 
 
 @app.route("/api/audition/submit", methods=["POST"])
@@ -2308,6 +2388,9 @@ def api_audition_submit():
     import uuid
     from datetime import datetime
     from zoneinfo import ZoneInfo
+
+    if not _audition_is_open():
+        return jsonify({"error": "オーディションの受付は終了しました"}), 410
 
     data = request.get_json(force=True) or {}
 

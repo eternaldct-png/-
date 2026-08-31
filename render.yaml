@@ -20,6 +20,8 @@ services:
                              # 未設定だと応募がファイル保存のみとなり、再デプロイ・スリープ復帰で消える
       - key: LINE_CHANNEL_ACCESS_TOKEN
         sync: false          # /audition のLINE通知に必要（eternal-interview-bookingと同じ値。未設定時は通知スキップ）
+      - key: AUDITION_STATUS
+        value: closed        # 次回募集時は open に変更すると、保存済みの応募フォームが再公開される
 
   - type: web
     name: eternal-schedule
