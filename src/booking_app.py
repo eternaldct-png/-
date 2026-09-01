@@ -293,8 +293,18 @@ def _bookings_file_save(rows):
         json.dump(rows, f, ensure_ascii=False, indent=2)
 
 
+class BookingStorageError(Exception):
+    """予約を保存できなかった（重複ではない）ときに送出する。"""
+
+
+def _is_duplicate_error(exc):
+    """Postgres の一意制約違反（すでに予約済み）かどうか。"""
+    return getattr(exc, "pgcode", None) == "23505"
+
+
 def create_booking(member, slot, guest_name):
-    """slot は member ごとに一意。すでに member 自身が同じ枠で予約済みなら None を返す。"""
+    """slot は member ごとに一意。すでに member 自身が同じ枠で予約済みなら None を返す。
+    保存そのものに失敗した場合は BookingStorageError を送出する。"""
     booking = {
         "id": str(uuid.uuid4()), "member": member, "slot": slot,
         "guest_name": guest_name,
@@ -311,16 +321,23 @@ def create_booking(member, slot, guest_name):
                         "(id,member,slot,guest_name,created_at) VALUES (%s,%s,%s,%s,%s)",
                         (booking["id"], member, slot, guest_name, booking["created_at"]),
                     )
-            return booking
-        except Exception:
-            return None
+        except Exception as e:
+            if _is_duplicate_error(e):
+                return None
+            print(f"[booking_app] booking insert failed: {e}", file=sys.stderr)
+            raise BookingStorageError(str(e))
         finally:
             conn.close()
+        return booking
     rows = load_bookings()
     if any(r["slot"] == slot and r["member"] == member for r in rows):
         return None
     rows.append(booking)
-    _bookings_file_save(rows)
+    try:
+        _bookings_file_save(rows)
+    except Exception as e:
+        print(f"[booking_app] booking file save failed: {e}", file=sys.stderr)
+        raise BookingStorageError(str(e))
     return booking
 
 
@@ -811,9 +828,20 @@ def api_book_create(slug):
     slot = slot_iso(date, hour)
     if slot not in open_slots:
         return jsonify({"error": "この時間はすでに予約できません"}), 409
-    booking = create_booking(member, slot, guest_name)
+    try:
+        booking = create_booking(member, slot, guest_name)
+    except BookingStorageError:
+        return jsonify({"error": "予約を登録できませんでした。時間をおいてもう一度お試しください"}), 500
     if not booking:
         return jsonify({"error": "この時間はすでに予約できません"}), 409
+    # 実際に保存できているかを読み直して確認する（保存漏れを完了扱いにしない）
+    try:
+        saved = get_booking(booking["id"])
+    except Exception as e:
+        print(f"[booking_app] booking verify failed: {e}", file=sys.stderr)
+        saved = None
+    if not saved:
+        return jsonify({"error": "予約を登録できませんでした。時間をおいてもう一度お試しください"}), 500
     try:
         from google_calendar import sync_create
         google_id = sync_create({
@@ -832,7 +860,11 @@ def api_book_create(slug):
         notify_booking_created(booking)
     except Exception:
         pass
-    return jsonify({"ok": True})
+    return jsonify({
+        "ok": True,
+        "message": "完了登録しました。",
+        "booking": {"member": member, "date": date, "hour": hour, "guest_name": guest_name},
+    })
 
 
 
@@ -1083,6 +1115,30 @@ select.fi, input.fi {
 }
 @keyframes nav-spin { to { transform: rotate(360deg); } }
 .nav-loading-text { font-size: 13px; color: var(--muted); }
+.spinner-sm {
+  display: inline-block; width: 15px; height: 15px; vertical-align: -2px;
+  border: 2px solid rgba(255,255,255,0.35); border-top-color: #fff; border-radius: 50%;
+  animation: nav-spin 0.7s linear infinite; margin-right: 7px;
+}
+button[disabled], .btn-pri[disabled], .btn-sec[disabled] {
+  opacity: 0.6; cursor: not-allowed;
+}
+.wait-note {
+  font-size: 12px; color: var(--muted); text-align: center; margin-top: 10px; line-height: 1.6;
+}
+.wait-bar {
+  height: 3px; border-radius: 3px; background: var(--surface3);
+  overflow: hidden; margin-top: 10px;
+}
+.wait-bar span {
+  display: block; height: 100%; width: 40%; border-radius: 3px;
+  background: linear-gradient(90deg, var(--accent2), var(--accent-light));
+  animation: wait-slide 1.1s ease-in-out infinite;
+}
+@keyframes wait-slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
+}
 """
 
 TOAST_JS = """
@@ -1439,18 +1495,29 @@ BOOK_HTML = """<!DOCTYPE html>
     <div class="sheet-title" id="bk-title"></div>
     <input type="text" class="fi" id="f-name" placeholder="お名前">
     <div class="btn-row">
-      <button class="btn-sec" onclick="closeModal()">キャンセル</button>
-      <button class="btn-pri" onclick="confirmBook()">予約する</button>
+      <button class="btn-sec" id="bk-cancel" onclick="closeModal()">キャンセル</button>
+      <button class="btn-pri" id="bk-submit" onclick="confirmBook()">予約する</button>
     </div>
+    <div class="wait-bar" id="bk-bar" style="display:none;"><span></span></div>
+    <div class="wait-note" id="bk-wait" style="display:none;"></div>
   </div>
 </div>
 <div class="overlay" id="done-overlay" onclick="onDoneBg(event)">
   <div class="sheet" style="text-align:center;">
     <div class="handle"></div>
     <div style="font-size:40px; margin-bottom:8px;">✅</div>
-    <div class="sheet-title" style="margin-bottom:6px;">予約が完了しました</div>
+    <div class="sheet-title" id="done-title" style="margin-bottom:6px;">完了登録しました。</div>
     <div class="card-sub" id="done-detail" style="margin-bottom:16px;"></div>
     <button class="btn-pri" onclick="closeDone()">閉じる</button>
+  </div>
+</div>
+<div class="overlay" id="err-overlay" onclick="onErrBg(event)">
+  <div class="sheet" style="text-align:center;">
+    <div class="handle"></div>
+    <div style="font-size:40px; margin-bottom:8px;">⚠️</div>
+    <div class="sheet-title" style="margin-bottom:6px; color: var(--busy);">登録できませんでした</div>
+    <div class="card-sub" id="err-detail" style="margin-bottom:16px;"></div>
+    <button class="btn-pri" onclick="closeErr()">閉じる</button>
   </div>
 </div>
 <div class="toast" id="toast"></div>
@@ -1501,31 +1568,86 @@ function openModal(ds, h) {
   pickHour = { ds, h };
   document.getElementById('bk-title').textContent = `${ds} ${h} に予約`;
   document.getElementById('f-name').value = '';
+  setSending(false);
   document.getElementById('bk-overlay').classList.add('open');
   setTimeout(() => document.getElementById('f-name').focus(), 80);
 }
-function closeModal() { document.getElementById('bk-overlay').classList.remove('open'); pickHour = null; }
+function closeModal() {
+  if (sending) return;   // 送信中は閉じない
+  document.getElementById('bk-overlay').classList.remove('open');
+  pickHour = null;
+}
 function onBg(e) { if (e.target===document.getElementById('bk-overlay')) closeModal(); }
-function showDone(ds, h) {
+let sending = false;
+let waitTimer = null;
+function setSending(on) {
+  sending = on;
+  const btn = document.getElementById('bk-submit');
+  const cancel = document.getElementById('bk-cancel');
+  const bar = document.getElementById('bk-bar');
+  const note = document.getElementById('bk-wait');
+  btn.disabled = on; cancel.disabled = on;
+  document.getElementById('f-name').disabled = on;
+  bar.style.display = on ? 'block' : 'none';
+  note.style.display = on ? 'block' : 'none';
+  if (waitTimer) { clearInterval(waitTimer); waitTimer = null; }
+  if (on) {
+    btn.innerHTML = '<span class="spinner-sm"></span>予約中…';
+    const started = Date.now();
+    const tick = () => {
+      const sec = Math.floor((Date.now() - started) / 1000);
+      let msg = `予約を登録しています… ${sec}秒`;
+      if (sec >= 10) msg += '<br>サーバーの起動中かもしれません。1分ほどお待ちください';
+      note.innerHTML = msg;
+    };
+    tick();
+    waitTimer = setInterval(tick, 1000);
+  } else {
+    btn.textContent = '予約する';
+    note.innerHTML = '';
+  }
+}
+function showDone(ds, h, message) {
+  document.getElementById('done-title').textContent = message || '完了登録しました。';
   document.getElementById('done-detail').textContent = `${ds} ${h}〜`;
   document.getElementById('done-overlay').classList.add('open');
 }
 function closeDone() { document.getElementById('done-overlay').classList.remove('open'); }
 function onDoneBg(e) { if (e.target===document.getElementById('done-overlay')) closeDone(); }
+function showErr(msg) {
+  document.getElementById('err-detail').textContent = msg;
+  document.getElementById('err-overlay').classList.add('open');
+}
+function closeErr() { document.getElementById('err-overlay').classList.remove('open'); }
+function onErrBg(e) { if (e.target===document.getElementById('err-overlay')) closeErr(); }
 async function confirmBook() {
+  if (sending) return;   // 二重送信を防ぐ
   const guest_name = document.getElementById('f-name').value.trim();
   if (!guest_name) { toast('名前を入力してください'); return; }
   if (!pickHour) return;
   const { ds, h } = pickHour;
+  setSending(true);
   try {
     const r = await fetch(`/api/book/${SLUG}`, {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ date: ds, hour: h, guest_name }),
     });
-    const d = await r.json();
-    if (d.ok) { closeModal(); showDone(ds, h); await loadSlots(); }
-    else { toast(d.error || '予約できませんでした'); await loadSlots(); }
-  } catch(e) { toast('通信エラーが発生しました。予約できませんでした'); }
+    let d = null;
+    try { d = await r.json(); } catch(e) { d = null; }
+    setSending(false);
+    if (r.ok && d && d.ok) {
+      closeModal();
+      showDone(ds, h, d.message);
+    } else {
+      closeModal();
+      showErr((d && d.error) || `予約を登録できませんでした（エラー ${r.status}）`);
+    }
+    await loadSlots();
+  } catch(e) {
+    setSending(false);
+    closeModal();
+    showErr('通信エラーが発生しました。予約は登録されていません');
+  }
 }
 __TOAST_JS__
 loadSlots();
