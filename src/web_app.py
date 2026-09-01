@@ -1801,6 +1801,26 @@ def _append_audition_file(entry):
         return False
 
 
+def _replace_audition_file(rows):
+    """応募ファイル全体を原子的に置き換える。削除中の書き込み中断でJSONを壊さない。"""
+    import json
+
+    AUDITION_FILE.parent.mkdir(parents=True, exist_ok=True)
+    temporary_file = AUDITION_FILE.with_suffix(AUDITION_FILE.suffix + ".tmp")
+    try:
+        with open(temporary_file, "w", encoding="utf-8") as f:
+            json.dump(rows, f, ensure_ascii=False, indent=2)
+        temporary_file.replace(AUDITION_FILE)
+        return True
+    except Exception as e:
+        print(f"[audition] file replace failed: {e}", file=sys.stderr)
+        try:
+            temporary_file.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return False
+
+
 def _load_audition_applications():
     """古い順に応募を返す。DBが使えるときはDBを正とする。"""
     conn = _audition_db_conn()
@@ -1819,6 +1839,57 @@ def _load_audition_applications():
         finally:
             conn.close()
     return _load_audition_file()
+
+
+def _delete_audition_application(application_id):
+    """応募をDBと控えJSONの両方から削除する。
+
+    DATABASE_URL が設定済みでDBに接続できないときは、DB側にデータが
+    残ったまま「削除完了」と見せないため失敗とする。
+    """
+    application_id = str(application_id or "").strip()
+    if not application_id:
+        return False
+
+    original_rows = _load_audition_file()
+    remaining_rows = [
+        row for row in original_rows if str(row.get("id", "")) != application_id
+    ]
+    removed_from_file = len(remaining_rows) != len(original_rows)
+
+    if not os.environ.get("DATABASE_URL", ""):
+        if removed_from_file and not _replace_audition_file(remaining_rows):
+            raise RuntimeError("控えファイルから削除できませんでした")
+        return removed_from_file
+
+    conn = _audition_db_conn()
+    if not conn:
+        raise RuntimeError("データベースに接続できませんでした")
+
+    try:
+        if not _ensure_audition_table(conn):
+            raise RuntimeError("応募テーブルを確認できませんでした")
+
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "DELETE FROM audition_applications WHERE id = %s",
+                    (application_id,),
+                )
+                removed_from_db = cur.rowcount > 0
+
+            # DBトランザクション中に控えも更新。失敗したらDB削除をロールバック。
+            if removed_from_file and not _replace_audition_file(remaining_rows):
+                raise RuntimeError("控えファイルから削除できませんでした")
+
+        return removed_from_db or removed_from_file
+    except Exception:
+        # DBのcommit失敗時は、先に更新した控えJSONも可能な限り元に戻す。
+        if removed_from_file:
+            _replace_audition_file(original_rows)
+        raise
+    finally:
+        conn.close()
 
 
 def _save_audition_application(entry):
@@ -2311,60 +2382,179 @@ AUDITION_ADMIN_HTML = r"""<!DOCTYPE html>
 <title>オーディション応募一覧 | ETERNALd.c.t</title>
 <style>
 :root {
-  --bg: #f7f7fb; --surface: #ffffff;
+  --bg: #f7f7fb; --surface: #ffffff; --surface2: #f7f5fc;
   --grad: linear-gradient(135deg, #7c3aed, #d946ef, #ec4899);
-  --accent-text: #9333ea; --text: #1f2333; --muted: #6b7280; --border: #eceaf5;
+  --accent: #7c3aed; --accent-text: #9333ea; --text: #1f2333; --muted: #6b7280; --border: #e7e3f0;
+  --danger: #dc2626; --danger-bg: #fff1f2;
   --shadow: 0 6px 24px rgba(124,58,237,0.08);
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
   background: var(--bg); color: var(--text); min-height: 100vh;
   font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
-  padding: 22px;
+  padding: 24px;
 }
-.header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; flex-wrap: wrap; gap: 10px; }
-.header h1 { font-size: 19px; font-weight: 800; }
+.page { width: min(1240px, 100%); margin: 0 auto; }
+.header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; flex-wrap: wrap; gap: 14px; }
+.title-wrap { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.header h1 { font-size: clamp(20px, 3vw, 26px); font-weight: 850; letter-spacing: -.02em; }
 .header .count { font-size: 13px; color: var(--muted); }
-.header a {
+.logout {
   font-size: 13px; font-weight: 700; color: white; text-decoration: none;
   background: var(--grad); padding: 8px 16px; border-radius: 999px;
   box-shadow: 0 6px 18px rgba(217,70,239,0.22);
 }
+.toolbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+  padding: 12px; margin-bottom: 16px; box-shadow: var(--shadow);
+}
+.search-wrap { flex: 1 1 300px; position: relative; }
+.search-wrap span { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--muted); }
+#applicant-search {
+  width: 100%; border: 1px solid var(--border); background: var(--bg); color: var(--text);
+  border-radius: 11px; padding: 11px 13px 11px 38px; font-size: 14px; outline: none;
+}
+#applicant-search:focus { border-color: #b794f6; box-shadow: 0 0 0 3px rgba(124,58,237,.1); }
+.view-switch { display: inline-flex; background: var(--surface2); padding: 4px; border-radius: 10px; gap: 3px; }
+.view-button { border: 0; background: transparent; color: var(--muted); border-radius: 8px; padding: 8px 12px; font-weight: 750; cursor: pointer; }
+.view-button.active { background: var(--surface); color: var(--accent-text); box-shadow: 0 2px 8px rgba(31,35,51,.08); }
+.result-count { color: var(--muted); font-size: 12px; min-width: 68px; text-align: right; }
+.message { padding: 12px 15px; border-radius: 12px; margin-bottom: 16px; font-size: 13px; font-weight: 700; }
+.message.ok { background: #edfaf1; border: 1px solid #b7e6c6; color: #1a7f45; }
+.message.error { background: var(--danger-bg); border: 1px solid #fecdd3; color: #b91c1c; }
+.card-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.app-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow); overflow: hidden; }
+.card-head { display: flex; justify-content: space-between; gap: 12px; padding: 17px 18px 13px; border-bottom: 1px solid var(--border); }
+.name { font-size: 17px; font-weight: 850; line-height: 1.35; }
+.furigana { color: var(--muted); font-size: 11px; margin-top: 3px; }
+.date { color: var(--muted); font-size: 11px; white-space: nowrap; }
+.activity { color: var(--accent-text); font-size: 13px; font-weight: 800; margin-top: 6px; }
+.quick-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 14px 18px; gap: 12px 18px; }
+.field dt, .long-field dt { color: var(--muted); font-size: 10px; font-weight: 750; margin-bottom: 4px; }
+.field dd { font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+.long-details { border-top: 1px solid var(--border); }
+.long-details summary { cursor: pointer; list-style: none; padding: 13px 18px; font-size: 13px; font-weight: 800; color: var(--accent-text); }
+.long-details summary::-webkit-details-marker { display: none; }
+.long-details summary::after { content: '・・・'; float: right; letter-spacing: 2px; color: var(--muted); }
+.long-content { border-top: 1px solid var(--border); background: #fcfbff; padding: 15px 18px; display: grid; gap: 14px; }
+.long-field dd { font-size: 13px; line-height: 1.75; white-space: pre-wrap; overflow-wrap: anywhere; }
+.card-actions { display: flex; justify-content: flex-end; padding: 12px 18px; border-top: 1px solid var(--border); }
+.delete-form { display: inline; }
+.delete-button { border: 1px solid #fecdd3; background: var(--danger-bg); color: var(--danger); padding: 7px 11px; border-radius: 9px; font-size: 12px; font-weight: 800; cursor: pointer; }
+.delete-button:hover { background: #ffe4e6; }
+.table-view { display: none; }
 .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); }
-table { border-collapse: collapse; width: 100%; min-width: 1100px; font-size: 13px; }
-th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; vertical-align: top; }
-th { background: var(--surface2, #f7f5fc); color: var(--muted); font-weight: 700; position: sticky; top: 0; }
-td { background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 860px; font-size: 13px; }
+th, td { padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--border); vertical-align: middle; }
+th { background: var(--surface2); color: var(--muted); font-weight: 750; position: sticky; top: 0; }
 tr:last-child td { border-bottom: none; }
-td.wrap { white-space: normal; min-width: 200px; max-width: 320px; }
-.empty-row { text-align: center; color: var(--muted); padding: 48px 16px; white-space: normal; }
-.note { font-size: 12px; color: var(--muted); margin-top: 16px; line-height: 1.8; }
+.detail-button { border: 0; color: var(--accent-text); background: transparent; padding: 6px; font-weight: 800; cursor: pointer; white-space: nowrap; }
+.empty-state { text-align: center; color: var(--muted); padding: 54px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; }
+.hidden { display: none !important; }
 .status { font-size: 13px; margin-top: 16px; line-height: 1.8; padding: 12px 16px; border-radius: 12px; }
 .status.ok { background: #edfaf1; border: 1px solid #b7e6c6; color: #1a7f45; }
 .status.warn { background: #fff6e8; border: 1px solid #f3d3a1; color: #9a5b00; }
+@media (max-width: 760px) {
+  body { padding: 14px; }
+  .card-grid { grid-template-columns: 1fr; }
+  .toolbar { align-items: stretch; }
+  .view-switch { flex: 1; }
+  .view-button { flex: 1; }
+  .result-count { width: 100%; text-align: left; padding-left: 2px; }
+}
+@media (max-width: 430px) {
+  .quick-grid { grid-template-columns: 1fr; }
+  .card-head { flex-direction: column; }
+}
 </style>
 </head>
 <body>
-<div class="header">
-  <h1>🎤 オーディション応募一覧</h1>
-  <span class="count">__COUNT__ 件</span>
-  <a href="/audition/admin/logout">ログアウト</a>
+<div class="page">
+  <div class="header">
+    <div class="title-wrap">
+      <h1>🎤 オーディション応募一覧</h1>
+      <span class="count">__COUNT__ 件</span>
+    </div>
+    <a class="logout" href="/audition/admin/logout">ログアウト</a>
+  </div>
+  __MESSAGE__
+  <div class="toolbar">
+    <label class="search-wrap">
+      <span>🔍</span>
+      <input id="applicant-search" type="search" placeholder="名前・活動名・メール・都道府県で検索">
+    </label>
+    <div class="view-switch" aria-label="表示切り替え">
+      <button class="view-button active" type="button" data-view="cards">▦ カード</button>
+      <button class="view-button" type="button" data-view="table">☰ 一覧</button>
+    </div>
+    <span class="result-count" id="result-count">__COUNT__ 件を表示</span>
+  </div>
+  <section class="card-view" id="card-view">
+    <div class="card-grid">__CARDS__</div>
+  </section>
+  <section class="table-view" id="table-view">
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>応募日時</th><th>お名前</th><th>活動名</th><th>都道府県</th><th>頻度</th><th>経験</th><th>詳細</th><th>操作</th></tr></thead>
+        <tbody>__ROWS__</tbody>
+      </table>
+    </div>
+  </section>
+  <p class="empty-state hidden" id="no-results">条件に一致する応募はありません</p>
+  __STORAGE_NOTE__
 </div>
-<div class="table-wrap">
-<table>
-  <thead>
-    <tr>
-      <th>応募日時</th><th>お名前</th><th>ふりがな</th><th>性別</th><th>メール</th><th>都道府県</th>
-      <th>活動名</th><th>経験</th><th>得意ジャンル</th><th>頻度</th><th>SNS</th>
-      <th>自己PR</th><th>応募動機</th><th>その他</th>
-    </tr>
-  </thead>
-  <tbody>
-    __ROWS__
-  </tbody>
-</table>
-</div>
-__STORAGE_NOTE__
+<script>
+(() => {
+  const search = document.getElementById('applicant-search');
+  const cards = [...document.querySelectorAll('.app-card')];
+  const rows = [...document.querySelectorAll('tr[data-search]')];
+  const resultCount = document.getElementById('result-count');
+  const noResults = document.getElementById('no-results');
+
+  function setView(view) {
+    const table = view === 'table';
+    document.getElementById('card-view').style.display = table ? 'none' : 'block';
+    document.getElementById('table-view').style.display = table ? 'block' : 'none';
+    document.querySelectorAll('.view-button').forEach(button => {
+      button.classList.toggle('active', button.dataset.view === view);
+    });
+    localStorage.setItem('audition-admin-view', view);
+  }
+
+  function filterApplicants() {
+    const query = search.value.trim().toLocaleLowerCase('ja');
+    let visible = 0;
+    cards.forEach(card => {
+      const match = !query || card.dataset.search.toLocaleLowerCase('ja').includes(query);
+      card.classList.toggle('hidden', !match);
+      if (match) visible += 1;
+    });
+    rows.forEach(row => {
+      const match = !query || row.dataset.search.toLocaleLowerCase('ja').includes(query);
+      row.classList.toggle('hidden', !match);
+    });
+    resultCount.textContent = `${visible} 件を表示`;
+    noResults.classList.toggle('hidden', visible !== 0);
+  }
+
+  document.querySelectorAll('.view-button').forEach(button => {
+    button.addEventListener('click', () => setView(button.dataset.view));
+  });
+  document.querySelectorAll('.detail-button').forEach(button => {
+    button.addEventListener('click', () => {
+      setView('cards');
+      const card = document.getElementById(button.dataset.target);
+      if (card) {
+        card.querySelector('details').open = true;
+        card.scrollIntoView({behavior: 'smooth', block: 'start'});
+      }
+    });
+  });
+  search.addEventListener('input', filterApplicants);
+  setView(localStorage.getItem('audition-admin-view') === 'table' ? 'table' : 'cards');
+})();
+</script>
 </body>
 </html>"""
 
@@ -2436,6 +2626,8 @@ def api_audition_submit():
 
 @app.route("/audition/admin", methods=["GET", "POST"])
 def audition_admin():
+    import secrets
+
     web_password = os.environ.get("WEB_PASSWORD", "")
     error_html = ""
 
@@ -2449,29 +2641,74 @@ def audition_admin():
         html = AUDITION_ADMIN_LOGIN_HTML.replace("__ERROR__", error_html)
         return html, (200 if not error_html else 401), {"Content-Type": "text/html; charset=utf-8"}
 
+    csrf_token = session.get("audition_admin_csrf")
+    if not csrf_token:
+        csrf_token = secrets.token_urlsafe(24)
+        session["audition_admin_csrf"] = csrf_token
+
     applications = list(reversed(_load_audition_applications()))
     if applications:
+        def delete_form(application_id):
+            return (
+                f'<form class="delete-form" method="POST" action="/audition/admin/delete/{escape(application_id)}" '
+                'onsubmit="return confirm(\'この応募データを完全に削除します。元に戻せません。よろしいですか？\')">'
+                f'<input type="hidden" name="csrf_token" value="{escape(csrf_token)}">'
+                '<button class="delete-button" type="submit">削除</button></form>'
+            )
+
+        cards = "".join(
+            (
+                f'<article class="app-card" id="app-{escape(a.get("id", ""))}" '
+                f'data-search="{escape(" ".join(str(a.get(key, "")) for key in AUDITION_COLUMNS))}">'
+                '<div class="card-head"><div>'
+                f'<div class="name">{escape(a.get("name", ""))}</div>'
+                f'<div class="furigana">{escape(a.get("furigana", ""))}</div>'
+                f'<div class="activity">{escape(a.get("activity_name", "") or "活動名未記入")}</div>'
+                f'</div><time class="date">{escape(a.get("created_at", ""))}</time></div>'
+                '<dl class="quick-grid">'
+                f'<div class="field"><dt>メール</dt><dd>{escape(a.get("email", ""))}</dd></div>'
+                f'<div class="field"><dt>都道府県</dt><dd>{escape(a.get("prefecture", ""))}</dd></div>'
+                f'<div class="field"><dt>性別</dt><dd>{escape(a.get("gender", "") or "未記入")}</dd></div>'
+                f'<div class="field"><dt>未成年者の同意</dt><dd>{escape(a.get("minor_consent", "") or "未記入")}</dd></div>'
+                f'<div class="field"><dt>配信経験</dt><dd>{escape(a.get("experience", ""))}</dd></div>'
+                f'<div class="field"><dt>配信頻度</dt><dd>{escape(a.get("frequency", ""))}</dd></div>'
+                f'<div class="field"><dt>得意ジャンル</dt><dd>{escape(a.get("genre", "") or "未記入")}</dd></div>'
+                f'<div class="field"><dt>SNS</dt><dd>{escape(a.get("sns", "") or "未記入")}</dd></div>'
+                '</dl>'
+                '<details class="long-details"><summary>自己PR・応募動機を表示</summary><dl class="long-content">'
+                f'<div class="long-field"><dt>活動歴・実績</dt><dd>{escape(a.get("history", "") or "未記入")}</dd></div>'
+                f'<div class="long-field"><dt>自己PR</dt><dd>{escape(a.get("self_pr", "") or "未記入")}</dd></div>'
+                f'<div class="long-field"><dt>応募動機</dt><dd>{escape(a.get("motivation", "") or "未記入")}</dd></div>'
+                f'<div class="long-field"><dt>その他</dt><dd>{escape(a.get("other", "") or "未記入")}</dd></div>'
+                '</dl></details>'
+                f'<div class="card-actions">{delete_form(a.get("id", ""))}</div>'
+                '</article>'
+            )
+            for a in applications
+        )
         rows = "".join(
-            "<tr>"
+            f'<tr data-search="{escape(" ".join(str(a.get(key, "")) for key in AUDITION_COLUMNS))}">'
             f"<td>{escape(a.get('created_at',''))}</td>"
             f"<td>{escape(a.get('name',''))}</td>"
-            f"<td>{escape(a.get('furigana',''))}</td>"
-            f"<td>{escape(a.get('gender',''))}</td>"
-            f"<td>{escape(a.get('email',''))}</td>"
-            f"<td>{escape(a.get('prefecture',''))}</td>"
             f"<td>{escape(a.get('activity_name',''))}</td>"
-            f"<td>{escape(a.get('experience',''))}</td>"
-            f"<td class='wrap'>{escape(a.get('genre',''))}</td>"
+            f"<td>{escape(a.get('prefecture',''))}</td>"
             f"<td>{escape(a.get('frequency',''))}</td>"
-            f"<td class='wrap'>{escape(a.get('sns',''))}</td>"
-            f"<td class='wrap'>{escape(a.get('self_pr',''))}</td>"
-            f"<td class='wrap'>{escape(a.get('motivation',''))}</td>"
-            f"<td class='wrap'>{escape(a.get('other',''))}</td>"
+            f"<td>{escape(a.get('experience',''))}</td>"
+            f'<td><button class="detail-button" type="button" data-target="app-{escape(a.get("id", ""))}">詳細を見る</button></td>'
+            f"<td>{delete_form(a.get('id', ''))}</td>"
             "</tr>"
             for a in applications
         )
     else:
-        rows = '<tr><td colspan="14" class="empty-row">応募はまだありません</td></tr>'
+        cards = '<p class="empty-state">応募はまだありません</p>'
+        rows = '<tr><td colspan="8" class="empty-state">応募はまだありません</td></tr>'
+
+    message = session.pop("audition_admin_message", None)
+    if message:
+        message_class = "ok" if message.get("ok") else "error"
+        message_html = f'<p class="message {message_class}">{escape(message.get("text", ""))}</p>'
+    else:
+        message_html = ""
 
     if _audition_db_ready():
         storage_note = (
@@ -2495,10 +2732,46 @@ def audition_admin():
     html = (
         AUDITION_ADMIN_HTML
         .replace("__ROWS__", rows)
+        .replace("__CARDS__", cards)
         .replace("__COUNT__", str(len(applications)))
+        .replace("__MESSAGE__", message_html)
         .replace("__STORAGE_NOTE__", storage_note)
     )
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
+
+
+@app.route("/audition/admin/delete/<application_id>", methods=["POST"])
+def audition_admin_delete(application_id):
+    import hmac
+
+    if not session.get("audition_admin_ok"):
+        return redirect("/audition/admin")
+
+    expected_token = str(session.get("audition_admin_csrf", ""))
+    submitted_token = str(request.form.get("csrf_token", ""))
+    if not expected_token or not hmac.compare_digest(expected_token, submitted_token):
+        return "不正なリクエストです。管理画面を再読み込みしてください。", 403
+
+    try:
+        deleted = _delete_audition_application(application_id)
+        if deleted:
+            session["audition_admin_message"] = {
+                "ok": True,
+                "text": "応募データを1件削除しました。",
+            }
+        else:
+            session["audition_admin_message"] = {
+                "ok": False,
+                "text": "対象の応募データは見つかりませんでした。",
+            }
+    except Exception as e:
+        print(f"[audition] delete failed: {e}", file=sys.stderr)
+        session["audition_admin_message"] = {
+            "ok": False,
+            "text": "削除に失敗しました。データは削除されていません。",
+        }
+
+    return redirect("/audition/admin")
 
 
 @app.route("/audition/admin/logout")
