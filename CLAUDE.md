@@ -135,7 +135,8 @@ Googleフォームの代わりに、サイト内に応募フォームを実装�
 - `/audition` — 応募フォーム（基本情報・活動について・アピール・確認事項の4セクション）
 - `/api/audition/submit` — POST、`DATABASE_URL`（Postgres/Supabase）の `audition_applications` テーブルに保存
   （併せて `posts/audition_applications.json` にも控えを書き出す。DBが未設定・接続不可のときはファイルのみ）
-- `/audition/admin` — `WEB_PASSWORD` でログインして応募一覧を確認（`/goods/admin` と同じパスワード）
+- `/audition/admin` — `WEB_PASSWORD` でログインして応募一覧を確認（`/goods/admin` と同じパスワード）。
+  カード／一覧表示の切り替え、応募者検索、確認ダイアログ付きの削除ができる。
 - 応募があると、面談予約アプリ（`eternal-interview-booking`）と共有の `DATABASE_URL`（Postgres/Supabase）から
   `booking_line_links` テーブルの `person='admin'` で連携済みのLINEユーザーへ通知を送る
   （`kazuto-post-generator` 側にも同じ `DATABASE_URL` と `LINE_CHANNEL_ACCESS_TOKEN` の設定が必要。
