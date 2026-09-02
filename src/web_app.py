@@ -674,6 +674,116 @@ document.querySelector('.plat-btn').classList.add('active');
 </html>"""
 
 
+AUDITION_ADMIN_EDIT_HTML = r"""<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>応募データ編集 | ETERNALd.c.t</title>
+<style>
+:root {
+  --bg: #f7f7fb; --surface: #fff; --surface2: #fcfbff;
+  --accent: #7c3aed; --accent-text: #9333ea; --text: #1f2333; --muted: #6b7280;
+  --border: #e7e3f0; --warn: #9a5b00; --warn-bg: #fff7e6;
+  --grad: linear-gradient(135deg, #7c3aed, #d946ef, #ec4899);
+  --shadow: 0 6px 24px rgba(124,58,237,.08);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  min-height: 100vh; padding: 24px; background: var(--bg); color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
+}
+.page { width: min(900px, 100%); margin: 0 auto; }
+.header { margin-bottom: 18px; }
+.back { display: inline-block; color: var(--accent-text); text-decoration: none; font-size: 13px; font-weight: 800; margin-bottom: 12px; }
+h1 { font-size: clamp(21px, 4vw, 28px); margin-bottom: 6px; }
+.meta { color: var(--muted); font-size: 12px; }
+.notice { background: var(--warn-bg); border: 1px solid #f3d3a1; color: var(--warn); padding: 12px 15px; border-radius: 12px; margin-bottom: 14px; font-size: 13px; line-height: 1.6; }
+.error { background: #fff1f2; border: 1px solid #fecdd3; color: #b91c1c; padding: 12px 15px; border-radius: 12px; margin-bottom: 14px; font-size: 13px; font-weight: 700; }
+.section { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow); padding: 20px; margin-bottom: 14px; }
+.section h2 { font-size: 15px; margin-bottom: 16px; }
+.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; }
+.field.full { grid-column: 1 / -1; }
+label { display: block; color: var(--muted); font-size: 11px; font-weight: 800; margin-bottom: 6px; }
+input, select, textarea {
+  width: 100%; color: var(--text); background: var(--surface2); border: 1.5px solid var(--border);
+  border-radius: 10px; padding: 11px 12px; font: inherit; font-size: 14px; outline: none;
+}
+input:focus, select:focus, textarea:focus { border-color: #b794f6; box-shadow: 0 0 0 3px rgba(124,58,237,.1); }
+textarea { min-height: 110px; line-height: 1.7; resize: vertical; }
+.activity-field { background: var(--warn-bg); border: 1px solid #f3d3a1; border-radius: 13px; padding: 14px; }
+.activity-field label { color: var(--warn); font-size: 12px; }
+.actions { display: flex; justify-content: flex-end; gap: 10px; position: sticky; bottom: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 14px; background: rgba(255,255,255,.94); backdrop-filter: blur(10px); box-shadow: var(--shadow); }
+.button { border: 0; border-radius: 10px; padding: 11px 18px; font-size: 14px; font-weight: 800; cursor: pointer; text-decoration: none; }
+.button.cancel { color: var(--muted); background: var(--bg); border: 1px solid var(--border); }
+.button.save { color: white; background: var(--grad); box-shadow: 0 6px 18px rgba(217,70,239,.22); }
+@media (max-width: 640px) {
+  body { padding: 14px; }
+  .section { padding: 16px; }
+  .form-grid { grid-template-columns: 1fr; }
+  .field.full { grid-column: auto; }
+  .actions { display: grid; grid-template-columns: 1fr 1.4fr; }
+  .button { text-align: center; padding-inline: 10px; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="header">
+    <a class="back" href="/audition/admin">← 応募一覧に戻る</a>
+    <h1>✏️ 応募データを編集</h1>
+    <p class="meta">応募日時：__CREATED_AT__　／　応募者：__DISPLAY_NAME__</p>
+  </header>
+  __ERROR__
+  <p class="notice">活動名が未記入の場合は、下の欄に入力して「変更を保存する」を押してください。</p>
+  <form method="POST">
+    <input type="hidden" name="csrf_token" value="__CSRF_TOKEN__">
+    <section class="section">
+      <h2>活動名</h2>
+      <div class="activity-field">
+        <label for="activity_name">活動名（配信上の名前）</label>
+        <input id="activity_name" type="text" name="activity_name" value="__ACTIVITY_NAME__" placeholder="例）かずと" autofocus>
+      </div>
+    </section>
+    <section class="section">
+      <h2>基本情報</h2>
+      <div class="form-grid">
+        <div class="field"><label for="name">お名前（本名）</label><input id="name" type="text" name="name" value="__NAME__" required></div>
+        <div class="field"><label for="furigana">ふりがな</label><input id="furigana" type="text" name="furigana" value="__FURIGANA__"></div>
+        <div class="field"><label for="gender">性別</label><select id="gender" name="gender">__GENDER_OPTIONS__</select></div>
+        <div class="field"><label for="email">メール</label><input id="email" type="email" name="email" value="__EMAIL__"></div>
+        <div class="field"><label for="prefecture">都道府県</label><select id="prefecture" name="prefecture">__PREFECTURE_OPTIONS__</select></div>
+        <div class="field"><label for="minor_consent">未成年者の同意</label><select id="minor_consent" name="minor_consent">__MINOR_OPTIONS__</select></div>
+      </div>
+    </section>
+    <section class="section">
+      <h2>活動について</h2>
+      <div class="form-grid">
+        <div class="field"><label for="experience">配信・ライバー経験</label><select id="experience" name="experience">__EXPERIENCE_OPTIONS__</select></div>
+        <div class="field"><label for="frequency">配信頻度</label><select id="frequency" name="frequency">__FREQUENCY_OPTIONS__</select></div>
+        <div class="field full"><label for="history">活動歴・実績</label><textarea id="history" name="history">__HISTORY__</textarea></div>
+        <div class="field full"><label for="genre">得意なジャンル・企画</label><textarea id="genre" name="genre">__GENRE__</textarea></div>
+        <div class="field full"><label for="sns">SNSアカウント</label><textarea id="sns" name="sns">__SNS__</textarea></div>
+      </div>
+    </section>
+    <section class="section">
+      <h2>アピール</h2>
+      <div class="form-grid">
+        <div class="field full"><label for="self_pr">自己PR</label><textarea id="self_pr" name="self_pr">__SELF_PR__</textarea></div>
+        <div class="field full"><label for="motivation">応募動機</label><textarea id="motivation" name="motivation">__MOTIVATION__</textarea></div>
+        <div class="field full"><label for="other">その他</label><textarea id="other" name="other">__OTHER__</textarea></div>
+      </div>
+    </section>
+    <div class="actions">
+      <a class="button cancel" href="/audition/admin">キャンセル</a>
+      <button class="button save" type="submit">変更を保存する</button>
+    </div>
+  </form>
+</div>
+</body>
+</html>"""
+
+
 # ── ルーティング ──────────────────────────────────────────────────
 
 @app.route("/")
@@ -1694,6 +1804,8 @@ AUDITION_COLUMNS = [
     "frequency", "sns", "self_pr", "motivation", "other",
 ]
 
+AUDITION_EDITABLE_FIELDS = AUDITION_COLUMNS[2:]
+
 _audition_table_ready = False
 
 
@@ -1886,6 +1998,61 @@ def _delete_audition_application(application_id):
     except Exception:
         # DBのcommit失敗時は、先に更新した控えJSONも可能な限り元に戻す。
         if removed_from_file:
+            _replace_audition_file(original_rows)
+        raise
+    finally:
+        conn.close()
+
+
+def _update_audition_application(application_id, updates):
+    """応募をDBと控えJSONの両方で同時に更新する。"""
+    application_id = str(application_id or "").strip()
+    if not application_id:
+        return False
+
+    clean_updates = {
+        field: str(updates.get(field, "")).strip()
+        for field in AUDITION_EDITABLE_FIELDS
+    }
+    original_rows = _load_audition_file()
+    updated_rows = []
+    updated_in_file = False
+    for row in original_rows:
+        if str(row.get("id", "")) == application_id:
+            row = {**row, **clean_updates}
+            updated_in_file = True
+        updated_rows.append(row)
+
+    if not os.environ.get("DATABASE_URL", ""):
+        if updated_in_file and not _replace_audition_file(updated_rows):
+            raise RuntimeError("控えファイルを更新できませんでした")
+        return updated_in_file
+
+    conn = _audition_db_conn()
+    if not conn:
+        raise RuntimeError("データベースに接続できませんでした")
+
+    try:
+        if not _ensure_audition_table(conn):
+            raise RuntimeError("応募テーブルを確認できませんでした")
+
+        assignments = ", ".join(f"{field} = %s" for field in AUDITION_EDITABLE_FIELDS)
+        values = [clean_updates[field] for field in AUDITION_EDITABLE_FIELDS]
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"UPDATE audition_applications SET {assignments} WHERE id = %s",
+                    (*values, application_id),
+                )
+                updated_in_db = cur.rowcount > 0
+
+            # DBトランザクション中に控えも更新し、片方だけの更新を防ぐ。
+            if updated_in_file and not _replace_audition_file(updated_rows):
+                raise RuntimeError("控えファイルを更新できませんでした")
+
+        return updated_in_db or updated_in_file
+    except Exception:
+        if updated_in_file:
             _replace_audition_file(original_rows)
         raise
     finally:
@@ -2430,6 +2597,7 @@ body {
 .furigana { color: var(--muted); font-size: 11px; margin-top: 3px; }
 .date { color: var(--muted); font-size: 11px; white-space: nowrap; }
 .activity { color: var(--accent-text); font-size: 13px; font-weight: 800; margin-top: 6px; }
+.missing-badge { display: inline-flex; align-items: center; gap: 4px; background: #fff7e6; border: 1px solid #f3d3a1; color: #9a5b00; border-radius: 999px; padding: 3px 8px; font-size: 11px; font-weight: 850; white-space: nowrap; }
 .quick-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 14px 18px; gap: 12px 18px; }
 .field dt, .long-field dt { color: var(--muted); font-size: 10px; font-weight: 750; margin-bottom: 4px; }
 .field dd { font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
@@ -2439,7 +2607,10 @@ body {
 .long-details summary::after { content: '・・・'; float: right; letter-spacing: 2px; color: var(--muted); }
 .long-content { border-top: 1px solid var(--border); background: #fcfbff; padding: 15px 18px; display: grid; gap: 14px; }
 .long-field dd { font-size: 13px; line-height: 1.75; white-space: pre-wrap; overflow-wrap: anywhere; }
-.card-actions { display: flex; justify-content: flex-end; padding: 12px 18px; border-top: 1px solid var(--border); }
+.card-actions, .table-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
+.card-actions { padding: 12px 18px; border-top: 1px solid var(--border); }
+.edit-link { display: inline-block; border: 1px solid #d8ccf4; background: #f7f2ff; color: var(--accent-text); padding: 7px 11px; border-radius: 9px; font-size: 12px; font-weight: 800; text-decoration: none; white-space: nowrap; }
+.edit-link:hover { background: #efe7ff; }
 .delete-form { display: inline; }
 .delete-button { border: 1px solid #fecdd3; background: var(--danger-bg); color: var(--danger); padding: 7px 11px; border-radius: 9px; font-size: 12px; font-weight: 800; cursor: pointer; }
 .delete-button:hover { background: #ffe4e6; }
@@ -2656,6 +2827,18 @@ def audition_admin():
                 '<button class="delete-button" type="submit">削除</button></form>'
             )
 
+        def edit_link(application_id):
+            return (
+                f'<a class="edit-link" href="/audition/admin/edit/{escape(application_id)}">'
+                '✏️ 編集</a>'
+            )
+
+        def activity_display(application):
+            activity_name = str(application.get("activity_name", "")).strip()
+            if activity_name:
+                return str(escape(activity_name))
+            return '<span class="missing-badge">⚠ 未記入</span>'
+
         cards = "".join(
             (
                 f'<article class="app-card" id="app-{escape(a.get("id", ""))}" '
@@ -2663,7 +2846,7 @@ def audition_admin():
                 '<div class="card-head"><div>'
                 f'<div class="name">{escape(a.get("name", ""))}</div>'
                 f'<div class="furigana">{escape(a.get("furigana", ""))}</div>'
-                f'<div class="activity">{escape(a.get("activity_name", "") or "活動名未記入")}</div>'
+                f'<div class="activity">{activity_display(a)}</div>'
                 f'</div><time class="date">{escape(a.get("created_at", ""))}</time></div>'
                 '<dl class="quick-grid">'
                 f'<div class="field"><dt>メール</dt><dd>{escape(a.get("email", ""))}</dd></div>'
@@ -2681,7 +2864,7 @@ def audition_admin():
                 f'<div class="long-field"><dt>応募動機</dt><dd>{escape(a.get("motivation", "") or "未記入")}</dd></div>'
                 f'<div class="long-field"><dt>その他</dt><dd>{escape(a.get("other", "") or "未記入")}</dd></div>'
                 '</dl></details>'
-                f'<div class="card-actions">{delete_form(a.get("id", ""))}</div>'
+                f'<div class="card-actions">{edit_link(a.get("id", ""))}{delete_form(a.get("id", ""))}</div>'
                 '</article>'
             )
             for a in applications
@@ -2690,12 +2873,12 @@ def audition_admin():
             f'<tr data-search="{escape(" ".join(str(a.get(key, "")) for key in AUDITION_COLUMNS))}">'
             f"<td>{escape(a.get('created_at',''))}</td>"
             f"<td>{escape(a.get('name',''))}</td>"
-            f"<td>{escape(a.get('activity_name',''))}</td>"
+            f"<td>{activity_display(a)}</td>"
             f"<td>{escape(a.get('prefecture',''))}</td>"
             f"<td>{escape(a.get('frequency',''))}</td>"
             f"<td>{escape(a.get('experience',''))}</td>"
             f'<td><button class="detail-button" type="button" data-target="app-{escape(a.get("id", ""))}">詳細を見る</button></td>'
-            f"<td>{delete_form(a.get('id', ''))}</td>"
+            f'<td><div class="table-actions">{edit_link(a.get("id", ""))}{delete_form(a.get("id", ""))}</div></td>'
             "</tr>"
             for a in applications
         )
@@ -2738,6 +2921,121 @@ def audition_admin():
         .replace("__STORAGE_NOTE__", storage_note)
     )
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
+
+
+@app.route("/audition/admin/edit/<application_id>", methods=["GET", "POST"])
+def audition_admin_edit(application_id):
+    import hmac
+    import secrets
+
+    if not session.get("audition_admin_ok"):
+        return redirect("/audition/admin")
+
+    csrf_token = session.get("audition_admin_csrf")
+    if not csrf_token:
+        csrf_token = secrets.token_urlsafe(24)
+        session["audition_admin_csrf"] = csrf_token
+
+    applications = _load_audition_applications()
+    application = next(
+        (
+            dict(row)
+            for row in applications
+            if str(row.get("id", "")) == str(application_id)
+        ),
+        None,
+    )
+    if not application:
+        session["audition_admin_message"] = {
+            "ok": False,
+            "text": "編集対象の応募データは見つかりませんでした。",
+        }
+        return redirect("/audition/admin")
+
+    error_html = ""
+    if request.method == "POST":
+        submitted_token = str(request.form.get("csrf_token", ""))
+        if not hmac.compare_digest(str(csrf_token), submitted_token):
+            return "不正なリクエストです。管理画面を再読み込みしてください。", 403
+
+        updates = {
+            field: str(request.form.get(field, "")).strip()
+            for field in AUDITION_EDITABLE_FIELDS
+        }
+        application.update(updates)
+        if not updates["name"]:
+            error_html = '<p class="error">お名前は空欄にできません。</p>'
+        else:
+            try:
+                if _update_audition_application(application_id, updates):
+                    session["audition_admin_message"] = {
+                        "ok": True,
+                        "text": "応募データの変更を保存しました。",
+                    }
+                    return redirect(f"/audition/admin#app-{application_id}")
+                error_html = '<p class="error">対象の応募データは見つかりませんでした。</p>'
+            except Exception as e:
+                print(f"[audition] update failed: {e}", file=sys.stderr)
+                error_html = '<p class="error">保存に失敗しました。データは更新されていません。</p>'
+
+    def options_html(values, current):
+        current = str(current or "")
+        choices = list(values)
+        if current and current not in choices:
+            choices.insert(0, current)
+        options = [
+            f'<option value=""{" selected" if not current else ""}>未記入</option>'
+        ]
+        for value in choices:
+            selected = " selected" if value == current else ""
+            options.append(
+                f'<option value="{escape(value)}"{selected}>{escape(value)}</option>'
+            )
+        return "".join(options)
+
+    replacements = {
+        "__CREATED_AT__": escape(application.get("created_at", "")),
+        "__DISPLAY_NAME__": escape(application.get("name", "")),
+        "__CSRF_TOKEN__": escape(csrf_token),
+        "__ACTIVITY_NAME__": escape(application.get("activity_name", "")),
+        "__NAME__": escape(application.get("name", "")),
+        "__FURIGANA__": escape(application.get("furigana", "")),
+        "__EMAIL__": escape(application.get("email", "")),
+        "__HISTORY__": escape(application.get("history", "")),
+        "__GENRE__": escape(application.get("genre", "")),
+        "__SNS__": escape(application.get("sns", "")),
+        "__SELF_PR__": escape(application.get("self_pr", "")),
+        "__MOTIVATION__": escape(application.get("motivation", "")),
+        "__OTHER__": escape(application.get("other", "")),
+        "__GENDER_OPTIONS__": options_html(
+            ["男性", "女性", "その他", "回答しない"],
+            application.get("gender", ""),
+        ),
+        "__PREFECTURE_OPTIONS__": options_html(
+            PREFECTURES,
+            application.get("prefecture", ""),
+        ),
+        "__MINOR_OPTIONS__": options_html(
+            ["該当しない（成人）", "同意している", "まだ得ていない"],
+            application.get("minor_consent", ""),
+        ),
+        "__EXPERIENCE_OPTIONS__": options_html(
+            ["あり", "なし"],
+            application.get("experience", ""),
+        ),
+        "__FREQUENCY_OPTIONS__": options_html(
+            ["週1回未満", "週1〜2回", "週3〜4回", "週5回以上"],
+            application.get("frequency", ""),
+        ),
+        "__ERROR__": error_html,
+    }
+    html = AUDITION_ADMIN_EDIT_HTML
+    for placeholder, value in replacements.items():
+        html = html.replace(placeholder, str(value))
+    return html, 200, {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store, max-age=0",
+    }
 
 
 @app.route("/audition/admin/delete/<application_id>", methods=["POST"])
