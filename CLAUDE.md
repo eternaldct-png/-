@@ -15,7 +15,8 @@ three.js を `site/vendor/` に同梱した **ビルド不要の静的サイト*
 - `index.html`（トップ・案②ガラスオブジェクト）/ `stage.html`（ライバー50人の光のステージ）/ `showroom.html`（グッズ3D）
 - 文言は各 HTML、色・フォントは `css/style.css` の `:root`、事業ごとの3D表情は `js/main.js` の `STATES`
 - ライバー一覧: `site/data/livers.json` / 商品: `python3 scripts/sync_products.py` で `goods_config.yaml` から再生成
-- 差し替え素材の置き場所: ロゴSVG・事業写真（`assets/img/`）・楽曲（`assets/audio/theme.mp3`）・GLB（`assets/models/<商品id>.glb`）
+- ロゴ: `site/assets/img/logo-full.png`（透過PNG）。ベクター版が来たら3D押し出しに差し替え可
+- 差し替え素材の置き場所: 事業写真（`assets/img/`）・楽曲（`assets/audio/theme.mp3`）・GLB（`assets/models/<商品id>.glb`）
 - ローカル確認: `cd site && python3 -m http.server 8765`
 
 ---

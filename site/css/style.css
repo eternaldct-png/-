@@ -47,6 +47,7 @@ img { max-width: 100%; display: block; }
   transition: opacity .8s ease, visibility .8s;
 }
 #loader.done { opacity: 0; visibility: hidden; }
+#loader img.logo { width: clamp(180px, 22vw, 260px); height: auto; margin-bottom: 4px; }
 #loader .brand { font-family: var(--font-en); font-weight: 200; letter-spacing: .32em; font-size: 13px; text-transform: uppercase; }
 #loader .bar { width: 160px; height: 1px; background: var(--line); overflow: hidden; }
 #loader .bar i { display: block; height: 100%; width: 0; background: #fff; transition: width .3s; }
@@ -142,6 +143,8 @@ p.lead { max-width: 46ch; color: #cdcdcd; font-size: clamp(14px, 1.05vw, 16px); 
 @media (hover: none), (pointer: coarse) { #cursor { display: none; } }
 
 /* ── footer ──────────────────────────── */
+.footer .brandmark { display: flex; flex-direction: column; gap: 14px; }
+.footer .brandmark img { width: 150px; height: auto; opacity: .9; }
 .footer {
   position: relative; z-index: 1;
   padding: 60px 40px 34px; border-top: 1px solid var(--line);

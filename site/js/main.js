@@ -12,11 +12,11 @@ initCommon();
 //   amp: 表面の揺らぎの強さ / freq: 揺らぎの細かさ / speed: 動く速さ
 //   scale: 大きさ / x,y: 位置 / tint: 差し色（点光源の色） / ring: リングの傾き / rough: 表面の曇り
 const STATES = [
-  { amp: 0.16, freq: 1.1, speed: 0.30, scale: 1.00, x:  1.9, y:  0.1, tint: 0xffffff, ring: 1.10, rough: 0.04 }, // 00 hero
-  { amp: 0.42, freq: 1.9, speed: 0.55, scale: 0.62, x:  3.3, y:  1.25, tint: 0xff7aa8, ring: 0.60, rough: 0.05 }, // 01 liver
-  { amp: 0.10, freq: 3.2, speed: 0.20, scale: 0.62, x: -3.3, y:  1.25, tint: 0x6fd6ff, ring: 1.35, rough: 0.02 }, // 02 ai
+  { amp: 0.12, freq: 1.1, speed: 0.30, scale: 1.00, x:  1.9, y:  0.1, tint: 0xffffff, ring: 1.10, rough: 0.04 }, // 00 hero（ロゴが読める程度の揺らぎ）
+  { amp: 0.42, freq: 1.9, speed: 0.55, scale: 0.62, x:  3.3, y:  1.25, tint: 0xd94fe6, ring: 0.60, rough: 0.05 }, // 01 liver
+  { amp: 0.10, freq: 3.2, speed: 0.20, scale: 0.62, x: -3.3, y:  1.25, tint: 0x2fd6d8, ring: 1.35, rough: 0.02 }, // 02 ai
   { amp: 0.30, freq: 1.3, speed: 0.90, scale: 0.62, x:  3.3, y:  1.25, tint: 0xb48cff, ring: 0.95, rough: 0.08 }, // 03 music
-  { amp: 0.06, freq: 2.4, speed: 0.15, scale: 0.58, x: -3.3, y:  1.25, tint: 0xffc46b, ring: 1.60, rough: 0.12 }, // 04 goods
+  { amp: 0.06, freq: 2.4, speed: 0.15, scale: 0.58, x: -3.3, y:  1.25, tint: 0xcfcfcf, ring: 1.60, rough: 0.12 }, // 04 goods
   { amp: 0.22, freq: 1.0, speed: 0.35, scale: 1.05, x:  2.1, y:  0.0, tint: 0xffffff, ring: 1.10, rough: 0.03 }, // 05 contact
 ];
 
@@ -59,13 +59,21 @@ function boot() {
   const glassMat = caps.quality >= 1
     ? new THREE.MeshPhysicalMaterial({
         color: 0xffffff, metalness: 0, roughness: 0.04, transmission: 1, thickness: 1.6, ior: 1.45,
-        clearcoat: 1, clearcoatRoughness: 0.05, envMapIntensity: 1.4, attenuationColor: new THREE.Color(0xdde4ff), attenuationDistance: 2.5,
+        clearcoat: 1, clearcoatRoughness: 0.05, envMapIntensity: 1.9, emissive: 0x0b0b0e, attenuationColor: new THREE.Color(0xe6ecff), attenuationDistance: 3.5,
       })
     : new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1, roughness: 0.12, envMapIntensity: 1.2 });
   const core = new THREE.Mesh(geo, glassMat);
   const group = new THREE.Group();
   group.add(core);
   scene.add(group);
+
+  // ── ロゴ（PNG）をガラスの中に浮かべる。透過素材の場合は屈折して見える ──
+  const logoTex = new THREE.TextureLoader().load('assets/img/logo-full.png', t => { t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; });
+  // transparent:true だと屈折パスに描画されず見えなくなるため alphaTest で抜く
+  const logoMat = new THREE.MeshBasicMaterial({ map: logoTex, alphaTest: 0.08, side: THREE.DoubleSide, toneMapped: false });
+  const logo = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 2.0 * 523 / 858), logoMat);
+  logo.position.z = caps.quality >= 1 ? 0 : 1.55; // 金属質フォールバック時は手前に出す
+  group.add(logo);
 
   // ring + satellites（ロゴの3Dデータが来たら core をロゴ形状に差し替える想定）
   const ring = new THREE.Mesh(new THREE.TorusGeometry(2.35, 0.018, 12, 220), new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1, roughness: 0.25 }));
@@ -227,6 +235,8 @@ function boot() {
     group.scale.setScalar(cur.scale);
     core.rotation.y = time * 0.12 + mouse.x * 0.35;
     core.rotation.x = Math.sin(time * 0.2) * 0.2 + mouse.y * 0.25;
+    logo.quaternion.copy(camera.quaternion); // 常にカメラ正面
+    logo.position.x = Math.sin(time * 0.5) * 0.08; logo.position.y = Math.cos(time * 0.4) * 0.06;
     ring.rotation.x = cur.ring + Math.sin(time * 0.3) * 0.08;
     ring.rotation.z = time * 0.08;
     sats.forEach((m, i) => {
