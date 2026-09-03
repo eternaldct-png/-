@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>ETERNAL d.c.t — ライバー事務所 / AI業務効率化 / 音楽制作 / グッズ</title>
+<meta name="description" content="ETERNAL d.c.t（エターナルディクト）。ライバー事務所の運営、AIを使った中小企業の業務効率化、音楽制作、オリジナルグッズ販売。">
+<meta property="og:title" content="ETERNAL d.c.t">
+<meta property="og:description" content="表現する人と、はたらく人の、これから。">
+<meta name="theme-color" content="#050505">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500&family=Noto+Sans+JP:wght@300;400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.min.js", "three/addons/": "./vendor/three/addons/" } }
+</script>
+</head>
+<body>
+
+<div id="loader"><div class="brand">ETERNAL d.c.t</div><div class="bar"><i></i></div></div>
+<div id="veil"></div>
+<div id="cursor"></div>
+
+<canvas id="gl"></canvas>
+
+<nav class="nav">
+  <a class="logo" href="./">ETERNAL d.c.t<small>eternal dict</small></a>
+  <ul>
+    <li><a href="./">Top</a></li>
+    <li><a href="stage.html">Stage</a></li>
+    <li><a href="showroom.html">Showroom</a></li>
+    <li><a href="https://kazuto-post-generator.onrender.com/goods" target="_blank" rel="noopener">Goods</a></li>
+    <li><a href="#contact">Contact</a></li>
+  </ul>
+</nav>
+
+<main class="page">
+
+  <!-- 00 HERO -->
+  <section class="section hero" data-state="0" id="top">
+    <div class="inner">
+      <div class="eyebrow reveal">Liver agency / AI solutions / Music / Goods</div>
+      <h1 class="reveal" data-delay="1">
+        <span class="en">ETERNAL<br>d.c.t</span>
+        <!-- ▼ キャッチコピーは仮。決まったら差し替え -->
+        <span class="jp">表現する人と、はたらく人の、これから。</span>
+      </h1>
+      <p class="lead reveal" data-delay="2">
+        配信者・ライバーのマネジメントから、AIによる中小企業の業務効率化、音楽制作、グッズまで。<br>
+        「好き」を仕事にする人と、仕事を軽くしたい会社の、両方を支える会社です。
+      </p>
+      <div class="scroll-hint reveal" data-delay="3"><span></span>Scroll</div>
+    </div>
+  </section>
+
+  <!-- 01 LIVER AGENCY -->
+  <section class="section" data-state="1">
+    <div class="inner grid">
+      <a class="gl-img reveal" href="stage.html" data-placeholder="LIVE|ライバー事務所" data-seed="3">
+        <img alt="ライバー事務所 イメージ" src="" loading="lazy">
+        <span class="tag">01 — Stage ↗</span>
+      </a>
+      <div>
+        <div class="eyebrow reveal">01 / Liver agency</div>
+        <h2 class="reveal" data-delay="1"><span class="en">Liver<br>Agency</span><span class="jp">ライバー事務所</span></h2>
+        <p class="lead reveal" data-delay="2">
+          歌が好きな人が、副業や家事のすきま時間からでも「配信者」として続けられるように。
+          配信ノウハウの共有、案件の橋渡し、伴走型のサポートで、50名のライバーが活動しています。
+        </p>
+        <div class="meta reveal" data-delay="2">
+          <div><b>50</b><span>Livers</span></div>
+          <div><b>20–50</b><span>Ages</span></div>
+          <div><b>1yr</b><span>Auto-renew</span></div>
+        </div>
+        <a class="btn reveal" data-delay="3" href="https://kazuto-post-generator.onrender.com/audition" target="_blank" rel="noopener"><i></i>Audition</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- 02 AI SOLUTIONS -->
+  <section class="section" data-state="2">
+    <div class="inner grid rev">
+      <div class="gl-img reveal" data-placeholder="AI|AI業務効率化" data-seed="7">
+        <img alt="AI業務効率化 イメージ" src="" loading="lazy">
+        <span class="tag">02 — AI solutions</span>
+      </div>
+      <div>
+        <div class="eyebrow reveal">02 / AI solutions</div>
+        <h2 class="reveal" data-delay="1"><span class="en">AI for<br>Small Business</span><span class="jp">AIを使った業務効率化</span></h2>
+        <p class="lead reveal" data-delay="2">
+          投稿の自動生成、問い合わせ対応、予約管理、請求まわり。
+          自社で毎日使っている仕組みを、そのまま中小企業向けに組み直して導入します。
+          「AIに詳しい人がいない会社」が、最初の一歩を踏み出すための伴走です。
+        </p>
+        <div class="meta reveal" data-delay="2">
+          <div><b>SNS</b><span>Auto posting</span></div>
+          <div><b>LINE</b><span>Notification</span></div>
+          <div><b>Booking</b><span>Calendar sync</span></div>
+        </div>
+        <a class="btn reveal" data-delay="3" href="https://eternal-interview-booking.onrender.com/" target="_blank" rel="noopener"><i></i>相談を予約する</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- 03 MUSIC -->
+  <section class="section" data-state="3">
+    <div class="inner grid">
+      <div class="gl-img reveal" data-placeholder="MUSIC|音楽制作" data-seed="11">
+        <img alt="音楽制作 イメージ" src="" loading="lazy">
+        <span class="tag">03 — Music</span>
+      </div>
+      <div>
+        <div class="eyebrow reveal">03 / Music production</div>
+        <h2 class="reveal" data-delay="1"><span class="en">Music<br>Production</span><span class="jp">音楽制作</span></h2>
+        <p class="lead reveal" data-delay="2">
+          ライバーのオリジナル曲、配信のテーマ曲、企業のサウンドロゴまで。
+          作る人と歌う人が同じ屋根の下にいるから、企画から配信・グッズ化までが一本につながります。
+        </p>
+        <a class="btn reveal" data-delay="3" href="#contact"><i></i>制作の相談</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- 04 GOODS -->
+  <section class="section" data-state="4">
+    <div class="inner grid rev">
+      <a class="gl-img reveal" href="showroom.html" data-src="assets/img/tshirt-charcoal-center.webp">
+        <img alt="chacoデザインTシャツ" src="assets/img/tshirt-charcoal-center.webp" loading="lazy">
+        <span class="tag">04 — Showroom ↗</span>
+      </a>
+      <div>
+        <div class="eyebrow reveal">04 / Goods</div>
+        <h2 class="reveal" data-delay="1"><span class="en">Goods</span><span class="jp">オリジナルグッズ</span></h2>
+        <p class="lead reveal" data-delay="2">
+          ライバーと一緒に作るTシャツやマグカップ。
+          3Dショールームで色とデザインを回しながら確かめて、そのまま購入できます。
+        </p>
+        <div class="meta reveal" data-delay="2">
+          <div><b>¥2,190〜</b><span>Tax &amp; shipping incl.</span></div>
+          <div><b>S–XXL</b><span>Sizes</span></div>
+        </div>
+        <a class="btn reveal" data-delay="3" href="showroom.html"><i></i>3D Showroom</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- 05 CONTACT -->
+  <section class="section contact" data-state="5" id="contact">
+    <div class="inner">
+      <div class="eyebrow reveal">Contact</div>
+      <h2 class="reveal" data-delay="1"><span class="en">Let's talk.</span><span class="jp">配信のこと、AIのこと、まずは30分。</span></h2>
+      <p class="lead reveal" data-delay="2">面談は予約ページから。メールでのご相談も受け付けています。</p>
+      <div class="contact-links reveal" data-delay="3">
+        <a class="btn" href="https://eternal-interview-booking.onrender.com/" target="_blank" rel="noopener"><i></i>面談を予約</a>
+        <a class="btn" href="mailto:eternal.d.c.t@gmail.com"><i></i>Mail</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <div>© ETERNAL d.c.t</div>
+  <div class="links">
+    <a href="https://eternaldct.net" target="_blank" rel="noopener">WordPress</a>
+    <a href="https://kazuto-post-generator.onrender.com/goods" target="_blank" rel="noopener">Goods</a>
+    <a href="https://kazuto-post-generator.onrender.com/audition" target="_blank" rel="noopener">Audition</a>
+  </div>
+</footer>
+
+<style>
+  /* index 固有 */
+  .hero h1 .en { display: block; font-family: var(--font-en); font-weight: 200; font-size: clamp(64px, 12vw, 190px); line-height: .92; letter-spacing: -.04em; }
+  .hero h1 .jp { display: block; font-size: clamp(15px, 1.7vw, 22px); letter-spacing: .12em; color: #d9d9d9; margin: 28px 0 0; }
+  .hero .lead { margin-top: 24px; }
+  .scroll-hint { margin-top: 60px; display: flex; align-items: center; gap: 14px; font-family: var(--font-en); font-size: 10px; letter-spacing: .3em; text-transform: uppercase; color: var(--muted); }
+  .scroll-hint span { width: 1px; height: 46px; background: var(--line); position: relative; overflow: hidden; }
+  .scroll-hint span::after { content: ""; position: absolute; left: 0; top: -50%; width: 100%; height: 50%; background: #fff; animation: drop 2.2s cubic-bezier(.2,.8,.2,1) infinite; }
+  @keyframes drop { to { top: 120%; } }
+  .contact .contact-links { display: flex; gap: 16px; flex-wrap: wrap; }
+  .contact .contact-links .btn { margin-top: 20px; }
+  @media (max-width: 900px) {
+    .hero h1 .en { font-size: clamp(56px, 18vw, 120px); }
+  }
+</style>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

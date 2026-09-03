@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Stage — ETERNAL d.c.t 所属ライバー</title>
+<meta name="description" content="ETERNAL d.c.t 所属ライバー50名。光のステージで一人ひとりを探せます。">
+<meta name="theme-color" content="#050505">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500&family=Noto+Sans+JP:wght@300;400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.min.js", "three/addons/": "./vendor/three/addons/" } }
+</script>
+<style>
+  body { overflow: hidden; height: 100vh; height: 100svh; }
+  .hud.bl .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .legend { margin-top: 14px; display: flex; gap: 16px; font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--muted); }
+  .legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+  .no-webgl .hud.tl .sub::after { content: "（お使いの端末では3D表示に対応していません）"; display: block; color: var(--muted); }
+  #tip { display: block; }
+  .count b { font-weight: 200; font-size: 46px; letter-spacing: -.02em; display: block; line-height: 1; }
+  .count span { font-size: 10px; letter-spacing: .25em; text-transform: uppercase; color: var(--muted); }
+  @media (max-width: 900px) { .hud.tr { display: none; } .legend { display: none; } }
+</style>
+</head>
+<body>
+<div id="loader"><div class="brand">Stage</div><div class="bar"><i></i></div></div>
+<div id="veil"></div>
+<div id="cursor"></div>
+<canvas id="gl"></canvas>
+
+<nav class="nav">
+  <a class="logo" href="./">ETERNAL d.c.t<small>eternal dict</small></a>
+  <ul>
+    <li><a href="./">Top</a></li>
+    <li><a href="stage.html">Stage</a></li>
+    <li><a href="showroom.html">Showroom</a></li>
+    <li><a href="https://kazuto-post-generator.onrender.com/goods" target="_blank" rel="noopener">Goods</a></li>
+    <li><a href="./#contact">Contact</a></li>
+  </ul>
+</nav>
+
+<div class="hud tl">
+  <div class="hint">01 / Liver agency</div>
+  <h1>Stage</h1>
+  <p class="sub">光の一つひとつが、所属ライバーです。<br>ドラッグで見回して、気になる光に触れてみてください。</p>
+  <div class="legend">
+    <span><i style="background:#ff7aa8"></i>歌</span><span><i style="background:#6fd6ff"></i>トーク</span>
+    <span><i style="background:#b48cff"></i>弾き語り</span><span><i style="background:#ffc46b"></i>ASMR</span><span><i style="background:#7dffb0"></i>ゲーム</span>
+  </div>
+</div>
+<div class="hud tr"><div class="count"><b id="count">50</b><span>Livers on stage</span></div></div>
+<div class="hud bl">
+  <div class="row">
+    <button class="pill" id="soundBtn"><span class="dot"></span><span id="soundLabel">Sound demo</span></button>
+    <button class="pill" id="autoBtn">Auto rotate</button>
+  </div>
+  <p class="hint" style="margin-top:12px">Sound は自社楽曲に差し替え可（assets/audio/theme.mp3）</p>
+</div>
+<div class="hud br">
+  <a class="pill" href="https://kazuto-post-generator.onrender.com/audition" target="_blank" rel="noopener">Audition ↗</a>
+</div>
+<div id="tip"><small>Liver</small><span id="tipName"></span></div>
+
+<script type="module" src="js/stage.js"></script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+# 既存サービス（Render）へのショートカット。ドメインを新サイトに向けた後も同じURLで案内できる
+/goods      https://kazuto-post-generator.onrender.com/goods      302
+/goods/*    https://kazuto-post-generator.onrender.com/goods/:splat 302
+/audition   https://kazuto-post-generator.onrender.com/audition   302
+/book       https://eternal-interview-booking.onrender.com/       302
+/book/*     https://eternal-interview-booking.onrender.com/book/:splat 302
+/wp         https://eternaldct.net                                302

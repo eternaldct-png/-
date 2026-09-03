@@ -1,0 +1,131 @@
+{
+  "_note": "persona/goods_config.yaml から生成した写し。商品を変えたら scripts/sync_products.py を実行する",
+  "products": [
+    {
+      "id": "chaco-mug-001",
+      "name": "chacoデザインマグカップ",
+      "description": "chacoデザインのオリジナルマグカップです（送料込み）。",
+      "price": 2190,
+      "images": [
+        {
+          "path": "assets/img/chaco-mug.jpg"
+        }
+      ],
+      "model": "assets/models/chaco-mug-001.glb",
+      "kind": "mug"
+    },
+    {
+      "id": "chaco-tshirt-001",
+      "name": "chacoデザインTシャツ 6.6oz",
+      "description": "chacoオリジナルデザインの6.6ozヘビーウェイトTシャツ（送料込み）。\nカラー・デザイン・サイズをお選びください。",
+      "variants": {
+        "size": [
+          {
+            "label": "S",
+            "price": 4590
+          },
+          {
+            "label": "M",
+            "price": 4590
+          },
+          {
+            "label": "L",
+            "price": 4590
+          },
+          {
+            "label": "XL",
+            "price": 4590
+          },
+          {
+            "label": "XXL",
+            "price": 5590
+          }
+        ],
+        "color": [
+          {
+            "label": "チャコール"
+          },
+          {
+            "label": "ホワイト"
+          }
+        ],
+        "design": [
+          {
+            "label": "センター"
+          },
+          {
+            "label": "スモール"
+          }
+        ]
+      },
+      "images": [
+        {
+          "path": "assets/img/tshirt-charcoal-center.webp",
+          "color": "チャコール",
+          "design": "センター"
+        },
+        {
+          "path": "assets/img/tshirt-charcoal-small.webp",
+          "color": "チャコール",
+          "design": "スモール"
+        },
+        {
+          "path": "assets/img/tshirt-white-center.webp",
+          "color": "ホワイト",
+          "design": "センター"
+        },
+        {
+          "path": "assets/img/tshirt-white-small.webp",
+          "color": "ホワイト",
+          "design": "スモール"
+        }
+      ],
+      "model": "assets/models/chaco-tshirt-001.glb",
+      "kind": "tshirt"
+    },
+    {
+      "id": "chaco-tshirt-56-001",
+      "name": "chacoデザインTシャツ 5.6oz",
+      "description": "chacoオリジナルデザインの5.6ozTシャツ（送料込み）。\nカラー・デザイン・サイズをお選びください。",
+      "variants": {
+        "size": [
+          {
+            "label": "S",
+            "price": 3590
+          },
+          {
+            "label": "M",
+            "price": 3590
+          },
+          {
+            "label": "L",
+            "price": 3590
+          },
+          {
+            "label": "XL",
+            "price": 3590
+          }
+        ],
+        "color": [
+          {
+            "label": "ホワイト"
+          },
+          {
+            "label": "黒"
+          }
+        ],
+        "design": [
+          {
+            "label": "センター"
+          },
+          {
+            "label": "スモール"
+          }
+        ]
+      },
+      "images": [],
+      "model": "assets/models/chaco-tshirt-56-001.glb",
+      "kind": "tshirt"
+    }
+  ]
+}

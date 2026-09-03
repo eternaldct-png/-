@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Showroom — ETERNAL d.c.t グッズ 3Dショールーム</title>
+<meta name="description" content="chacoデザインのTシャツ・マグカップを3Dで回して、色とデザインを確かめてから購入できます。">
+<meta name="theme-color" content="#050505">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500&family=Noto+Sans+JP:wght@300;400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.min.js", "three/addons/": "./vendor/three/addons/" } }
+</script>
+<style>
+  body { overflow: hidden; height: 100vh; height: 100svh; }
+  .panel {
+    position: fixed; z-index: 5; right: 40px; top: 50%; transform: translateY(-50%);
+    width: min(360px, 40vw); padding: 26px 26px 22px;
+    border: 1px solid var(--line); background: rgba(5,5,5,.55); backdrop-filter: blur(14px);
+    font-family: var(--font-en);
+  }
+  .panel .name { font-family: var(--font-jp); font-size: 16px; font-weight: 400; line-height: 1.5; }
+  .panel .price { font-weight: 200; font-size: 40px; letter-spacing: -.02em; margin: 6px 0 4px; }
+  .panel .price small { font-size: 10px; letter-spacing: .25em; text-transform: uppercase; color: var(--muted); margin-left: 8px; }
+  .panel .desc { font-family: var(--font-jp); font-size: 12px; color: #bdbdbd; line-height: 1.8; white-space: pre-line; margin-bottom: 14px; }
+  .opt { margin-top: 12px; }
+  .opt .lbl { font-size: 9px; letter-spacing: .3em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+  .opt .vals { display: flex; gap: 6px; flex-wrap: wrap; }
+  .opt button {
+    font-family: var(--font-jp); font-size: 11px; padding: 7px 12px; border-radius: 999px;
+    border: 1px solid var(--line); background: transparent; color: #eee; cursor: pointer; transition: .25s;
+  }
+  .opt button.on { background: #fff; color: #000; border-color: #fff; }
+  .opt button.sw { width: 26px; height: 26px; padding: 0; border-radius: 50%; }
+  .panel .buy { margin-top: 20px; width: 100%; justify-content: center; }
+  .products { position: fixed; z-index: 5; left: 40px; bottom: 34px; display: flex; gap: 10px; flex-wrap: wrap; }
+  .products .pill { font-family: var(--font-jp); letter-spacing: .05em; text-transform: none; font-size: 11px; }
+  .photo { position: fixed; z-index: 5; left: 40px; top: 50%; transform: translateY(-50%); width: 150px; border: 1px solid var(--line); background: #0c0c0c; }
+  .photo img { width: 100%; aspect-ratio: 1; object-fit: cover; opacity: .9; }
+  .photo span { display: block; padding: 8px 10px; font-family: var(--font-en); font-size: 9px; letter-spacing: .3em; text-transform: uppercase; color: var(--muted); }
+  .note { position: fixed; z-index: 5; right: 40px; bottom: 34px; font-family: var(--font-jp); font-size: 10px; color: var(--muted); text-align: right; line-height: 1.7; }
+  @media (max-width: 900px) {
+    .hud.tl h1 { font-size: 46px; }
+    .hud.tl .sub { display: none; }
+    .panel { right: 0; left: 0; top: auto; bottom: 0; transform: none; width: 100%; border-left: 0; border-right: 0; border-bottom: 0; padding: 18px 20px 20px; max-height: 52vh; overflow: auto; }
+    .panel .price { font-size: 30px; }
+    .panel .desc { display: none; }
+    .products { left: 20px; bottom: auto; top: calc(var(--nav-h) + 90px); }
+    .photo, .note { display: none; }
+  }
+</style>
+</head>
+<body>
+<div id="loader"><div class="brand">Showroom</div><div class="bar"><i></i></div></div>
+<div id="veil"></div>
+<div id="cursor"></div>
+<canvas id="gl"></canvas>
+
+<nav class="nav">
+  <a class="logo" href="./">ETERNAL d.c.t<small>eternal dict</small></a>
+  <ul>
+    <li><a href="./">Top</a></li>
+    <li><a href="stage.html">Stage</a></li>
+    <li><a href="showroom.html">Showroom</a></li>
+    <li><a href="https://kazuto-post-generator.onrender.com/goods" target="_blank" rel="noopener">Goods</a></li>
+    <li><a href="./#contact">Contact</a></li>
+  </ul>
+</nav>
+
+<div class="hud tl">
+  <div class="hint">04 / Goods</div>
+  <h1>Showroom</h1>
+  <p class="sub">ドラッグで回転、色とデザインを切り替えて確認できます。<br>購入は既存の販売ページに進みます。</p>
+</div>
+
+<div class="photo" id="photo" hidden><img id="photoImg" alt=""><span>Photo</span></div>
+<div class="products" id="products"></div>
+
+<aside class="panel" id="panel">
+  <div class="name" id="pName">—</div>
+  <div class="price"><span id="pPrice">¥—</span><small>tax &amp; shipping incl.</small></div>
+  <div class="desc" id="pDesc"></div>
+  <div id="opts"></div>
+  <a class="btn buy" id="buy" href="https://kazuto-post-generator.onrender.com/goods" target="_blank" rel="noopener"><i></i>購入ページへ</a>
+</aside>
+<p class="note">3Dモデルは仮の形状です。<br>assets/models/&lt;商品id&gt;.glb を置くと実物モデルに切り替わります。</p>
+
+<script type="module" src="js/showroom.js"></script>
+</body>
+</html>

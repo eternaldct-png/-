@@ -5,6 +5,18 @@ eternaldct-png/- は ETERNAL d.c.t の投稿自動化 & グッズ販売サイト
 - Flask アプリ（`src/web_app.py`）を Render でホスト
 - 本番URL: `https://kazuto-post-generator.onrender.com`
 - ホームページ: `https://eternaldct.net`（WordPress、別管理）
+- 3DCGホームページ（静的サイト）: `site/` → Cloudflare Pages でホスト（手順: `docs/cloudflare_pages_setup.md`）
+
+---
+
+## site/（3DCGホームページ・Cloudflare Pages）
+
+three.js を `site/vendor/` に同梱した **ビルド不要の静的サイト**。Flask とは独立。
+- `index.html`（トップ・案②ガラスオブジェクト）/ `stage.html`（ライバー50人の光のステージ）/ `showroom.html`（グッズ3D）
+- 文言は各 HTML、色・フォントは `css/style.css` の `:root`、事業ごとの3D表情は `js/main.js` の `STATES`
+- ライバー一覧: `site/data/livers.json` / 商品: `python3 scripts/sync_products.py` で `goods_config.yaml` から再生成
+- 差し替え素材の置き場所: ロゴSVG・事業写真（`assets/img/`）・楽曲（`assets/audio/theme.mp3`）・GLB（`assets/models/<商品id>.glb`）
+- ローカル確認: `cd site && python3 -m http.server 8765`
 
 ---
 
