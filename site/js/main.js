@@ -132,10 +132,11 @@ function boot() {
           float g = texture2D(uTex, uv).g;
           float b = texture2D(uTex, uv - vec2(split, 0.0)).b;
           vec3 col = vec3(r, g, b);
-          col = mix(vec3(dot(col, vec3(0.299, 0.587, 0.114))), col, 0.35 + 0.65 * uHover); // 通常はほぼモノクロ、ホバーで色が戻る
+          col = mix(vec3(dot(col, vec3(0.299, 0.587, 0.114))), col, 0.65 + 0.35 * uHover); // ホバーで差し色が強まる
           float edge = smoothstep(0.0, 0.08, vUv.x) * smoothstep(0.0, 0.08, 1.0 - vUv.x);
           float rev = smoothstep(vUv.y - 0.15, vUv.y + 0.15, uReveal * 1.3);
-          gl_FragColor = vec4(col * (0.85 + 0.15 * uHover), rev);
+          gl_FragColor = vec4(col * (0.94 + 0.06 * uHover), rev);
+          #include <colorspace_fragment>
         }`,
       transparent: true, depthTest: false,
     });

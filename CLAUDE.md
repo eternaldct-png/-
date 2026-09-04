@@ -16,6 +16,7 @@ three.js を `site/vendor/` に同梱した **ビルド不要の静的サイト*
 - 文言は各 HTML、色・フォントは `css/style.css` の `:root`、事業ごとの3D表情は `js/main.js` の `STATES`
 - ライバー一覧: `site/data/livers.json` / 商品: `python3 scripts/sync_products.py` で `goods_config.yaml` から再生成
 - ロゴ: `site/assets/img/logo-full.png`（透過PNG）。ベクター版が来たら3D押し出しに差し替え可
+- 事業画像3枚は生成アート（`python3 site/assets/art/make_art.py` で再生成）。実写に替えるなら `index.html` の `data-src` を差し替え
 - 差し替え素材の置き場所: 事業写真（`assets/img/`）・楽曲（`assets/audio/theme.mp3`）・GLB（`assets/models/<商品id>.glb`）
 - ローカル確認: `cd site && python3 -m http.server 8765`
 

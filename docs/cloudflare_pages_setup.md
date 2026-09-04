@@ -46,7 +46,7 @@ cd site && python3 -m http.server 8765
 | 素材 | 置き場所 / 変更箇所 |
 |---|---|
 | キャッチコピー・事業説明文 | `site/index.html` の各 section（`<!-- ▼ 仮 -->` コメントの箇所） |
-| 事業ごとの写真 | `index.html` の `.gl-img` に `data-src="assets/img/xxx.jpg"` を指定（`data-placeholder` を削除） |
+| 事業ごとの画像 | 現在は生成アート `assets/img/biz-live/ai/music.webp`（`python3 site/assets/art/make_art.py` で再生成、哲学は `assets/art/PHILOSOPHY.md`）。実写に替えるときは `index.html` の `.gl-img` の `data-src` と `<img src>` を差し替える |
 | ロゴ | `assets/img/logo-full.png`（支給PNGの黒背景を透過処理したもの）。ローダー・フッター・ガラス玉の中に使用。favicon は `favicon-32/180/512.png`、OGP は `og-image.jpg`。**ベクター（AI/SVG）か背景透過のモノグラム単体PNG** があれば、本当の押し出し3Dロゴと欠けのない favicon に置き換え可 |
 | ライバー一覧 | `site/data/livers.json`（掲載許諾を取った人のみ） |
 | ステージの音楽 | `site/assets/audio/theme.mp3` を置くだけ（無ければ生成音のデモが鳴る） |
