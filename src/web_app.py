@@ -1871,6 +1871,12 @@ def _ensure_audition_table(conn):
                     )
                     """
                 )
+                # 「確認済み」は編集フォームの対象外（AUDITION_COLUMNSに入れると
+                # 編集保存のたびに空欄で上書きされてしまうため別カラムで管理）
+                cur.execute(
+                    "ALTER TABLE audition_applications "
+                    "ADD COLUMN IF NOT EXISTS checked TEXT NOT NULL DEFAULT ''"
+                )
         # ファイルに残っている応募をDBへ移行（重複はスキップ）
         legacy = _load_audition_file()
         if legacy:
@@ -2047,6 +2053,55 @@ def _update_audition_application(application_id, updates):
                 updated_in_db = cur.rowcount > 0
 
             # DBトランザクション中に控えも更新し、片方だけの更新を防ぐ。
+            if updated_in_file and not _replace_audition_file(updated_rows):
+                raise RuntimeError("控えファイルを更新できませんでした")
+
+        return updated_in_db or updated_in_file
+    except Exception:
+        if updated_in_file:
+            _replace_audition_file(original_rows)
+        raise
+    finally:
+        conn.close()
+
+
+def _set_audition_checked(application_id, checked):
+    """「確認済み」フラグだけをDBと控えJSONの両方で更新する（他の項目には触れない）。"""
+    application_id = str(application_id or "").strip()
+    if not application_id:
+        return False
+    checked_value = "true" if checked else ""
+
+    original_rows = _load_audition_file()
+    updated_rows = []
+    updated_in_file = False
+    for row in original_rows:
+        if str(row.get("id", "")) == application_id:
+            row = {**row, "checked": checked_value}
+            updated_in_file = True
+        updated_rows.append(row)
+
+    if not os.environ.get("DATABASE_URL", ""):
+        if updated_in_file and not _replace_audition_file(updated_rows):
+            raise RuntimeError("控えファイルを更新できませんでした")
+        return updated_in_file
+
+    conn = _audition_db_conn()
+    if not conn:
+        raise RuntimeError("データベースに接続できませんでした")
+
+    try:
+        if not _ensure_audition_table(conn):
+            raise RuntimeError("応募テーブルを確認できませんでした")
+
+        with conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE audition_applications SET checked = %s WHERE id = %s",
+                    (checked_value, application_id),
+                )
+                updated_in_db = cur.rowcount > 0
+
             if updated_in_file and not _replace_audition_file(updated_rows):
                 raise RuntimeError("控えファイルを更新できませんでした")
 
@@ -2591,8 +2646,15 @@ body {
 .message.ok { background: #edfaf1; border: 1px solid #b7e6c6; color: #1a7f45; }
 .message.error { background: var(--danger-bg); border: 1px solid #fecdd3; color: #b91c1c; }
 .card-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-.app-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow); overflow: hidden; }
+.app-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow); overflow: hidden; transition: opacity .15s, border-color .15s; }
+.app-card.checked { opacity: .55; border-color: #22c55e; }
 .card-head { display: flex; justify-content: space-between; gap: 12px; padding: 17px 18px 13px; border-bottom: 1px solid var(--border); }
+.check-toggle {
+  flex-shrink: 0; width: 26px; height: 26px; border-radius: 8px; border: 2px solid var(--border);
+  display: flex; align-items: center; justify-content: center; font-size: 15px; color: white;
+  background: var(--surface); cursor: pointer; transition: background .15s, border-color .15s;
+}
+.app-card.checked .check-toggle { background: #22c55e; border-color: #22c55e; }
 .name { font-size: 17px; font-weight: 850; line-height: 1.35; }
 .furigana { color: var(--muted); font-size: 11px; margin-top: 3px; }
 .date { color: var(--muted); font-size: 11px; white-space: nowrap; }
@@ -2708,6 +2770,26 @@ tr:last-child td { border-bottom: none; }
     resultCount.textContent = `${visible} 件を表示`;
     noResults.classList.toggle('hidden', visible !== 0);
   }
+
+  const csrfToken = '__CSRF_TOKEN_JS__';
+  document.querySelectorAll('.check-toggle').forEach(toggle => {
+    toggle.addEventListener('click', async () => {
+      const card = toggle.closest('.app-card');
+      const id = card.dataset.id;
+      const nowChecked = !card.classList.contains('checked');
+      card.classList.toggle('checked', nowChecked);
+      try {
+        const res = await fetch(`/audition/admin/check/${encodeURIComponent(id)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ checked: nowChecked, csrf_token: csrfToken }),
+        });
+        if (!res.ok) throw new Error('failed');
+      } catch (e) {
+        card.classList.toggle('checked', !nowChecked);
+      }
+    });
+  });
 
   document.querySelectorAll('.view-button').forEach(button => {
     button.addEventListener('click', () => setView(button.dataset.view));
@@ -2839,11 +2921,17 @@ def audition_admin():
                 return str(escape(activity_name))
             return '<span class="missing-badge">⚠ 未記入</span>'
 
+        def is_checked(application):
+            return str(application.get("checked", "")).strip().lower() in ("1", "true", "yes", "on")
+
         cards = "".join(
             (
-                f'<article class="app-card" id="app-{escape(a.get("id", ""))}" '
+                f'<article class="app-card{" checked" if is_checked(a) else ""}" '
+                f'id="app-{escape(a.get("id", ""))}" data-id="{escape(a.get("id", ""))}" '
                 f'data-search="{escape(" ".join(str(a.get(key, "")) for key in AUDITION_COLUMNS))}">'
-                '<div class="card-head"><div>'
+                '<div class="card-head">'
+                f'<div class="check-toggle" title="確認済みにする">✓</div>'
+                '<div>'
                 f'<div class="name">{escape(a.get("name", ""))}</div>'
                 f'<div class="furigana">{escape(a.get("furigana", ""))}</div>'
                 f'<div class="activity">{activity_display(a)}</div>'
@@ -2919,6 +3007,7 @@ def audition_admin():
         .replace("__COUNT__", str(len(applications)))
         .replace("__MESSAGE__", message_html)
         .replace("__STORAGE_NOTE__", storage_note)
+        .replace("__CSRF_TOKEN_JS__", escape(csrf_token))
     )
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
@@ -3070,6 +3159,30 @@ def audition_admin_delete(application_id):
         }
 
     return redirect("/audition/admin")
+
+
+@app.route("/audition/admin/check/<application_id>", methods=["POST"])
+def audition_admin_check(application_id):
+    import hmac
+
+    if not session.get("audition_admin_ok"):
+        return jsonify({"error": "unauthorized"}), 401
+
+    data = request.get_json(force=True) or {}
+    expected_token = str(session.get("audition_admin_csrf", ""))
+    submitted_token = str(data.get("csrf_token", ""))
+    if not expected_token or not hmac.compare_digest(expected_token, submitted_token):
+        return jsonify({"error": "不正なリクエストです。管理画面を再読み込みしてください。"}), 403
+
+    try:
+        updated = _set_audition_checked(application_id, bool(data.get("checked")))
+    except Exception as e:
+        print(f"[audition] check toggle failed: {e}", file=sys.stderr)
+        return jsonify({"error": "更新に失敗しました"}), 500
+
+    if not updated:
+        return jsonify({"error": "対象の応募データは見つかりませんでした"}), 404
+    return jsonify({"ok": True})
 
 
 @app.route("/audition/admin/logout")
