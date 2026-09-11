@@ -138,6 +138,8 @@ Googleフォームの代わりに、サイト内に応募フォームを実装�
 - `/audition/admin` — `WEB_PASSWORD` でログインして応募一覧を確認（`/goods/admin` と同じパスワード）。
   カード／一覧表示の切り替え、応募者検索、応募内容の編集、確認ダイアログ付きの削除ができる。
   活動名が空欄の応募は「⚠ 未記入」と強調表示され、編集画面から追記できる。
+  カード左上の✓アイコンをクリックすると「確認済み」を切り替えられる（`checked` カラム。
+  編集フォームの対象外なので、内容を編集しても確認済み状態は保持される）。
 - 応募があると、面談予約アプリ（`eternal-interview-booking`）と共有の `DATABASE_URL`（Postgres/Supabase）から
   `booking_line_links` テーブルの `person='admin'` で連携済みのLINEユーザーへ通知を送る
   （`kazuto-post-generator` 側にも同じ `DATABASE_URL` と `LINE_CHANNEL_ACCESS_TOKEN` の設定が必要。
