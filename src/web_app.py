@@ -784,6 +784,116 @@ textarea { min-height: 110px; line-height: 1.7; resize: vertical; }
 </html>"""
 
 
+AUDITION_ADMIN_NEW_HTML = r"""<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>応募データを手動で追加 | ETERNALd.c.t</title>
+<style>
+:root {
+  --bg: #f7f7fb; --surface: #fff; --surface2: #fcfbff;
+  --accent: #7c3aed; --accent-text: #9333ea; --text: #1f2333; --muted: #6b7280;
+  --border: #e7e3f0; --warn: #9a5b00; --warn-bg: #fff7e6;
+  --grad: linear-gradient(135deg, #7c3aed, #d946ef, #ec4899);
+  --shadow: 0 6px 24px rgba(124,58,237,.08);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  min-height: 100vh; padding: 24px; background: var(--bg); color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
+}
+.page { width: min(900px, 100%); margin: 0 auto; }
+.header { margin-bottom: 18px; }
+.back { display: inline-block; color: var(--accent-text); text-decoration: none; font-size: 13px; font-weight: 800; margin-bottom: 12px; }
+h1 { font-size: clamp(21px, 4vw, 28px); margin-bottom: 6px; }
+.meta { color: var(--muted); font-size: 12px; }
+.notice { background: var(--warn-bg); border: 1px solid #f3d3a1; color: var(--warn); padding: 12px 15px; border-radius: 12px; margin-bottom: 14px; font-size: 13px; line-height: 1.6; }
+.error { background: #fff1f2; border: 1px solid #fecdd3; color: #b91c1c; padding: 12px 15px; border-radius: 12px; margin-bottom: 14px; font-size: 13px; font-weight: 700; }
+.section { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow); padding: 20px; margin-bottom: 14px; }
+.section h2 { font-size: 15px; margin-bottom: 16px; }
+.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; }
+.field.full { grid-column: 1 / -1; }
+label { display: block; color: var(--muted); font-size: 11px; font-weight: 800; margin-bottom: 6px; }
+input, select, textarea {
+  width: 100%; color: var(--text); background: var(--surface2); border: 1.5px solid var(--border);
+  border-radius: 10px; padding: 11px 12px; font: inherit; font-size: 14px; outline: none;
+}
+input:focus, select:focus, textarea:focus { border-color: #b794f6; box-shadow: 0 0 0 3px rgba(124,58,237,.1); }
+textarea { min-height: 110px; line-height: 1.7; resize: vertical; }
+.activity-field { background: var(--warn-bg); border: 1px solid #f3d3a1; border-radius: 13px; padding: 14px; }
+.activity-field label { color: var(--warn); font-size: 12px; }
+.actions { display: flex; justify-content: flex-end; gap: 10px; position: sticky; bottom: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 14px; background: rgba(255,255,255,.94); backdrop-filter: blur(10px); box-shadow: var(--shadow); }
+.button { border: 0; border-radius: 10px; padding: 11px 18px; font-size: 14px; font-weight: 800; cursor: pointer; text-decoration: none; }
+.button.cancel { color: var(--muted); background: var(--bg); border: 1px solid var(--border); }
+.button.save { color: white; background: var(--grad); box-shadow: 0 6px 18px rgba(217,70,239,.22); }
+@media (max-width: 640px) {
+  body { padding: 14px; }
+  .section { padding: 16px; }
+  .form-grid { grid-template-columns: 1fr; }
+  .field.full { grid-column: auto; }
+  .actions { display: grid; grid-template-columns: 1fr 1.4fr; }
+  .button { text-align: center; padding-inline: 10px; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="header">
+    <a class="back" href="/audition/admin">← 応募一覧に戻る</a>
+    <h1>➕ 応募データを手動で追加</h1>
+    <p class="meta">Googleフォームや口頭・メールなどサイト外で届いた応募を、管理者が手動で登録します。</p>
+  </header>
+  __ERROR__
+  <p class="notice">お名前だけ入力すれば登録できます。他の項目は分かる範囲で構いません。</p>
+  <form method="POST">
+    <input type="hidden" name="csrf_token" value="__CSRF_TOKEN__">
+    <section class="section">
+      <h2>活動名</h2>
+      <div class="activity-field">
+        <label for="activity_name">活動名（配信上の名前）</label>
+        <input id="activity_name" type="text" name="activity_name" value="__ACTIVITY_NAME__" placeholder="例）かずと" autofocus>
+      </div>
+    </section>
+    <section class="section">
+      <h2>基本情報</h2>
+      <div class="form-grid">
+        <div class="field"><label for="name">お名前（本名）</label><input id="name" type="text" name="name" value="__NAME__" required></div>
+        <div class="field"><label for="furigana">ふりがな</label><input id="furigana" type="text" name="furigana" value="__FURIGANA__"></div>
+        <div class="field"><label for="gender">性別</label><select id="gender" name="gender">__GENDER_OPTIONS__</select></div>
+        <div class="field"><label for="email">メール</label><input id="email" type="email" name="email" value="__EMAIL__"></div>
+        <div class="field"><label for="prefecture">都道府県</label><select id="prefecture" name="prefecture">__PREFECTURE_OPTIONS__</select></div>
+        <div class="field"><label for="minor_consent">未成年者の同意</label><select id="minor_consent" name="minor_consent">__MINOR_OPTIONS__</select></div>
+      </div>
+    </section>
+    <section class="section">
+      <h2>活動について</h2>
+      <div class="form-grid">
+        <div class="field"><label for="experience">配信・ライバー経験</label><select id="experience" name="experience">__EXPERIENCE_OPTIONS__</select></div>
+        <div class="field"><label for="frequency">配信頻度</label><select id="frequency" name="frequency">__FREQUENCY_OPTIONS__</select></div>
+        <div class="field full"><label for="history">活動歴・実績</label><textarea id="history" name="history">__HISTORY__</textarea></div>
+        <div class="field full"><label for="genre">得意なジャンル・企画</label><textarea id="genre" name="genre">__GENRE__</textarea></div>
+        <div class="field full"><label for="sns">SNSアカウント</label><textarea id="sns" name="sns">__SNS__</textarea></div>
+      </div>
+    </section>
+    <section class="section">
+      <h2>アピール</h2>
+      <div class="form-grid">
+        <div class="field full"><label for="self_pr">自己PR</label><textarea id="self_pr" name="self_pr">__SELF_PR__</textarea></div>
+        <div class="field full"><label for="motivation">応募動機</label><textarea id="motivation" name="motivation">__MOTIVATION__</textarea></div>
+        <div class="field full"><label for="other">その他</label><textarea id="other" name="other">__OTHER__</textarea></div>
+      </div>
+    </section>
+    <div class="actions">
+      <a class="button cancel" href="/audition/admin">キャンセル</a>
+      <button class="button save" type="submit">追加する</button>
+    </div>
+  </form>
+</div>
+</body>
+</html>"""
+
+
 # ── ルーティング ──────────────────────────────────────────────────
 
 @app.route("/")
@@ -2727,7 +2837,10 @@ tr:last-child td { border-bottom: none; }
       <h1>🎤 オーディション応募一覧</h1>
       <span class="count">__COUNT__ 件</span>
     </div>
-    <a class="logout" href="/audition/admin/logout">ログアウト</a>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <a class="logout" href="/audition/admin/new">＋ 新規追加</a>
+      <a class="logout" href="/audition/admin/logout">ログアウト</a>
+    </div>
   </div>
   __MESSAGE__
   <div class="toolbar">
@@ -3028,6 +3141,114 @@ def audition_admin():
         .replace("__CSRF_TOKEN_JS__", escape(csrf_token))
     )
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
+
+
+@app.route("/audition/admin/new", methods=["GET", "POST"])
+def audition_admin_new():
+    """Googleフォーム経由ではなく、口頭・メールなどサイト外で届いた応募を
+    管理者が手動で登録するためのフォーム。"""
+    import hmac
+    import secrets
+    import uuid
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    if not session.get("audition_admin_ok"):
+        return redirect("/audition/admin")
+
+    csrf_token = session.get("audition_admin_csrf")
+    if not csrf_token:
+        csrf_token = secrets.token_urlsafe(24)
+        session["audition_admin_csrf"] = csrf_token
+
+    form_values = {field: "" for field in AUDITION_EDITABLE_FIELDS}
+    error_html = ""
+
+    if request.method == "POST":
+        submitted_token = str(request.form.get("csrf_token", ""))
+        if not hmac.compare_digest(str(csrf_token), submitted_token):
+            return "不正なリクエストです。管理画面を再読み込みしてください。", 403
+
+        form_values = {
+            field: str(request.form.get(field, "")).strip()
+            for field in AUDITION_EDITABLE_FIELDS
+        }
+        if not form_values["name"]:
+            error_html = '<p class="error">お名前は空欄にできません。</p>'
+        else:
+            JST = ZoneInfo("Asia/Tokyo")
+            entry = {
+                "id": str(uuid.uuid4()),
+                "created_at": datetime.now(JST).strftime("%Y-%m-%d %H:%M"),
+                **form_values,
+            }
+            try:
+                _save_audition_application(entry)
+                session["audition_admin_message"] = {
+                    "ok": True,
+                    "text": "応募データを手動で追加しました。",
+                }
+                return redirect(f"/audition/admin#app-{entry['id']}")
+            except Exception as e:
+                print(f"[audition] manual add failed: {e}", file=sys.stderr)
+                error_html = '<p class="error">追加に失敗しました。データは登録されていません。</p>'
+
+    def options_html(values, current):
+        current = str(current or "")
+        choices = list(values)
+        if current and current not in choices:
+            choices.insert(0, current)
+        options = [
+            f'<option value=""{" selected" if not current else ""}>未記入</option>'
+        ]
+        for value in choices:
+            selected = " selected" if value == current else ""
+            options.append(
+                f'<option value="{escape(value)}"{selected}>{escape(value)}</option>'
+            )
+        return "".join(options)
+
+    replacements = {
+        "__CSRF_TOKEN__": escape(csrf_token),
+        "__ACTIVITY_NAME__": escape(form_values.get("activity_name", "")),
+        "__NAME__": escape(form_values.get("name", "")),
+        "__FURIGANA__": escape(form_values.get("furigana", "")),
+        "__EMAIL__": escape(form_values.get("email", "")),
+        "__HISTORY__": escape(form_values.get("history", "")),
+        "__GENRE__": escape(form_values.get("genre", "")),
+        "__SNS__": escape(form_values.get("sns", "")),
+        "__SELF_PR__": escape(form_values.get("self_pr", "")),
+        "__MOTIVATION__": escape(form_values.get("motivation", "")),
+        "__OTHER__": escape(form_values.get("other", "")),
+        "__GENDER_OPTIONS__": options_html(
+            ["男性", "女性", "その他", "回答しない"],
+            form_values.get("gender", ""),
+        ),
+        "__PREFECTURE_OPTIONS__": options_html(
+            PREFECTURES,
+            form_values.get("prefecture", ""),
+        ),
+        "__MINOR_OPTIONS__": options_html(
+            ["該当しない（成人）", "同意している", "まだ得ていない"],
+            form_values.get("minor_consent", ""),
+        ),
+        "__EXPERIENCE_OPTIONS__": options_html(
+            ["あり", "なし"],
+            form_values.get("experience", ""),
+        ),
+        "__FREQUENCY_OPTIONS__": options_html(
+            ["週1回未満", "週1〜2回", "週3〜4回", "週5回以上"],
+            form_values.get("frequency", ""),
+        ),
+        "__ERROR__": error_html,
+    }
+    html = AUDITION_ADMIN_NEW_HTML
+    for placeholder, value in replacements.items():
+        html = html.replace(placeholder, str(value))
+    return html, 200, {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store, max-age=0",
+    }
 
 
 @app.route("/audition/admin/edit/<application_id>", methods=["GET", "POST"])
