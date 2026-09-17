@@ -2116,12 +2116,25 @@ def _set_audition_checked(application_id, checked):
 
 def _save_audition_application(entry):
     """応募を保存する。DBに入れば True、ファイルにしか残せなければ False を返す。
-    どちらにも保存できなかった場合は例外を送出する（呼び出し側でエラー応答する）。"""
+    どちらにも保存できなかった場合は例外を送出する（呼び出し側でエラー応答する）。
+
+    ファイルはRenderの再デプロイ・スリープ復帰で消えるため、DB保存はできる限り
+    その場で成功させたい。接続やINSERTがデプロイ切り替え等で一時的に失敗しても、
+    ファイルだけの保存に落ちる前に何度か再試行する。"""
+    import time
+
     global _audition_table_ready
 
     saved_db = False
-    conn = _audition_db_conn()
-    if conn:
+    last_error = None
+    attempts = 3 if os.environ.get("DATABASE_URL", "") else 1
+    for attempt in range(attempts):
+        if attempt:
+            time.sleep(0.4 * attempt)
+        conn = _audition_db_conn()
+        if not conn:
+            last_error = "connection failed"
+            continue
         try:
             if _ensure_audition_table(conn):
                 with conn:
@@ -2129,11 +2142,16 @@ def _save_audition_application(entry):
                         _insert_audition_row(cur, entry)
                 saved_db = True
         except Exception as e:
-            print(f"[audition] DB save failed: {e}", file=sys.stderr)
+            last_error = e
             # 次にDBへつながったときに、ファイルに残った分をまとめて取り込み直す
             _audition_table_ready = False
         finally:
             conn.close()
+        if saved_db:
+            break
+
+    if not saved_db and last_error is not None:
+        print(f"[audition] DB save failed after retries: {last_error}", file=sys.stderr)
 
     # DBの有無にかかわらずファイルにも控えを残す（DB障害時の保険）
     saved_file = _append_audition_file(entry)
@@ -3189,59 +3207,6 @@ def audition_admin_check(application_id):
 def audition_admin_logout():
     session.pop("audition_admin_ok", None)
     return redirect("/audition/admin")
-
-
-@app.route("/audition/admin/debug")
-def audition_admin_debug():
-    """応募データが見当たらないときの一時的な調査用エンドポイント。
-    DBと控えファイルそれぞれの件数・要約を返す。原因が分かったら削除する。"""
-    if not session.get("audition_admin_ok"):
-        return jsonify({"error": "unauthorized"}), 401
-
-    def summarize(rows):
-        return [
-            {
-                "id": r.get("id", ""),
-                "created_at": r.get("created_at", ""),
-                "name": r.get("name", ""),
-                "furigana": r.get("furigana", ""),
-                "activity_name": r.get("activity_name", ""),
-                "checked": r.get("checked", ""),
-            }
-            for r in rows
-        ]
-
-    result = {
-        "database_url_set": bool(os.environ.get("DATABASE_URL", "")),
-        "db_ready": _audition_db_ready(),
-    }
-
-    db_rows = []
-    db_error = None
-    conn = _audition_db_conn()
-    if conn:
-        try:
-            if _ensure_audition_table(conn):
-                import psycopg2.extras
-                with conn:
-                    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                        cur.execute("SELECT * FROM audition_applications ORDER BY seq ASC")
-                        db_rows = [dict(r) for r in cur.fetchall()]
-        except Exception as e:
-            db_error = str(e)
-        finally:
-            conn.close()
-
-    file_rows = _load_audition_file()
-
-    result["db_count"] = len(db_rows)
-    result["db_error"] = db_error
-    result["db_rows"] = summarize(db_rows)
-    result["file_count"] = len(file_rows)
-    result["file_rows"] = summarize(file_rows)
-    result["merged_count"] = len(_load_audition_applications())
-
-    return jsonify(result)
 
 
 # ── LINEスタンプメーカー ──────────────────────────────────────────
