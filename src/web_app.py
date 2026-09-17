@@ -3191,6 +3191,59 @@ def audition_admin_logout():
     return redirect("/audition/admin")
 
 
+@app.route("/audition/admin/debug")
+def audition_admin_debug():
+    """応募データが見当たらないときの一時的な調査用エンドポイント。
+    DBと控えファイルそれぞれの件数・要約を返す。原因が分かったら削除する。"""
+    if not session.get("audition_admin_ok"):
+        return jsonify({"error": "unauthorized"}), 401
+
+    def summarize(rows):
+        return [
+            {
+                "id": r.get("id", ""),
+                "created_at": r.get("created_at", ""),
+                "name": r.get("name", ""),
+                "furigana": r.get("furigana", ""),
+                "activity_name": r.get("activity_name", ""),
+                "checked": r.get("checked", ""),
+            }
+            for r in rows
+        ]
+
+    result = {
+        "database_url_set": bool(os.environ.get("DATABASE_URL", "")),
+        "db_ready": _audition_db_ready(),
+    }
+
+    db_rows = []
+    db_error = None
+    conn = _audition_db_conn()
+    if conn:
+        try:
+            if _ensure_audition_table(conn):
+                import psycopg2.extras
+                with conn:
+                    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                        cur.execute("SELECT * FROM audition_applications ORDER BY seq ASC")
+                        db_rows = [dict(r) for r in cur.fetchall()]
+        except Exception as e:
+            db_error = str(e)
+        finally:
+            conn.close()
+
+    file_rows = _load_audition_file()
+
+    result["db_count"] = len(db_rows)
+    result["db_error"] = db_error
+    result["db_rows"] = summarize(db_rows)
+    result["file_count"] = len(file_rows)
+    result["file_rows"] = summarize(file_rows)
+    result["merged_count"] = len(_load_audition_applications())
+
+    return jsonify(result)
+
+
 # ── LINEスタンプメーカー ──────────────────────────────────────────
 # ChatGPT などで手動生成したキャラクターのポーズ違い画像（最大16枚）をアップロードすると、
 # 背景透過・白ふち・セリフ合成・LINEスタンプサイズ調整をまとめて行う。外部APIキーは不要。
