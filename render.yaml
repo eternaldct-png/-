@@ -21,7 +21,8 @@ services:
       - key: LINE_CHANNEL_ACCESS_TOKEN
         sync: false          # /audition のLINE通知に必要（eternal-interview-bookingと同じ値。未設定時は通知スキップ）
       - key: AUDITION_STATUS
-        value: closed        # 次回募集時は open に変更すると、保存済みの応募フォームが再公開される
+        sync: false          # open/closed をRenderダッシュボードで設定（value:で固定するとデプロイのたびに
+                             # 上書きされてしまうため sync: false にしてある）。未設定時はclosed扱い。
 
   - type: web
     name: eternal-schedule
