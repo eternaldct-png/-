@@ -2,38 +2,35 @@
 note.com ブラウザ自動化クライアント (Playwright)
 
 公式APIがないため、実際のブラウザ操作で下書きを作成する。
+ログインは1回の実行につき1回だけ行う（記事ごとにログインし直すと
+note 側で「しばらくたってからもう一度お試しください」とブロックされるため）。
 """
-import sys
-from pathlib import Path
 from typing import Optional
 
 
-def create_draft_via_browser(
-    email: str,
-    password: str,
-    title: str,
-    body: str,
-    tags: Optional[list] = None,
-    headless: bool = True,
-) -> Optional[dict]:
-    try:
-        from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
-    except ImportError:
-        print("[note_browser] playwright がインストールされていません: pip install playwright")
-        return None
+class NoteBrowserSession:
+    """1回のログインで複数の下書きを作成するブラウザセッション"""
 
-    tags = tags or []
+    def __init__(self, headless: bool = True):
+        self.headless = headless
+        self.last_error = ""
+        self._pw = None
+        self._browser = None
+        self.page = None
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=headless,
+    def __enter__(self):
+        from playwright.sync_api import sync_playwright
+
+        self._pw = sync_playwright().start()
+        self._browser = self._pw.chromium.launch(
+            headless=self.headless,
             args=[
                 "--disable-blink-features=AutomationControlled",
                 "--no-sandbox",
                 "--disable-dev-shm-usage",
             ],
         )
-        context = browser.new_context(
+        context = self._browser.new_context(
             user_agent=(
                 "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -49,10 +46,24 @@ def create_draft_via_browser(
             Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
             Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3]});
         """)
-        page = context.new_page()
+        self.page = context.new_page()
+        return self
 
+    def __exit__(self, *exc):
         try:
-            # ── ログイン ──────────────────────────────────────────
+            if self._browser:
+                self._browser.close()
+        finally:
+            if self._pw:
+                self._pw.stop()
+
+    # ── ログイン ──────────────────────────────────────────────
+
+    def login(self, email: str, password: str) -> bool:
+        from playwright.sync_api import TimeoutError as PWTimeout
+
+        page = self.page
+        try:
             print("[note_browser] ログインページへ移動...")
             page.goto("https://note.com/login", wait_until="domcontentloaded", timeout=30000)
             page.wait_for_timeout(3000)  # SPA レンダリング待ち
@@ -91,8 +102,8 @@ def create_draft_via_browser(
                 for i, inp in enumerate(inputs):
                     print(f"[note_browser] input[{i}]: type={inp.get_attribute('type')} name={inp.get_attribute('name')} placeholder={inp.get_attribute('placeholder')}")
                 page.screenshot(path="/tmp/note_login_debug.png")
-                browser.close()
-                return None
+                self.last_error = "ログイン画面のメール欄が見つかりません"
+                return False
 
             # パスワード入力
             pwd_selectors = [
@@ -137,15 +148,35 @@ def create_draft_via_browser(
             page.screenshot(path="/tmp/note_after_login.png")
             print(f"[note_browser] ログイン後URL: {page.url}")
 
-            # エラーメッセージを確認
+            if "/login" not in page.url:
+                return True
+
+            # ログイン画面から進めなかった → エラーメッセージを拾って失敗扱い
+            message = ""
             for err_sel in ['[class*="error"]', '[class*="Error"]', '.alert', '[role="alert"]']:
                 try:
                     el = page.locator(err_sel).first
                     if el.is_visible():
-                        print(f"[note_browser] エラーメッセージ: {el.inner_text()[:100]}")
+                        message = el.inner_text()[:100].strip()
+                        print(f"[note_browser] エラーメッセージ: {message}")
+                        break
                 except Exception:
                     pass
+            self.last_error = "note へのログインに失敗" + (f"（{message}）" if message else "")
+            return False
 
+        except Exception as e:
+            print(f"[note_browser] ログイン中のエラー: {e}")
+            self.last_error = f"note へのログイン中にエラー: {e}"
+            return False
+
+    # ── 下書き作成 ────────────────────────────────────────────
+
+    def create_draft(self, title: str, body: str, tags: Optional[list] = None) -> Optional[dict]:
+        from playwright.sync_api import TimeoutError as PWTimeout
+
+        page = self.page
+        try:
             # ── 新規記事ページへ ──────────────────────────────────
             print("[note_browser] 新規記事ページへ移動...")
             page.goto("https://note.com/notes/new", wait_until="networkidle", timeout=30000)
@@ -161,13 +192,13 @@ def create_draft_via_browser(
             except PWTimeout:
                 print("[note_browser] タイトル欄が見つかりません。スクリーンショット保存")
                 page.screenshot(path="/tmp/note_new_error.png")
-                browser.close()
+                self.last_error = "note の新規記事画面でタイトル欄が見つかりません"
                 return None
 
             # 本文エリアへ移動してテキスト入力
             page.keyboard.press("Tab")
             page.wait_for_timeout(500)
-            page.keyboard.type(body[:3000], delay=1)  # 長すぎる場合は先頭3000字
+            page.keyboard.type(body, delay=1)
             print("[note_browser] 本文入力完了")
 
             # ── 下書き保存 ────────────────────────────────────────
@@ -196,15 +227,34 @@ def create_draft_via_browser(
 
             current_url = page.url
             print(f"[note_browser] 現在のURL: {current_url}")
-
-            browser.close()
             return {"url": current_url, "title": title, "status": "draft"}
 
         except Exception as e:
             print(f"[note_browser] エラー: {e}")
+            self.last_error = f"下書き作成中にエラー: {e}"
             try:
                 page.screenshot(path="/tmp/note_error.png")
             except Exception:
                 pass
-            browser.close()
             return None
+
+
+def create_draft_via_browser(
+    email: str,
+    password: str,
+    title: str,
+    body: str,
+    tags: Optional[list] = None,
+    headless: bool = True,
+) -> Optional[dict]:
+    """1記事だけ作成する（ログイン → 下書き作成）。複数記事は NoteBrowserSession を使う。"""
+    try:
+        import playwright  # noqa: F401
+    except ImportError:
+        print("[note_browser] playwright がインストールされていません: pip install playwright")
+        return None
+
+    with NoteBrowserSession(headless=headless) as s:
+        if not s.login(email, password):
+            return None
+        return s.create_draft(title, body, tags)

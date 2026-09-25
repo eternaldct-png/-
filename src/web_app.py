@@ -956,8 +956,95 @@ NOTE_DRAFTS_HTML = r"""<!DOCTYPE html>
     border-radius: 8px;
     padding: 2px 8px;
   }
-  .article-card .status-draft { color: #f39c12; font-weight: 600; }
-  .article-card .status-uploaded { color: #41C9B4; font-weight: 600; }
+  .badge {
+    display: inline-block;
+    border-radius: 8px;
+    padding: 2px 8px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .badge.st-draft { background: #fdf0e0; color: #b9650a; }
+  .badge.st-uploaded_draft { background: #e3effd; color: #1f5fae; }
+  .badge.st-published { background: #e2f6e9; color: #1e7a45; }
+  .badge.warn { background: #fdeaea; color: #c0392b; font-weight: 600; }
+  .article-card .excerpt {
+    font-size: 13px;
+    color: #555;
+    line-height: 1.6;
+    margin-bottom: 8px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .article-card .file { font-size: 11px; color: #aaa; margin-top: 6px; word-break: break-all; }
+  .filters {
+    display: flex;
+    gap: 8px;
+    padding: 12px 16px 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .filters button {
+    flex-shrink: 0;
+    border: 1.5px solid #d8d8d0;
+    background: white;
+    color: #444;
+    border-radius: 999px;
+    padding: 7px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .filters button.active { background: #1a1a1a; border-color: #1a1a1a; color: white; }
+  .notice {
+    margin: 12px 16px 0;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: #fff6e0;
+    color: #7a5a00;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .status-box {
+    padding: 12px 20px;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+  .status-box .now { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .status-box .now a { color: #1f5fae; word-break: break-all; }
+  .status-box .hint { color: #888; font-size: 12px; margin-top: 6px; line-height: 1.5; }
+  .status-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .status-actions button {
+    border: 1.5px solid #d8d8d0;
+    background: white;
+    border-radius: 10px;
+    padding: 9px 4px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    color: #333;
+  }
+  .status-actions button.current { background: #1a1a1a; border-color: #1a1a1a; color: white; }
+  .status-actions button:disabled { opacity: 0.35; cursor: default; }
+  .status-box input[type=url] {
+    width: 100%;
+    margin-top: 8px;
+    padding: 9px 10px;
+    border: 1.5px solid #d8d8d0;
+    border-radius: 10px;
+    font-size: 13px;
+  }
+  .confirm-box input[type=password] {
+    width: 100%;
+    padding: 12px;
+    border: 1.5px solid #d8d8d0;
+    border-radius: 12px;
+    font-size: 15px;
+    margin-bottom: 16px;
+  }
+  .btn-primary { background: #41C9B4; color: white; }
   .empty { text-align: center; padding: 60px 20px; color: #888; }
   .empty p { margin-top: 8px; font-size: 14px; }
 
@@ -999,7 +1086,7 @@ NOTE_DRAFTS_HTML = r"""<!DOCTYPE html>
     border-bottom: 1px solid #f0f0f0;
     flex-shrink: 0;
   }
-  .detail-header h2 { font-size: 16px; font-weight: 700; line-height: 1.4; }
+  .detail-header h2 { font-size: 16px; font-weight: 700; line-height: 1.4; padding-right: 40px; }
   .detail-header .close-btn {
     position: absolute;
     top: 16px;
@@ -1121,6 +1208,9 @@ NOTE_DRAFTS_HTML = r"""<!DOCTYPE html>
   <span class="count" id="count">0件</span>
 </header>
 
+<div class="filters" id="filters"></div>
+<div class="notice" id="notice" style="display:none"></div>
+
 <div class="list-view" id="list"></div>
 
 <div class="detail-overlay" id="overlay" onclick="closeDetail()">
@@ -1129,6 +1219,16 @@ NOTE_DRAFTS_HTML = r"""<!DOCTYPE html>
     <div class="detail-header">
       <h2 id="detail-title"></h2>
       <button class="close-btn" onclick="closeDetail()">×</button>
+    </div>
+    <div class="status-box">
+      <div class="now" id="detail-status"></div>
+      <div class="status-actions">
+        <button data-status="draft" onclick="setStatus('draft')">未作成</button>
+        <button data-status="uploaded_draft" onclick="setStatus('uploaded_draft')">下書き作成済</button>
+        <button data-status="published" onclick="setStatus('published')">公開済</button>
+      </div>
+      <input type="url" id="note-url" placeholder="note の URL（任意）https://note.com/...">
+      <div class="hint" id="detail-hint"></div>
     </div>
     <div class="detail-body" id="detail-body"></div>
     <div class="detail-footer">
@@ -1149,57 +1249,194 @@ NOTE_DRAFTS_HTML = r"""<!DOCTYPE html>
   </div>
 </div>
 
+<div class="confirm-overlay" id="login-overlay">
+  <div class="confirm-box">
+    <h3>パスワードを入力</h3>
+    <p>状態の変更・削除には管理パスワード（/goods/admin と同じ）が必要です</p>
+    <input type="password" id="login-password" autocomplete="current-password"
+           onkeydown="if(event.key==='Enter')submitLogin()">
+    <div class="confirm-actions">
+      <button class="btn-cancel" onclick="closeLogin()">キャンセル</button>
+      <button class="btn-primary" onclick="submitLogin()">ログイン</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
+const LABELS = {draft: 'note未作成', uploaded_draft: 'note下書き作成済', published: 'note公開済'};
+const FILTERS = [['all', 'すべて'], ['draft', 'note未作成'], ['uploaded_draft', '下書き作成済'], ['published', '公開済']];
 let articles = [];
+let storage = 'file';
+let filter = 'all';
 let currentContent = '';
 let currentFilename = '';
-let currentIndex = -1;
+let pendingAction = null;
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+}
+
+function badge(status) {
+  return `<span class="badge st-${esc(status)}">${esc(LABELS[status] || status)}</span>`;
+}
+
+function shortDate(iso) {
+  const m = String(iso || '').match(/^\d{4}-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  return m ? `${Number(m[1])}/${Number(m[2])} ${m[3]}:${m[4]}` : '';
+}
 
 async function load() {
   const res = await fetch('/api/note-drafts');
   const data = await res.json();
   articles = data.articles || [];
+  storage = data.storage || 'file';
+  const notice = document.getElementById('notice');
+  if (data.storage === 'file') {
+    notice.textContent = '⚠️ データベース未設定のため、手動で変えた状態は記事ファイルに保存しています（Render では再デプロイ・スリープ復帰で消えます）。';
+    notice.style.display = '';
+  } else if (data.storage === 'db_error') {
+    notice.textContent = '⚠️ データベースに接続できないため、手動で変えた状態を読み込めていません。';
+    notice.style.display = '';
+  } else {
+    notice.style.display = 'none';
+  }
   render();
+  if (currentFilename) {
+    const i = articles.findIndex(a => a.filename === currentFilename);
+    if (i >= 0 && document.getElementById('overlay').classList.contains('open')) fillDetail(articles[i]);
+  }
 }
 
 function render() {
-  const list = document.getElementById('list');
+  const counts = {all: articles.length, draft: 0, uploaded_draft: 0, published: 0};
+  articles.forEach(a => { counts[a.status] = (counts[a.status] || 0) + 1; });
   document.getElementById('count').textContent = articles.length + '件';
-  if (!articles.length) {
-    list.innerHTML = '<div class="empty"><div style="font-size:48px">📝</div><p>下書き記事がありません</p></div>';
+  document.getElementById('filters').innerHTML = FILTERS.map(([key, label]) =>
+    `<button class="${filter === key ? 'active' : ''}" onclick="setFilter('${key}')">${label} ${counts[key] || 0}</button>`
+  ).join('');
+
+  const list = document.getElementById('list');
+  const shown = articles.filter(a => filter === 'all' || a.status === filter);
+  if (!shown.length) {
+    list.innerHTML = '<div class="empty"><div style="font-size:48px">📝</div><p>該当する記事がありません</p></div>';
     return;
   }
-  list.innerHTML = articles.map((a, i) => `
-    <div class="article-card" onclick="openDetail(${i})">
-      <h2>${a.title}</h2>
+  list.innerHTML = shown.map(a => `
+    <div class="article-card" data-file="${esc(a.filename)}" onclick="openDetail(this.dataset.file)">
+      <h2>${esc(a.title)}</h2>
+      <div class="excerpt">${esc(a.excerpt)}${a.chars > 90 ? '…' : ''}</div>
       <div class="meta">
-        <span>${a.date}</span>
-        <span class="${a.status === 'draft' ? 'status-draft' : 'status-uploaded'}">
-          ${a.status === 'draft' ? '● 未投稿' : '✓ 投稿済'}
-        </span>
-        ${a.tags.map(t => `<span class="tag">${t}</span>`).join('')}
+        ${badge(a.status)}
+        ${a.upload_error ? `<span class="badge warn">⚠ 自動アップロード失敗 ${esc(shortDate(a.upload_attempted_at))}</span>` : ''}
+        <span>${esc(a.date)}</span>
+        <span>${a.chars}字</span>
+        ${a.tags.map(t => `<span class="tag">${esc(t)}</span>`).join('')}
       </div>
+      <div class="file">${esc(a.filename)}</div>
     </div>
   `).join('');
 }
 
-function openDetail(i) {
-  const a = articles[i];
-  currentIndex = i;
+function setFilter(key) {
+  filter = key;
+  render();
+}
+
+function openDetail(filename) {
+  const a = articles.find(x => x.filename === filename);
+  if (!a) return;
   currentContent = a.copy_text;
   currentFilename = a.filename;
-  document.getElementById('detail-title').textContent = a.title;
-  document.getElementById('detail-body').textContent = a.body;
+  fillDetail(a);
   document.getElementById('copy-btn').textContent = 'コピーして note に貼り付け';
   document.getElementById('copy-btn').classList.remove('copied');
   document.getElementById('overlay').classList.add('open');
   document.body.style.overflow = 'hidden';
 }
 
+function fillDetail(a) {
+  document.getElementById('detail-title').textContent = a.title;
+  document.getElementById('detail-body').textContent = a.body;
+  const link = a.note_url ? `<a href="${esc(a.note_url)}" target="_blank" rel="noopener">note で開く</a>` : '';
+  document.getElementById('detail-status').innerHTML = badge(a.status) + link;
+  // DB保存時、自動アップロードで進んだ状態より前には戻せない
+  const floor = storage === 'file' ? 0 : Object.keys(LABELS).indexOf(a.file_status);
+  document.querySelectorAll('.status-actions button').forEach(b => {
+    b.classList.toggle('current', b.dataset.status === a.status);
+    b.disabled = Object.keys(LABELS).indexOf(b.dataset.status) < floor;
+  });
+  document.getElementById('note-url').value = a.note_url || '';
+
+  const hints = [];
+  if (storage !== 'file' && a.file_status !== 'draft') hints.push(`自動アップロードで「${LABELS[a.file_status]}」になった記事です（これより前の状態には戻せません）。`);
+  if (a.manual_status) hints.push(`手動で「${LABELS[a.manual_status]}」に設定${a.manual_updated_at ? '（' + shortDate(a.manual_updated_at) + '）' : ''}。`);
+  if (a.upload_error) hints.push(`自動アップロード失敗: ${a.upload_error}`);
+  if (!hints.length) hints.push('note で下書きを作った・公開したら、上のボタンで状態を記録してください。');
+  document.getElementById('detail-hint').textContent = hints.join(' ');
+}
+
+async function postJSON(url, body) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body),
+  });
+  let data = {};
+  try { data = await res.json(); } catch (e) {}
+  return {status: res.status, data};
+}
+
+async function withLogin(action) {
+  const r = await action();
+  if (r.status !== 401) return r;
+  pendingAction = action;
+  document.getElementById('login-password').value = '';
+  document.getElementById('login-overlay').classList.add('open');
+  setTimeout(() => document.getElementById('login-password').focus(), 50);
+  return null;
+}
+
+async function submitLogin() {
+  const r = await postJSON('/api/note-drafts/login', {password: document.getElementById('login-password').value});
+  if (!r.data.ok) { showToast(r.data.error || 'ログインできませんでした'); return; }
+  closeLogin();
+  const action = pendingAction;
+  pendingAction = null;
+  if (action) await action();
+}
+
+function closeLogin() {
+  document.getElementById('login-overlay').classList.remove('open');
+}
+
+async function setStatus(status) {
+  const a = articles.find(x => x.filename === currentFilename);
+  if (!a) return;
+  // 「未作成」は手動設定の取り消し（自動アップロード済みの状態までは戻らない）
+  const body = {
+    filename: currentFilename,
+    status: status === 'draft' ? '' : status,
+    note_url: status === 'draft' ? '' : document.getElementById('note-url').value.trim(),
+  };
+  const run = async () => {
+    const r = await postJSON('/api/note-drafts/status', body);
+    if (r.status === 401) return r;
+    if (r.data.ok) {
+      showToast('状態を保存しました');
+      await load();
+    } else {
+      showToast('保存できませんでした: ' + (r.data.error || ''));
+    }
+    return r;
+  };
+  await withLogin(run);
+}
+
 function confirmDelete() {
-  const a = articles[currentIndex];
+  const a = articles.find(x => x.filename === currentFilename);
+  if (!a) return;
   document.getElementById('confirm-title-text').textContent = '「' + a.title + '」';
   document.getElementById('confirm-overlay').classList.add('open');
 }
@@ -1210,19 +1447,19 @@ function closeConfirm() {
 
 async function deleteArticle() {
   closeConfirm();
-  const res = await fetch('/api/note-drafts/delete', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({filename: currentFilename}),
-  });
-  const data = await res.json();
-  if (data.ok) {
-    showToast('削除しました');
-    closeDetail();
-    await load();
-  } else {
-    showToast('削除に失敗しました: ' + (data.error || ''));
-  }
+  const run = async () => {
+    const r = await postJSON('/api/note-drafts/delete', {filename: currentFilename});
+    if (r.status === 401) return r;
+    if (r.data.ok) {
+      showToast('削除しました');
+      closeDetail();
+      await load();
+    } else {
+      showToast('削除に失敗しました: ' + (r.data.error || ''));
+    }
+    return r;
+  };
+  await withLogin(run);
 }
 
 function closeDetail() {
@@ -1267,62 +1504,112 @@ def note_drafts():
     return NOTE_DRAFTS_HTML, 200, {"Content-Type": "text/html; charset=utf-8"}
 
 
+def _note_drafts_can_edit():
+    """状態変更・削除の権限。WEB_PASSWORD 未設定（ローカル実行）なら誰でも可。"""
+    if not os.environ.get("WEB_PASSWORD", ""):
+        return True
+    return bool(session.get("note_drafts_ok"))
+
+
 @app.route("/api/note-drafts")
 def api_note_drafts():
-    import yaml
-    import re
+    import note_status as ns
 
-    articles_dir = Path("posts/note/articles")
+    if not ns.ARTICLES_DIR.exists():
+        return jsonify({"articles": [], "storage": "file", "can_edit": _note_drafts_can_edit()})
+
+    manual, db_ok = ns.load_manual_statuses()
+    uploads = ns.load_upload_results()
     result = []
 
-    if not articles_dir.exists():
-        return jsonify({"articles": []})
-
-    for fp in sorted(articles_dir.glob("*.md"), reverse=True):
-        content = fp.read_text(encoding="utf-8")
-
-        # frontmatter パース
-        meta, body = {}, content
-        if content.startswith("---"):
-            parts = content.split("---", 2)
-            if len(parts) >= 3:
-                try:
-                    meta = yaml.safe_load(parts[1]) or {}
-                    body = parts[2].strip()
-                except Exception:
-                    pass
-
-        title = meta.get("title", fp.stem)
-        date = meta.get("date", "")
-        tags = meta.get("tags", [])
-        status = meta.get("note_status", "draft")
-
-        # コピー用テキスト（タイトル＋本文）
-        copy_text = f"{title}\n\n{body}"
+    for fp in sorted(ns.ARTICLES_DIR.glob("*.md"), reverse=True):
+        a = ns.read_article(fp)
+        m = manual.get(fp.name, {})
+        status = ns.merge_status(a["note_status"], m.get("status"))
+        upload = uploads.get(fp.name, {})
+        excerpt = " ".join(a["body"].replace("#", "").replace("*", "").split())[:90]
 
         result.append({
-            "title": title,
-            "date": str(date)[:10] if date else "",
-            "tags": [str(t) for t in tags],
-            "status": status,
-            "body": body,
-            "copy_text": copy_text,
             "filename": fp.name,
+            "title": a["title"],
+            "date": a["date"],
+            "tags": a["tags"],
+            "status": status,
+            "status_label": ns.STATUS_LABELS[status],
+            "file_status": a["note_status"],
+            "manual_status": m.get("status", ""),
+            "manual_updated_at": m.get("updated_at", ""),
+            "note_url": m.get("note_url") or a["note_url"],
+            "upload_error": upload.get("error", "") if status == "draft" else "",
+            "upload_attempted_at": upload.get("attempted_at", ""),
+            "excerpt": excerpt,
+            "chars": len(a["body"]),
+            "body": a["body"],
+            # コピー用テキスト（タイトル＋本文）
+            "copy_text": f"{a['title']}\n\n{a['body']}",
         })
 
-    return jsonify({"articles": result})
+    if not ns.db_configured():
+        storage = "file"
+    else:
+        storage = "db" if db_ok else "db_error"
+
+    return jsonify({"articles": result, "storage": storage, "can_edit": _note_drafts_can_edit()})
+
+
+@app.route("/api/note-drafts/login", methods=["POST"])
+def api_note_drafts_login():
+    import hmac
+
+    data = request.get_json(silent=True) or {}
+    web_password = os.environ.get("WEB_PASSWORD", "")
+    password = str(data.get("password", "")).encode("utf-8")
+    if web_password and hmac.compare_digest(password, web_password.encode("utf-8")):
+        session["note_drafts_ok"] = True
+        return jsonify({"ok": True})
+    return jsonify({"ok": False, "error": "パスワードが違います"}), 401
+
+
+@app.route("/api/note-drafts/status", methods=["POST"])
+def api_note_drafts_status():
+    import note_status as ns
+
+    if not _note_drafts_can_edit():
+        return jsonify({"ok": False, "error": "login required"}), 401
+
+    data = request.get_json(silent=True) or {}
+    fp = ns.article_path(data.get("filename", ""))
+    if not fp:
+        return jsonify({"ok": False, "error": "記事が見つかりません"}), 404
+
+    status = data.get("status")
+    if status == "":
+        status = None  # 手動設定の取り消し
+    elif status not in ns.STATUS_ORDER:
+        return jsonify({"ok": False, "error": "不明な状態です"}), 400
+
+    note_url = str(data.get("note_url", "")).strip()
+    if note_url and not ns.is_note_url(note_url):
+        return jsonify({"ok": False, "error": "note の URL（https://note.com/...）を入力してください"}), 400
+
+    try:
+        storage = ns.set_manual_status(fp, status, note_url)
+    except Exception as e:
+        print(f"[note-drafts] status update failed: {e}", file=sys.stderr)
+        return jsonify({"ok": False, "error": "保存できませんでした"}), 500
+    return jsonify({"ok": True, "storage": storage})
 
 
 @app.route("/api/note-drafts/delete", methods=["POST"])
 def api_note_drafts_delete():
-    data = request.get_json(force=True)
-    filename = data.get("filename", "").strip()
+    import note_status as ns
 
-    if not filename or "/" in filename or "\\" in filename or not filename.endswith(".md"):
-        return jsonify({"ok": False, "error": "invalid filename"})
+    if not _note_drafts_can_edit():
+        return jsonify({"ok": False, "error": "login required"}), 401
 
-    fp = Path("posts/note/articles") / filename
-    if not fp.exists():
+    data = request.get_json(silent=True) or {}
+    fp = ns.article_path(str(data.get("filename", "")).strip())
+    if not fp:
         return jsonify({"ok": False, "error": "file not found"})
 
     fp.unlink()

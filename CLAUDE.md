@@ -163,6 +163,33 @@ Googleフォームの代わりに、サイト内に応募フォームを実装�
 
 ---
 
+## /note-drafts ページ（note記事の下書き一覧）
+
+`posts/note/articles/*.md`（`note_generate.yml` が毎朝生成）を一覧表示し、コピーして note に貼り付けるページ。
+
+### note上の状態（3段階）
+| 値 | 表示 | 意味 |
+|---|---|---|
+| `draft` | note未作成 | リポジトリに記事があるだけ |
+| `uploaded_draft` | note下書き作成済 | note に下書きを作成済み |
+| `published` | note公開済 | note で公開済み |
+
+- 記事ファイルの frontmatter `note_status` / `note_url` が基本。`src/push_note_drafts.py` が下書きを作ると `uploaded_draft` になる。
+- 手作業で note に貼った・公開したときは、記事を開いて「下書き作成済」「公開済」ボタンで記録する（URLも任意で保存）。
+  保存先は `DATABASE_URL` の `note_article_status` テーブル（未設定時は記事ファイルを直接書き換え＝Renderでは消える）。
+  表示は「ファイルの状態」と「手動の状態」のうち進んでいる方。
+- 状態変更・削除には `WEB_PASSWORD` でのログインが必要（未設定のローカル実行時は不要）。
+- ロジックは `src/note_status.py` に集約（生成時にJSONのまま保存されてしまった記事もここで title/body を取り出す）。
+
+### note への自動アップロード（`push_note_drafts.yml`）
+- **手動実行のみ**（Actions タブから。件数 `limit` の既定は新しい順に3件）。記事 push のたびの自動実行は廃止した
+  （機能ブランチへの push でも走り、全記事ぶんログインし直して note に「しばらくたってからもう一度お試しください」とブロックされていたため）。
+- ログインは1回の実行につき1回。失敗したらその場で中止し、理由を `posts/note/history.json`（`note_upload_error`）に記録 → `/note-drafts` に「⚠ 自動アップロード失敗」と出る。
+- 手動で「下書き作成済」「公開済」にした記事をスキップさせるには、GitHub Secrets にも `DATABASE_URL` を登録する。
+- ローカルから実行する場合は `bash push_note.sh`（`NOTE_SESSION_TOKEN` を使用。結果をコミットして push する）。
+
+---
+
 ## 面談予約アプリ（src/booking_app.py）
 
 kazuto / あまりん / さな / しー / かぴのすけ の5人それぞれについて、外部ゲストが
