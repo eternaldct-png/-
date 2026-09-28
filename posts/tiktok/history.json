@@ -663,5 +663,12 @@
     "filepath": "posts/tiktok/scripts/20260927_192901_tiktok_script.md",
     "timestamp": "2026-09-27T19:29:01.503792+09:00",
     "status": "saved"
+  },
+  {
+    "platform_id": "20260928_203639",
+    "hook": "月曜の朝、カフェで『今週もがんばろ』って思った3秒後にSlack通知99件だった人、正直に手挙げて？",
+    "filepath": "posts/tiktok/scripts/20260928_203639_tiktok_script.md",
+    "timestamp": "2026-09-28T20:36:39.726745+09:00",
+    "status": "saved"
   }
 ]
