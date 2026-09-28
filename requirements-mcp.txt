@@ -1,0 +1,4 @@
+# Claude Code ⇔ Gemini TTS 連携（MCP サーバー）用。Render 本番には不要なので requirements.txt とは分けている
+# pip install -r requirements-mcp.txt
+mcp>=1.2,<2
+requests>=2.31.0

@@ -26,3 +26,6 @@ media/fonts/*.ttf
 # Instagram生成画像（ワークフローで明示的にコミットするため除外）
 posts/media/*.png
 posts/media/*.jpg
+
+# Gemini TTS の生成音声（src/gemini_tts.py）
+media/tts_output/

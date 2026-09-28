@@ -1,0 +1,236 @@
+"""
+Gemini TTS（Gemini 3.8 Flash TTS）で音声を生成するモジュール
+
+Claude Code からは MCP サーバー（src/mcp_gemini_tts.py）経由で呼び出すほか、
+CLI としても直接使える:
+
+    python3 src/gemini_tts.py "こんにちは、ETERNAL d.c.t です" --voice Kore --style "明るく元気に"
+    python3 src/gemini_tts.py --file script.txt -o media/tts_output/intro.wav
+    python3 src/gemini_tts.py "kazuto: やあ\\nあまりん: こんにちは" --speakers "kazuto=Puck,あまりん=Kore"
+
+必要な環境変数:
+    GEMINI_API_KEY    Google AI Studio で発行した API キー
+    GEMINI_TTS_MODEL  （任意）使うモデル。デフォルト: gemini-3.8-flash-tts
+                      安く大量に作るなら gemini-3.8-flash-lite-tts
+
+API のレスポンスは生の PCM（16bit / 24kHz / モノラル）なので、WAV ヘッダーを付けて保存する。
+.mp3 を指定した場合は ffmpeg があれば変換する。
+"""
+import argparse
+import base64
+import os
+import re
+import shutil
+import subprocess
+import sys
+import wave
+from datetime import datetime
+from pathlib import Path
+
+import requests
+
+API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
+DEFAULT_MODEL = "gemini-3.8-flash-tts"
+DEFAULT_VOICE = "Kore"
+DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parent.parent / "media" / "tts_output"
+REQUEST_TIMEOUT = 180
+
+# Gemini TTS のプリセット音声（30種）。キャラクターは Google 公式の説明より
+PREBUILT_VOICES = {
+    "Zephyr": "明るい", "Puck": "アップビート", "Charon": "情報的",
+    "Kore": "しっかり", "Fenrir": "興奮気味", "Leda": "若々しい",
+    "Orus": "しっかり", "Aoede": "軽やか", "Callirrhoe": "おおらか",
+    "Autonoe": "明るい", "Enceladus": "息まじり", "Iapetus": "クリア",
+    "Umbriel": "おおらか", "Algieba": "なめらか", "Despina": "なめらか",
+    "Erinome": "クリア", "Algenib": "しゃがれ声", "Rasalgethi": "情報的",
+    "Laomedeia": "アップビート", "Achernar": "ソフト", "Alnilam": "しっかり",
+    "Schedar": "落ち着き", "Gacrux": "大人っぽい", "Pulcherrima": "前向き",
+    "Achird": "親しみやすい", "Zubenelgenubi": "カジュアル",
+    "Vindemiatrix": "やさしい", "Sadachbia": "生き生き",
+    "Sadaltager": "知的", "Sulafat": "あたたかい",
+}
+
+
+class GeminiTTSError(RuntimeError):
+    pass
+
+
+def _api_key() -> str:
+    key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    if not key:
+        raise GeminiTTSError(
+            "GEMINI_API_KEY が設定されていません。"
+            "Google AI Studio（https://aistudio.google.com/apikey）でキーを発行して環境変数に設定してください。"
+        )
+    return key
+
+
+def _voice_config(voice: str) -> dict:
+    return {"prebuiltVoiceConfig": {"voiceName": voice}}
+
+
+def build_request(text: str, voice: str = DEFAULT_VOICE, style: str = "",
+                  speakers: dict[str, str] | None = None) -> dict:
+    """generateContent 用のリクエストボディを組み立てる
+
+    style: 読み上げ方の指示（例: "明るく元気に"、"ささやくように"）。本文の前に指示として付ける。
+    speakers: {話者名: 音声名}。2人までの掛け合い。text は「話者名: セリフ」の行で書く。
+    """
+    if not text.strip():
+        raise GeminiTTSError("読み上げるテキストが空です。")
+    prompt = f"次の文章を「{style}」の雰囲気で読み上げてください:\n{text}" if style else text
+
+    if speakers:
+        if len(speakers) > 2:
+            raise GeminiTTSError("複数話者は2人までです。")
+        speech_config = {
+            "multiSpeakerVoiceConfig": {
+                "speakerVoiceConfigs": [
+                    {"speaker": name, "voiceConfig": _voice_config(v)}
+                    for name, v in speakers.items()
+                ]
+            }
+        }
+    else:
+        speech_config = {"voiceConfig": _voice_config(voice)}
+
+    return {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "responseModalities": ["AUDIO"],
+            "speechConfig": speech_config,
+        },
+    }
+
+
+def _extract_audio(data: dict) -> tuple[bytes, int]:
+    """レスポンスから PCM バイト列とサンプリングレートを取り出す"""
+    try:
+        parts = data["candidates"][0]["content"]["parts"]
+    except (KeyError, IndexError, TypeError):
+        reason = (data.get("promptFeedback") or {}).get("blockReason") or \
+            ((data.get("candidates") or [{}])[0].get("finishReason"))
+        raise GeminiTTSError(f"音声が返ってきませんでした（理由: {reason or '不明'}）")
+
+    pcm = b""
+    rate = 24000
+    for part in parts:
+        inline = part.get("inlineData") or part.get("inline_data")
+        if not inline:
+            continue
+        pcm += base64.b64decode(inline["data"])
+        m = re.search(r"rate=(\d+)", inline.get("mimeType") or inline.get("mime_type") or "")
+        if m:
+            rate = int(m.group(1))
+    if not pcm:
+        raise GeminiTTSError("レスポンスに音声データが含まれていませんでした。")
+    return pcm, rate
+
+
+def synthesize(text: str, voice: str = DEFAULT_VOICE, style: str = "",
+               speakers: dict[str, str] | None = None,
+               model: str | None = None) -> tuple[bytes, int]:
+    """Gemini TTS を呼び出して (PCM バイト列, サンプリングレート) を返す"""
+    model = model or os.environ.get("GEMINI_TTS_MODEL") or DEFAULT_MODEL
+    body = build_request(text, voice=voice, style=style, speakers=speakers)
+    resp = requests.post(
+        f"{API_BASE}/{model}:generateContent",
+        headers={"x-goog-api-key": _api_key(), "Content-Type": "application/json"},
+        json=body,
+        timeout=REQUEST_TIMEOUT,
+    )
+    if resp.status_code != 200:
+        try:
+            message = resp.json()["error"]["message"]
+        except Exception:
+            message = resp.text[:500]
+        raise GeminiTTSError(f"Gemini API エラー（HTTP {resp.status_code}, model={model}）: {message}")
+    return _extract_audio(resp.json())
+
+
+def save_audio(pcm: bytes, rate: int, output: Path) -> Path:
+    """PCM を .wav で保存する。拡張子が .mp3 なら ffmpeg で変換する"""
+    output.parent.mkdir(parents=True, exist_ok=True)
+    wav_path = output.with_suffix(".wav")
+    with wave.open(str(wav_path), "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(rate)
+        wf.writeframes(pcm)
+
+    if output.suffix.lower() != ".mp3":
+        return wav_path
+    if not shutil.which("ffmpeg"):
+        raise GeminiTTSError(f"mp3 変換には ffmpeg が必要です（WAV は保存済み: {wav_path}）")
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-i", str(wav_path), "-b:a", "192k", str(output)],
+        check=True,
+    )
+    wav_path.unlink()
+    return output
+
+
+def default_output_path(fmt: str = "wav") -> Path:
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return DEFAULT_OUTPUT_DIR / f"tts_{stamp}.{fmt}"
+
+
+def text_to_speech(text: str, output: str | Path | None = None, voice: str = DEFAULT_VOICE,
+                   style: str = "", speakers: dict[str, str] | None = None,
+                   model: str | None = None) -> Path:
+    """テキストを読み上げて音声ファイルに保存し、保存先パスを返す"""
+    pcm, rate = synthesize(text, voice=voice, style=style, speakers=speakers, model=model)
+    path = Path(output) if output else default_output_path()
+    return save_audio(pcm, rate, path)
+
+
+def parse_speakers(spec: str) -> dict[str, str]:
+    """ "kazuto=Puck,あまりん=Kore" → {"kazuto": "Puck", "あまりん": "Kore"} """
+    result = {}
+    for item in filter(None, (s.strip() for s in spec.split(","))):
+        if "=" not in item:
+            raise GeminiTTSError(f"話者指定の形式が不正です: {item}（例: kazuto=Puck）")
+        name, voice = (s.strip() for s in item.split("=", 1))
+        result[name] = voice
+    return result
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Gemini TTS で音声ファイルを生成する")
+    parser.add_argument("text", nargs="?", help="読み上げるテキスト（\\n で改行）")
+    parser.add_argument("--file", help="読み上げるテキストファイル")
+    parser.add_argument("-o", "--output", help="保存先（.wav / .mp3）。省略時は media/tts_output/")
+    parser.add_argument("--voice", default=DEFAULT_VOICE, help=f"音声名（デフォルト: {DEFAULT_VOICE}）")
+    parser.add_argument("--style", default="", help="読み上げ方の指示（例: 明るく元気に）")
+    parser.add_argument("--speakers", help="2人の掛け合い。例: kazuto=Puck,あまりん=Kore")
+    parser.add_argument("--model", help=f"モデル名（デフォルト: $GEMINI_TTS_MODEL または {DEFAULT_MODEL}）")
+    parser.add_argument("--list-voices", action="store_true", help="使える音声の一覧を表示")
+    args = parser.parse_args(argv)
+
+    if args.list_voices:
+        for name, desc in PREBUILT_VOICES.items():
+            print(f"{name:15s} {desc}")
+        return 0
+
+    if args.file:
+        text = Path(args.file).read_text(encoding="utf-8")
+    elif args.text:
+        text = args.text.replace("\\n", "\n")
+    else:
+        parser.error("テキストか --file を指定してください")
+
+    try:
+        path = text_to_speech(
+            text, output=args.output, voice=args.voice, style=args.style,
+            speakers=parse_speakers(args.speakers) if args.speakers else None,
+            model=args.model,
+        )
+    except GeminiTTSError as e:
+        print(f"エラー: {e}", file=sys.stderr)
+        return 1
+    print(path)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

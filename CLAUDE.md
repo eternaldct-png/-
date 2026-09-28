@@ -194,3 +194,15 @@ kazuto / あまりん / さな / しー / かぴのすけ の5人それぞれに
 ### データ
 - `posts/booking_availability.json` — 各人の空き時間（`DATABASE_URL` 設定時は Postgres の `booking_availability` テーブル）
 - `posts/booking_reservations.json` — 確定した予約（同テーブル構成時は `interview_bookings` テーブル。予約の一意制約は `(member, slot)` の組み合わせ単位）
+
+---
+
+## Gemini TTS 連携（Claude Code から音声生成）
+
+Claude Code から Gemini 3.8 Flash TTS を呼び出してテキストを音声化する。Render 本番には関係しないローカル用ツール。
+
+- `src/gemini_tts.py` — Gemini API（`generateContent` + `responseModalities: AUDIO`）を叩いて WAV/MP3 を保存。CLI としても使える
+- `src/mcp_gemini_tts.py` — Claude Code 用 MCP サーバー（`.mcp.json` の `gemini-tts`）。ツール: `text_to_speech` / `list_voices`
+- 依存: `requirements-mcp.txt`（`mcp<2`）。環境変数: `GEMINI_API_KEY`（必須）、`GEMINI_TTS_MODEL`（任意、デフォルト `gemini-3.8-flash-tts`）
+- 出力先: `media/tts_output/`（Git管理外）
+- セットアップ手順: `docs/gemini_tts_setup.md`
