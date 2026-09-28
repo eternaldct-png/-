@@ -1,0 +1,734 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ETERNAL d.c.t Promo</title>
+<link rel="stylesheet" href="fonts/fonts.css">
+<style>
+  html,body{margin:0;background:#000;overflow:hidden}
+  canvas{display:block;width:100vw;height:auto}
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+// =============================================================
+// ETERNAL d.c.t プロモーション映像（60秒 / 1920x1080 / 30fps）
+// draw(t) に秒数を渡すとそのフレームを描画する（決定論的）。
+// render.mjs が 1フレームずつ呼び出して MP4 に書き出す。
+// ブラウザで直接開くと ?play でプレビュー再生できる。
+// =============================================================
+const W = 1920, H = 1080, DURATION = 60;
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+
+// ---- ブランドカラー（web_app.py の配色に合わせる） ----
+const C = {
+  bg: '#0b0714', bg2: '#150a2a',
+  purple: '#7c3aed', violet: '#9333ea', magenta: '#d946ef', pink: '#ec4899',
+  rose: '#fecdd3', white: '#ffffff', soft: '#eceaf5', gray: '#a8a3bd',
+};
+const JP = '"Noto Sans JP", sans-serif';
+const EN = 'Montserrat, "Noto Sans JP", sans-serif';
+
+// ---- 汎用ヘルパー ----
+const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+const prog = (t, a, b) => clamp((t - a) / (b - a));
+const lerp = (a, b, p) => a + (b - a) * p;
+const eOutCubic = p => 1 - Math.pow(1 - p, 3);
+const eInCubic = p => p * p * p;
+const eInOut = p => p < .5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+const eOutExpo = p => p >= 1 ? 1 : 1 - Math.pow(2, -10 * p);
+const eOutBack = p => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(p - 1, 3) + c1 * Math.pow(p - 1, 2); };
+// 区間 [a,b] でフェードイン、[c,d] でフェードアウト
+const inOut = (t, a, b, c, d) => Math.min(eOutCubic(prog(t, a, b)), 1 - eInCubic(prog(t, c, d)));
+
+function rng(seed) { // 決定論的な乱数（毎フレーム同じ値になる）
+  let s = seed >>> 0;
+  return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+}
+
+// 音楽は 120BPM（1拍 0.5秒 / 1小節 2秒）。ドラムが鳴っている区間だけビートに反応させる
+const BEAT = 0.5;
+const drumsOn = t => (t >= 4 && t < 46) || (t >= 52 && t < 58);
+const kick = t => drumsOn(t) ? Math.exp(-((t % BEAT) / BEAT) * 7) : 0;
+
+function gradH(x0, x1, stops) {
+  const g = ctx.createLinearGradient(x0, 0, x1, 0);
+  stops.forEach((c, i) => g.addColorStop(i / (stops.length - 1), c));
+  return g;
+}
+const brandGrad = (x0, x1) => gradH(x0, x1, [C.purple, C.magenta, C.pink]);
+
+function setFont(weight, size, family = JP) { ctx.font = `${weight} ${size}px ${family}`; }
+
+// テキスト描画（letterSpacing の末尾余白を補正して中央揃え）
+function text(str, x, y, o = {}) {
+  ctx.save();
+  setFont(o.weight || 700, o.size || 48, o.family || JP);
+  ctx.letterSpacing = `${o.ls || 0}px`;
+  ctx.textAlign = o.align || 'center';
+  ctx.textBaseline = o.baseline || 'middle';
+  ctx.globalAlpha *= (o.alpha ?? 1);
+  let dx = 0;
+  if ((o.align || 'center') === 'center') dx = (o.ls || 0) / 2;
+  if (o.fill === 'brand') {
+    const w = ctx.measureText(str).width;
+    const x0 = o.align === 'left' ? x : x - w / 2;
+    ctx.fillStyle = brandGrad(x0, x0 + w);
+  } else ctx.fillStyle = o.fill || C.white;
+  if (o.glow) { ctx.shadowColor = o.glow; ctx.shadowBlur = o.glowBlur || 30; }
+  if (o.stroke) { ctx.strokeStyle = o.stroke; ctx.lineWidth = o.lineWidth || 2; ctx.strokeText(str, x + dx, y); }
+  else ctx.fillText(str, x + dx, y);
+  ctx.restore();
+}
+
+// 1文字ずつ時間差で浮かび上がるテキスト
+function staggerText(str, cx, y, t0, t, o = {}) {
+  ctx.save();
+  setFont(o.weight || 700, o.size || 64, o.family || JP);
+  ctx.letterSpacing = '0px';
+  const ls = o.ls || 0;
+  const chars = [...str];
+  const ws = chars.map(ch => ctx.measureText(ch).width + ls);
+  const total = ws.reduce((a, b) => a + b, 0) - ls;
+  let x = (o.align === 'left') ? cx : (o.align === 'right') ? cx - total : cx - total / 2;
+  const fill = o.fill === 'brand' ? brandGrad(x, x + total) : (o.fill || C.white);
+  const step = o.step ?? 0.05, dur = o.dur ?? 0.5, rise = o.rise ?? 30;
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'left';
+  chars.forEach((ch, i) => {
+    const p = prog(t, t0 + i * step, t0 + i * step + dur);
+    if (p > 0) {
+      ctx.globalAlpha = eOutCubic(p) * (o.alpha ?? 1);
+      ctx.fillStyle = fill;
+      if (o.glow) { ctx.shadowColor = o.glow; ctx.shadowBlur = o.glowBlur || 24; }
+      const yy = y + (1 - eOutCubic(p)) * rise;
+      ctx.fillText(ch, x, yy);
+    }
+    x += ws[i];
+  });
+  ctx.restore();
+  return total;
+}
+
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function heart(x, y, s) {
+  ctx.beginPath();
+  ctx.moveTo(x, y + s * .35);
+  ctx.bezierCurveTo(x, y, x - s * .5, y, x - s * .5, y + s * .35);
+  ctx.bezierCurveTo(x - s * .5, y + s * .65, x, y + s * .8, x, y + s);
+  ctx.bezierCurveTo(x, y + s * .8, x + s * .5, y + s * .65, x + s * .5, y + s * .35);
+  ctx.bezierCurveTo(x + s * .5, y, x, y, x, y + s * .35);
+  ctx.fill();
+}
+
+// セクション見出し（番号・英字ラベル・日本語タイトル・サブコピー）
+function sectionHeader(lt, x, y, num, label, title, sub, o = {}) {
+  const p1 = eOutCubic(prog(lt, 0.2, 0.8));
+  text(num, x + (1 - p1) * -40, y, { family: EN, weight: 800, size: 120, align: 'left', stroke: 'rgba(255,255,255,.35)', lineWidth: 2, alpha: p1 });
+  const p2 = eOutCubic(prog(lt, 0.35, 0.9));
+  ctx.save(); ctx.globalAlpha = p2;
+  ctx.fillStyle = brandGrad(x + 170, x + 250);
+  ctx.fillRect(x + 170, y - 2, 60 * p2, 4);
+  ctx.restore();
+  text(label, x + 250, y, { family: EN, weight: 600, size: 26, ls: 8, align: 'left', fill: C.rose, alpha: p2 });
+  staggerText(title, x, y + 130, 0.5, lt, { size: o.titleSize || 104, weight: 900, align: 'left', step: 0.06 });
+  (Array.isArray(sub) ? sub : [sub]).forEach((line, i) => {
+    const p = eOutCubic(prog(lt, 1.1 + i * 0.25, 1.7 + i * 0.25));
+    text(line, x, y + 250 + i * 64 + (1 - p) * 20, { size: 42, weight: 400, align: 'left', fill: C.soft, alpha: p });
+  });
+}
+
+// ---- 背景（全シーン共通のアンビエント） ----
+const particles = (() => { const r = rng(7); return Array.from({ length: 140 }, () => ({ x: r() * W, y: r() * H, s: .6 + r() * 2.2, v: 8 + r() * 30, ph: r() * 6.28, hue: r() })); })();
+
+function drawBG(t, tint = 1) {
+  ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
+  const blobs = [
+    [C.purple, 0.28 + 0.12 * Math.sin(t * .21), 0.3 + 0.1 * Math.cos(t * .17), 900],
+    [C.pink, 0.75 + 0.1 * Math.cos(t * .19), 0.7 + 0.12 * Math.sin(t * .23), 800],
+    [C.magenta, 0.55 + 0.2 * Math.sin(t * .13 + 2), 0.15 + 0.1 * Math.sin(t * .29), 600],
+  ];
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  blobs.forEach(([col, bx, by, r]) => {
+    const g = ctx.createRadialGradient(bx * W, by * H, 0, bx * W, by * H, r);
+    g.addColorStop(0, col + '55'); g.addColorStop(1, col + '00');
+    ctx.globalAlpha = 0.55 * tint;
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  });
+  ctx.restore();
+  // 浮遊する光の粒
+  ctx.save();
+  particles.forEach(p => {
+    const y = ((p.y - t * p.v) % H + H) % H;
+    const x = p.x + Math.sin(t * .5 + p.ph) * 20;
+    const a = (0.25 + 0.35 * Math.sin(t * 2 + p.ph) ** 2) * tint;
+    ctx.globalAlpha = a;
+    ctx.fillStyle = p.hue < .5 ? C.rose : '#e9d5ff';
+    ctx.beginPath(); ctx.arc(x, y, p.s, 0, 6.283); ctx.fill();
+  });
+  ctx.restore();
+}
+
+function vignette() {
+  const g = ctx.createRadialGradient(W / 2, H / 2, H * .35, W / 2, H / 2, H * .95);
+  g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.55)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+}
+
+// ---- ロゴ（オフスクリーンに描画して光のスイープを重ねる） ----
+const logoCv = document.createElement('canvas'); logoCv.width = 1800; logoCv.height = 360;
+const lctx = logoCv.getContext('2d');
+
+function drawLogo(cx, cy, lt, scale = 1, o = {}) {
+  const L = lctx, LW = logoCv.width, LH = logoCv.height;
+  L.clearRect(0, 0, LW, LH);
+  L.textBaseline = 'alphabetic';
+  L.font = `800 190px ${EN}`; L.letterSpacing = '14px';
+  const word = 'ETERNAL';
+  const ws = [...word].map(ch => L.measureText(ch).width);
+  L.font = `300 150px ${EN}`; L.letterSpacing = '6px';
+  const dctW = L.measureText('d.c.t').width;
+  const gap = 46;
+  const total = ws.reduce((a, b) => a + b, 0) + gap + dctW;
+  let x = (LW - total) / 2;
+  const base = 250;
+  const gWhite = L.createLinearGradient(0, 80, 0, 260);
+  gWhite.addColorStop(0, '#ffffff'); gWhite.addColorStop(1, '#f3e8ff');
+  L.font = `800 190px ${EN}`; L.letterSpacing = '14px';
+  [...word].forEach((ch, i) => {
+    const p = prog(lt, (o.start || 0) + i * 0.07, (o.start || 0) + i * 0.07 + 0.6);
+    if (p > 0) {
+      L.globalAlpha = clamp(p * 2);
+      L.fillStyle = gWhite;
+      L.fillText(ch, x, base - (1 - eOutBack(p)) * 90);
+    }
+    x += ws[i];
+  });
+  x += gap;
+  const pd = eOutExpo(prog(lt, (o.start || 0) + 0.6, (o.start || 0) + 1.3));
+  L.font = `300 150px ${EN}`; L.letterSpacing = '6px';
+  const gd = L.createLinearGradient(x, 0, x + dctW, 0);
+  gd.addColorStop(0, C.magenta); gd.addColorStop(1, C.pink);
+  L.globalAlpha = pd; L.fillStyle = gd;
+  L.fillText('d.c.t', x + (1 - pd) * 160, base);
+  // 光のスイープ（文字の上だけに乗る）
+  const sp = prog(lt, (o.start || 0) + (o.glint ?? 1.8), (o.start || 0) + (o.glint ?? 1.8) + 0.9);
+  if (sp > 0 && sp < 1) {
+    L.globalAlpha = 1;
+    L.globalCompositeOperation = 'source-atop';
+    const gx = lerp(-300, LW + 300, eInOut(sp));
+    const g = L.createLinearGradient(gx - 160, 0, gx + 160, 0);
+    g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(.5, 'rgba(255,255,255,.95)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    L.fillStyle = g;
+    L.save(); L.translate(gx, LH / 2); L.transform(1, 0, -0.35, 1, 0, 0); L.translate(-gx, -LH / 2);
+    L.fillRect(gx - 160, 0, 320, LH); L.restore();
+    L.globalCompositeOperation = 'source-over';
+  }
+  L.globalAlpha = 1;
+  ctx.save();
+  ctx.translate(cx, cy); ctx.scale(scale, scale);
+  ctx.shadowColor = 'rgba(217,70,239,.55)'; ctx.shadowBlur = 40;
+  ctx.drawImage(logoCv, -LW / 2, -LH / 2 - 60);
+  ctx.restore();
+  return total;
+}
+
+// ---- 画像（グッズ写真） ----
+const IMG = {};
+function loadImages() {
+  const list = {
+    mug: 'assets/mug.png',            // prep_assets.py で枠線を消した素材
+    tc: 'assets/tshirt-charcoal.png',
+    tw: 'assets/tshirt-white.png',
+  };
+  return Promise.all(Object.entries(list).map(([k, src]) => new Promise(res => {
+    const im = new Image(); im.onload = () => { IMG[k] = im; res(); }; im.onerror = () => res(); im.src = src;
+  })));
+}
+
+// =============================================================
+// シーン
+// =============================================================
+
+// S1 0–4s: オープニングのコピー
+function S1(lt, t) {
+  drawBG(t, 0.35 + 0.4 * prog(lt, 0, 3));
+  const lp = eInOut(prog(lt, 0.1, 1.1));
+  const la = 1 - prog(lt, 3.2, 3.8);
+  ctx.save(); ctx.globalAlpha = la;
+  ctx.fillStyle = brandGrad(W / 2 - 500, W / 2 + 500);
+  ctx.fillRect(W / 2 - 500 * lp, 540 - 1, 1000 * lp, 2);
+  ctx.restore();
+  const out = 1 - eInCubic(prog(lt, 3.3, 3.9));
+  const sc = 1 + 0.06 * prog(lt, 1, 4);
+  ctx.save(); ctx.translate(W / 2, 540); ctx.scale(sc, sc); ctx.translate(-W / 2, -540);
+  staggerText('その「好き」を、', W / 2, 460, 0.9, lt, { size: 84, weight: 700, step: 0.07, alpha: out });
+  staggerText('ずっと、届けたい。', W / 2, 620, 1.9, lt, { size: 96, weight: 900, step: 0.08, fill: 'brand', alpha: out, glow: 'rgba(236,72,153,.5)' });
+  ctx.restore();
+  // 収束する光
+  const f = prog(lt, 3.5, 4);
+  if (f > 0) {
+    const g = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, 900 * f + 1);
+    g.addColorStop(0, `rgba(255,255,255,${f})`); g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
+}
+
+// S2 4–12s: ロゴ登場
+function S2(lt, t) {
+  drawBG(t);
+  // 衝撃波リング
+  for (let i = 0; i < 3; i++) {
+    const p = prog(lt, i * 0.18, i * 0.18 + 1.6);
+    if (p > 0 && p < 1) {
+      ctx.save(); ctx.globalAlpha = (1 - p) * .8;
+      ctx.strokeStyle = [C.pink, C.magenta, C.purple][i]; ctx.lineWidth = 6 * (1 - p) + 1;
+      ctx.beginPath(); ctx.arc(W / 2, 470, 60 + eOutCubic(p) * 1100, 0, 6.283); ctx.stroke();
+      ctx.restore();
+    }
+  }
+  // ビートに合わせて脈打つ光輪
+  const glowA = 0.25 + 0.25 * kick(t);
+  const g = ctx.createRadialGradient(W / 2, 470, 0, W / 2, 470, 700);
+  g.addColorStop(0, `rgba(217,70,239,${glowA})`); g.addColorStop(1, 'rgba(217,70,239,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+  const zoom = 1 + 0.05 * eInOut(prog(lt, 4, 8));
+  ctx.save(); ctx.translate(W / 2, 540); ctx.scale(zoom, zoom); ctx.translate(-W / 2, -540);
+  drawLogo(W / 2, 470, lt, 1, { start: 0.25, glint: 2.0 });
+  // 下線
+  const up = eOutExpo(prog(lt, 1.4, 2.2));
+  ctx.fillStyle = brandGrad(W / 2 - 420, W / 2 + 420);
+  ctx.fillRect(W / 2 - 420 * up, 612, 840 * up, 4);
+  text('エターナル  ディクト', W / 2, 670, { size: 36, weight: 700, ls: 16, fill: C.soft, alpha: eOutCubic(prog(lt, 1.8, 2.5)) });
+  const tags = ['LIVE', 'MUSIC', 'AI', 'GOODS'];
+  tags.forEach((tg, i) => {
+    const p = eOutBack(prog(lt, 2.7 + i * 0.12, 3.2 + i * 0.12));
+    const x = W / 2 + (i - 1.5) * 230;
+    ctx.save(); ctx.globalAlpha = clamp(p);
+    ctx.translate(x, 780); ctx.scale(p, p);
+    roundRect(-95, -32, 190, 64, 32);
+    ctx.fillStyle = 'rgba(255,255,255,.07)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(254,205,211,.5)'; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.restore();
+    if (p > 0) text(tg, x, 781, { family: EN, weight: 600, size: 28, ls: 6, alpha: clamp(p) });
+  });
+  ctx.restore();
+  // 白フラッシュの残り
+  const fl = 1 - prog(lt, 0, 0.5);
+  if (fl > 0) { ctx.fillStyle = `rgba(255,255,255,${fl * .9})`; ctx.fillRect(0, 0, W, H); }
+}
+
+// S3 12–18s: キネティック・タイポグラフィ（1秒ごとに切り替え）
+const WORDS = [
+  ['歌う。', 'SING', C.purple],
+  ['配信する。', 'STREAM', '#1a0b2e'],
+  ['つくる。', 'CREATE', C.pink],
+  ['つなぐ。', 'CONNECT', '#12081f'],
+  ['届ける。', 'DELIVER', C.magenta],
+  ['支える。', 'SUPPORT', '#1a0b2e'],
+];
+function S3(lt, t) {
+  const i = Math.min(5, Math.floor(lt));
+  const wl = lt - i;
+  const [jp, en, col] = WORDS[i];
+  const prev = i > 0 ? WORDS[i - 1][2] : C.bg;
+  ctx.fillStyle = prev; ctx.fillRect(0, 0, W, H);
+  // 新しい色がスライドして入る（方向を交互に）
+  const wp = eOutExpo(prog(wl, 0, 0.3));
+  ctx.fillStyle = col;
+  if (i % 2 === 0) ctx.fillRect(0, 0, W * wp, H); else ctx.fillRect(0, H * (1 - wp), W, H * wp);
+  // 装飾の斜めストライプ
+  ctx.save(); ctx.globalAlpha = 0.08;
+  ctx.fillStyle = '#fff';
+  for (let k = -4; k < 14; k++) {
+    const x = k * 180 + (wl * 120) % 180;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + 40, 0); ctx.lineTo(x - 260, H); ctx.lineTo(x - 300, H); ctx.fill();
+  }
+  ctx.restore();
+  const punch = 1.35 - 0.35 * eOutExpo(prog(wl, 0, 0.35)) + 0.04 * wl;
+  const a = eOutCubic(prog(wl, 0, 0.12));
+  ctx.save(); ctx.translate(W / 2, 500); ctx.scale(punch, punch);
+  const dark = (i % 2 === 1);
+  text(jp, 0, 0, { size: 230, weight: 900, fill: dark ? 'brand' : C.white, alpha: a, glow: dark ? 'rgba(236,72,153,.45)' : 'rgba(0,0,0,.25)', glowBlur: 40 });
+  ctx.restore();
+  text(en, W / 2, 720, { family: EN, weight: 600, size: 40, ls: 28, fill: dark ? C.rose : 'rgba(255,255,255,.9)', alpha: eOutCubic(prog(wl, 0.12, 0.4)) });
+  // カウンター
+  text(`0${i + 1} / 06`, 120, 980, { family: EN, weight: 600, size: 26, ls: 4, align: 'left', alpha: .7 });
+  text('ETERNAL d.c.t', W - 120, 980, { family: EN, weight: 600, size: 26, ls: 4, align: 'right', alpha: .7 });
+}
+
+// S4 18–26s: ライバー事務所
+const COMMENTS = ['うますぎ！', '鳥肌たった…', '神回きた', 'また来ます！', '声すき'];
+function S4(lt, t) {
+  drawBG(t);
+  sectionHeader(lt, 160, 240, '01', 'LIVER AGENCY', 'ライバー事務所', ['歌好き・配信者の「好き」を、', '全力でサポート。']);
+  // 所属ライバー数カウンター
+  const cp = eOutCubic(prog(lt, 2.3, 2.9));
+  ctx.save(); ctx.globalAlpha = cp;
+  roundRect(160, 720 + (1 - cp) * 30, 540, 190, 28);
+  ctx.fillStyle = 'rgba(255,255,255,.06)'; ctx.fill();
+  ctx.strokeStyle = 'rgba(254,205,211,.35)'; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.restore();
+  if (cp > 0) {
+    const n = Math.round(50 * eOutCubic(prog(lt, 2.5, 4.2)));
+    text('所属ライバー', 210, 772, { size: 32, weight: 700, align: 'left', fill: C.soft, alpha: cp });
+    text(String(n), 400, 852, { family: EN, weight: 800, size: 110, align: 'right', fill: 'brand', alpha: cp, glow: 'rgba(236,72,153,.5)' });
+    text('名', 418, 874, { size: 44, weight: 700, align: 'left', alpha: cp });
+    text('LIVERS', 640, 874, { family: EN, weight: 600, size: 22, ls: 6, align: 'right', fill: C.gray, alpha: cp });
+  }
+  // スマホのモック
+  const pp = eOutCubic(prog(lt, 0, 0.9));
+  const px = 1180, py = 150 + (1 - pp) * 700, pw = 400, ph = 790;
+  ctx.save();
+  ctx.globalAlpha = pp;
+  ctx.shadowColor = 'rgba(124,58,237,.6)'; ctx.shadowBlur = 80;
+  roundRect(px, py, pw, ph, 56); ctx.fillStyle = '#0d0a16'; ctx.fill();
+  ctx.shadowBlur = 0;
+  roundRect(px + 14, py + 14, pw - 28, ph - 28, 44);
+  const sg = ctx.createLinearGradient(0, py, 0, py + ph);
+  sg.addColorStop(0, '#3b1a6e'); sg.addColorStop(.6, '#6d1d63'); sg.addColorStop(1, '#2a0f3d');
+  ctx.fillStyle = sg; ctx.fill();
+  ctx.save(); ctx.clip();
+  // 歌い手のシルエット＋音の波紋
+  const mx = px + pw / 2, my = py + 330;
+  for (let k = 0; k < 4; k++) {
+    const rp = ((lt * 2 + k * 0.25) % 1);
+    ctx.globalAlpha = (1 - rp) * .5;
+    ctx.strokeStyle = C.rose; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(mx, my, 90 + rp * 170, 0, 6.283); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = 'rgba(255,255,255,.9)';
+  ctx.beginPath(); ctx.arc(mx, my - 20, 58, 0, 6.283); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(mx, my + 120, 110, 80, 0, Math.PI, 0); ctx.fill();
+  // マイク
+  ctx.fillStyle = C.pink;
+  roundRect(mx + 44, my + 10, 26, 44, 13); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.fillRect(mx + 54, my + 54, 6, 40);
+  // 波形バー
+  for (let k = 0; k < 24; k++) {
+    const hgt = 10 + 50 * Math.abs(Math.sin(lt * 7 + k * .7) * Math.cos(lt * 3.1 + k * .31)) * (0.5 + kick(t));
+    ctx.fillStyle = k % 2 ? C.rose : C.pink;
+    ctx.fillRect(px + 40 + k * 13.5, py + 480 - hgt / 2, 7, hgt);
+  }
+  // コメントが流れる
+  COMMENTS.forEach((cm, k) => {
+    const born = 1.0 + k * 0.9;
+    const age = lt - born;
+    if (age < 0) return;
+    const newer = COMMENTS.filter((_, j) => j > k && lt > 1.0 + j * 0.9).length;
+    const cy = py + ph - 90 - newer * 62;
+    const a = eOutCubic(clamp(age / 0.3)) * (1 - prog(newer, 2, 3));
+    const cx = px + 34 + (1 - eOutCubic(clamp(age / 0.3))) * -60;
+    ctx.globalAlpha = a;
+    setFont(700, 24);
+    const w = ctx.measureText(cm).width + 44;
+    roundRect(cx, cy - 22, w, 44, 22); ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.fillText(cm, cx + 22, cy + 1);
+  });
+  // ハート
+  const r = rng(99);
+  for (let k = 0; k < 40; k++) {
+    const born = 0.8 + k * 0.17 + r() * .1, life = 2.2;
+    const sx = r(), sz = 20 + r() * 26, sw = r() * 6.28;
+    const age = lt - born;
+    if (age < 0 || age > life) continue;
+    const q = age / life;
+    ctx.globalAlpha = Math.sin(q * Math.PI) * .95;
+    ctx.fillStyle = [C.pink, C.magenta, C.rose, '#f472b6'][k % 4];
+    heart(px + pw - 70 + Math.sin(age * 3 + sw) * 24 - sx * 30, py + ph - 110 - q * 520, sz * (0.6 + 0.4 * eOutBack(clamp(q * 4))));
+  }
+  ctx.restore();
+  // LIVE バッジ
+  ctx.globalAlpha = pp;
+  const pulse = 1 + 0.08 * kick(t);
+  ctx.save(); ctx.translate(px + 90, py + 70); ctx.scale(pulse, pulse);
+  roundRect(-50, -22, 100, 44, 10); ctx.fillStyle = '#ef4444'; ctx.fill();
+  ctx.restore();
+  text('LIVE', px + 90, py + 71, { family: EN, weight: 800, size: 24, ls: 3, alpha: pp });
+  ctx.restore();
+}
+
+// S5 26–32s: 音楽制作
+function S5(lt, t) {
+  drawBG(t);
+  // レコード盤
+  const vp = eOutCubic(prog(lt, 0, 1));
+  const vx = lerp(-300, 560, vp), vy = 520, R = 330;
+  ctx.save(); ctx.translate(vx, vy); ctx.rotate(lt * 1.6 + (1 - vp) * -4);
+  ctx.shadowColor = 'rgba(217,70,239,.5)'; ctx.shadowBlur = 70;
+  ctx.fillStyle = '#0a0a0f'; ctx.beginPath(); ctx.arc(0, 0, R, 0, 6.283); ctx.fill();
+  ctx.shadowBlur = 0;
+  for (let k = 0; k < 26; k++) {
+    ctx.strokeStyle = `rgba(255,255,255,${0.03 + (k % 3) * 0.015})`; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(0, 0, 130 + k * 7.5, 0, 6.283); ctx.stroke();
+  }
+  // 反射光
+  const rg = ctx.createLinearGradient(-R, -R, R, R);
+  rg.addColorStop(.35, 'rgba(255,255,255,0)'); rg.addColorStop(.5, 'rgba(255,255,255,.12)'); rg.addColorStop(.65, 'rgba(255,255,255,0)');
+  ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(0, 0, R, 0, 6.283); ctx.fill();
+  const lg = ctx.createLinearGradient(-120, 0, 120, 0);
+  lg.addColorStop(0, C.purple); lg.addColorStop(1, C.pink);
+  ctx.fillStyle = lg; ctx.beginPath(); ctx.arc(0, 0, 120, 0, 6.283); ctx.fill();
+  text('ETERNAL', 0, -18, { family: EN, weight: 800, size: 34, ls: 4 });
+  text('d.c.t', 0, 26, { family: EN, weight: 300, size: 30, ls: 2 });
+  ctx.fillStyle = C.bg; ctx.beginPath(); ctx.arc(0, 0, 10, 0, 6.283); ctx.fill();
+  ctx.restore();
+  // 音符
+  const r = rng(5);
+  for (let k = 0; k < 14; k++) {
+    const born = 0.5 + k * 0.38, life = 3;
+    const bx = 350 + r() * 500, sz = 40 + r() * 40, ph = r() * 6;
+    const age = lt - born; if (age < 0 || age > life) continue;
+    const q = age / life;
+    text(k % 2 ? '♪' : '♫', bx + Math.sin(age * 2 + ph) * 40, 900 - q * 800, { size: sz, weight: 700, fill: k % 3 ? C.rose : C.pink, alpha: Math.sin(q * Math.PI) * .8 });
+  }
+  sectionHeader(lt, 1060, 270, '02', 'MUSIC PRODUCTION', '音楽制作', ['あなたの声を、作品に。', '歌も、曲も、発信まで。']);
+  // イコライザー
+  const n = 72, bw = W / n;
+  for (let k = 0; k < n; k++) {
+    const f = Math.abs(Math.sin(k * .37 + lt * 3) * Math.sin(k * .11 - lt * 1.7));
+    const hgt = (20 + 150 * f * (0.45 + 0.8 * kick(t))) * eOutCubic(prog(lt, 0.3 + k * 0.006, 1 + k * 0.006));
+    ctx.fillStyle = brandGrad(0, W);
+    ctx.globalAlpha = .75;
+    ctx.fillRect(k * bw + 3, H - hgt, bw - 6, hgt);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// S6 32–40s: AI業務効率化
+const nodes = (() => { const r = rng(21); return Array.from({ length: 46 }, () => ({ x: r() * 1000, y: r() * H, vx: (r() - .5) * 20, vy: (r() - .5) * 20 })); })();
+const TASKS = ['SNS投稿文の自動生成', '予約受付・カレンダー連携', 'LINE自動通知', '注文・決済の管理'];
+function S6(lt, t) {
+  drawBG(t, .7);
+  // ノードネットワーク
+  const na = eOutCubic(prog(lt, 0, 1));
+  const pts = nodes.map(n => [n.x + n.vx * lt, n.y + n.vy * lt]);
+  ctx.save();
+  for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++) {
+    const d = Math.hypot(pts[i][0] - pts[j][0], pts[i][1] - pts[j][1]);
+    if (d < 230) {
+      ctx.globalAlpha = (1 - d / 230) * .35 * na;
+      ctx.strokeStyle = '#c4b5fd'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(...pts[i]); ctx.lineTo(...pts[j]); ctx.stroke();
+      if ((i + j) % 5 === 0) { // データが流れる光
+        const q = (lt * .8 + (i * 7 + j) * .13) % 1;
+        ctx.globalAlpha = na * .9; ctx.fillStyle = C.pink;
+        ctx.beginPath(); ctx.arc(lerp(pts[i][0], pts[j][0], q), lerp(pts[i][1], pts[j][1], q), 3, 0, 6.283); ctx.fill();
+      }
+    }
+  }
+  pts.forEach(([x, y], i) => { ctx.globalAlpha = na * .8; ctx.fillStyle = i % 3 ? '#e9d5ff' : C.magenta; ctx.beginPath(); ctx.arc(x, y, 4, 0, 6.283); ctx.fill(); });
+  ctx.restore();
+  // 左側の暗幕で文字を読みやすく
+  const dg = ctx.createLinearGradient(0, 0, 1000, 0);
+  dg.addColorStop(0, 'rgba(11,7,20,.75)'); dg.addColorStop(1, 'rgba(11,7,20,0)');
+  ctx.fillStyle = dg; ctx.fillRect(0, 0, 1000, H);
+  sectionHeader(lt, 160, 270, '03', 'AI SOLUTIONS', 'AI業務効率化', ['中小企業の仕事を、', 'もっと軽く。']);
+  // アシスタントUIカード
+  const cp = eOutCubic(prog(lt, 0.4, 1.2));
+  const cx = 1040 + (1 - cp) * 120, cy = 250, cw = 740, chh = 600;
+  ctx.save(); ctx.globalAlpha = cp;
+  ctx.shadowColor = 'rgba(124,58,237,.45)'; ctx.shadowBlur = 60;
+  roundRect(cx, cy, cw, chh, 28); ctx.fillStyle = 'rgba(28,18,48,.88)'; ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = 'rgba(196,181,253,.35)'; ctx.lineWidth = 1.5; ctx.stroke();
+  ['#ef4444', '#f59e0b', '#22c55e'].forEach((c, i) => { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(cx + 40 + i * 28, cy + 40, 8, 0, 6.283); ctx.fill(); });
+  ctx.restore();
+  text('ETERNAL AI Assistant', cx + 150, cy + 41, { family: EN, weight: 600, size: 24, ls: 2, align: 'left', fill: C.gray, alpha: cp });
+  // タイピング
+  const line = '> 毎日の定型業務を、AIにおまかせ。';
+  const nChars = Math.floor(clamp((lt - 1.2) / 1.1) * [...line].length);
+  const typed = [...line].slice(0, nChars).join('');
+  const cursor = (Math.floor(lt * 3) % 2 === 0) ? '▍' : '';
+  text(typed + (lt > 1.1 && lt < 7 ? cursor : ''), cx + 44, cy + 115, { size: 32, weight: 700, align: 'left', fill: C.rose, alpha: cp });
+  TASKS.forEach((tk, i) => {
+    const t0 = 2.3 + i * 0.75;
+    const a = eOutCubic(prog(lt, t0, t0 + 0.35));
+    if (a <= 0) return;
+    const y = cy + 200 + i * 92;
+    ctx.save(); ctx.globalAlpha = a;
+    roundRect(cx + 40, y - 34, cw - 80, 70, 16); ctx.fillStyle = 'rgba(255,255,255,.05)'; ctx.fill();
+    // 進捗バー
+    const bp = eInOut(prog(lt, t0 + 0.1, t0 + 0.65));
+    ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.fillRect(cx + 70, y + 22, cw - 220, 4);
+    ctx.fillStyle = brandGrad(cx + 70, cx + cw - 150); ctx.fillRect(cx + 70, y + 22, (cw - 220) * bp, 4);
+    // チェック
+    const ck = eOutBack(prog(lt, t0 + 0.6, t0 + 0.9));
+    ctx.translate(cx + cw - 90, y - 4); ctx.scale(ck, ck);
+    ctx.fillStyle = '#22c55e'; ctx.beginPath(); ctx.arc(0, 0, 22, 0, 6.283); ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 5; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.moveTo(-10, 0); ctx.lineTo(-3, 8); ctx.lineTo(11, -8); ctx.stroke();
+    ctx.restore();
+    text(tk, cx + 70, y - 8, { size: 32, weight: 700, align: 'left', alpha: a });
+  });
+  const fp = eOutCubic(prog(lt, 5.8, 6.5));
+  text('空いた時間を、本業と「好き」へ。', cx + cw / 2, cy + chh + 70, { size: 38, weight: 900, fill: 'brand', alpha: fp, glow: 'rgba(236,72,153,.4)' });
+}
+
+// S7 40–46s: グッズ
+const GOODS = [
+  ['mug', 'chaco マグカップ'],
+  ['tc', 'chaco Tシャツ（チャコール）'],
+  ['tw', 'chaco Tシャツ（ホワイト）'],
+];
+function S7(lt, t) {
+  drawBG(t);
+  const hp = eOutCubic(prog(lt, 0.1, 0.7));
+  text('04', 160, 150, { family: EN, weight: 800, size: 110, align: 'left', stroke: 'rgba(255,255,255,.35)', lineWidth: 2, alpha: hp });
+  ctx.fillStyle = brandGrad(330, 390); ctx.globalAlpha = hp; ctx.fillRect(330, 148, 60 * hp, 4); ctx.globalAlpha = 1;
+  text('GOODS', 410, 150, { family: EN, weight: 600, size: 26, ls: 8, align: 'left', fill: C.rose, alpha: hp });
+  staggerText('好きを、カタチに。', W - 160, 150, 0.4, lt, { size: 84, weight: 900, align: 'right', step: 0.06, fill: 'brand' });
+  GOODS.forEach(([k, name], i) => {
+    const t0 = 0.6 + i * 0.22;
+    const p = eOutBack(prog(lt, t0, t0 + 0.8));
+    const a = clamp(prog(lt, t0, t0 + 0.3));
+    const cw = 460, chh = 520;
+    const x = W / 2 + (i - 1) * 540 - cw / 2;
+    const y = 290 + (1 - p) * 500 + Math.sin(lt * 2 + i * 1.3) * 10;
+    const rot = (1 - p) * (i - 1) * 0.25 + (i - 1) * 0.02;
+    ctx.save(); ctx.globalAlpha = a;
+    ctx.translate(x + cw / 2, y + chh / 2); ctx.rotate(rot); ctx.translate(-cw / 2, -chh / 2);
+    ctx.shadowColor = 'rgba(236,72,153,.35)'; ctx.shadowBlur = 50;
+    roundRect(0, 0, cw, chh, 30); ctx.fillStyle = '#f7f7f7'; ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.save(); roundRect(0, 0, cw, chh, 30); ctx.clip();
+    const im = IMG[k];
+    if (im) {
+      const box = 400, s = Math.min(box / im.width, box / im.height) * (1 + 0.03 * Math.sin(lt * 1.5 + i));
+      ctx.drawImage(im, cw / 2 - im.width * s / 2, 30 + box / 2 - im.height * s / 2, im.width * s, im.height * s);
+    }
+    ctx.fillStyle = brandGrad(0, cw); ctx.fillRect(0, chh - 80, cw, 80);
+    ctx.restore();
+    text(name, cw / 2, chh - 40, { size: 30, weight: 700 });
+    ctx.restore();
+  });
+  const bp = eOutBack(prog(lt, 2.2, 2.8));
+  ctx.save(); ctx.translate(W / 2, 950); ctx.scale(bp, bp);
+  roundRect(-300, -38, 600, 76, 38); ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.fill();
+  ctx.strokeStyle = C.pink; ctx.lineWidth = 2; ctx.stroke();
+  ctx.restore();
+  if (bp > 0) text('オンラインショップで販売中', W / 2, 951, { size: 34, weight: 700, alpha: clamp(bp) });
+}
+
+// S8 46–52s: メッセージ
+function S8(lt, t) {
+  drawBG(t, .6);
+  const words = ['LIVE', 'MUSIC', 'AI', 'GOODS'];
+  const pos = [[560, 330], [1360, 330], [560, 750], [1360, 750]];
+  const merge = eInOut(prog(lt, 1.4, 2.2));
+  words.forEach((w, i) => {
+    const a = eOutCubic(prog(lt, i * 0.18, i * 0.18 + 0.5)) * (1 - prog(lt, 1.9, 2.2));
+    const x = lerp(pos[i][0], W / 2, merge), y = lerp(pos[i][1], 540, merge);
+    text(w, x, y, { family: EN, weight: 800, size: 130 * (1 - merge * .6), ls: 10, stroke: i % 2 ? C.pink : '#c4b5fd', lineWidth: 3, alpha: a });
+  });
+  if (lt > 1.4 && lt < 1.8) text('×', W / 2, 540, { family: EN, weight: 300, size: 120, alpha: 1 - prog(lt, 1.5, 1.8) });
+  // 合体して光のリングに
+  const rp = prog(lt, 2.0, 3.2);
+  if (rp > 0) {
+    const g = ctx.createRadialGradient(W / 2, 540, 0, W / 2, 540, 600);
+    g.addColorStop(0, `rgba(236,72,153,${.5 * (1 - rp) + .15})`); g.addColorStop(1, 'rgba(124,58,237,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.save(); ctx.globalAlpha = 1 - rp * .6;
+    ctx.strokeStyle = brandGrad(W / 2 - 500, W / 2 + 500); ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(W / 2, 540, 40 + eOutCubic(rp) * 420, 0, 6.283); ctx.stroke();
+    ctx.restore();
+  }
+  staggerText('その「好き」を、', W / 2, 450, 2.4, lt, { size: 88, weight: 700, step: 0.07 });
+  const bigA = eOutCubic(prog(lt, 3.2, 3.9));
+  const bs = 1.25 - 0.25 * eOutExpo(prog(lt, 3.2, 3.9));
+  ctx.save(); ctx.translate(W / 2, 630); ctx.scale(bs, bs);
+  text('エターナルに。', 0, 0, { size: 150, weight: 900, fill: 'brand', alpha: bigA, glow: 'rgba(236,72,153,.6)', glowBlur: 50 });
+  ctx.restore();
+  const fl = prog(lt, 5.5, 6);
+  if (fl > 0) { ctx.fillStyle = `rgba(255,255,255,${eInCubic(fl)})`; ctx.fillRect(0, 0, W, H); }
+}
+
+// S9 52–60s: エンドカード
+function S9(lt, t) {
+  drawBG(t);
+  const g = ctx.createRadialGradient(W / 2, 420, 0, W / 2, 420, 800);
+  g.addColorStop(0, `rgba(217,70,239,${.25 + .2 * kick(t)})`); g.addColorStop(1, 'rgba(217,70,239,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  drawLogo(W / 2, 400, lt, 0.9, { start: 0.1, glint: 1.4 });
+  text('エターナル  ディクト', W / 2, 545, { size: 34, weight: 700, ls: 16, fill: C.soft, alpha: eOutCubic(prog(lt, 1.0, 1.6)) });
+  const biz = 'ライバー事務所  ・  音楽制作  ・  AI業務効率化  ・  グッズ';
+  text(biz, W / 2, 640, { size: 34, weight: 400, ls: 2, fill: C.rose, alpha: eOutCubic(prog(lt, 1.5, 2.1)) });
+  text('ライバー募集・AI導入のご相談は公式サイトへ', W / 2, 760, { size: 38, weight: 700, alpha: eOutCubic(prog(lt, 2.1, 2.7)) });
+  const bp = eOutBack(prog(lt, 2.5, 3.1));
+  const pulse = 1 + 0.03 * Math.sin(lt * 4) * prog(lt, 3.1, 3.5);
+  ctx.save(); ctx.translate(W / 2, 870); ctx.scale(bp * pulse, bp * pulse);
+  ctx.shadowColor = 'rgba(236,72,153,.7)'; ctx.shadowBlur = 40;
+  roundRect(-300, -50, 600, 100, 50); ctx.fillStyle = brandGrad(-300, 300); ctx.fill();
+  ctx.restore();
+  if (bp > 0) text('eternaldct.net', W / 2, 872, { family: EN, weight: 800, size: 46, ls: 3, alpha: clamp(bp) });
+  const fo = prog(lt, 6.8, 7.9);
+  if (fo > 0) { ctx.fillStyle = `rgba(0,0,0,${eInOut(fo)})`; ctx.fillRect(0, 0, W, H); }
+}
+
+const SCENES = [
+  [0, 4, S1], [4, 12, S2], [12, 18, S3], [18, 26, S4], [26, 32, S5],
+  [32, 40, S6], [40, 46, S7], [46, 52, S8], [52, 60, S9],
+];
+const WIPES = [12, 18, 26, 32, 40, 46];
+
+// 斜めのグラデーション帯が画面を横切るトランジション（境界時刻で全面を覆う）
+function wipe(t, B) {
+  const p = prog(t, B - 0.35, B + 0.35);
+  if (p <= 0 || p >= 1) return;
+  const q = eInOut(p);
+  const bandW = W * 1.9;
+  const x = lerp(-bandW - 400, W + 400, q);
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(x + 400, 0); ctx.lineTo(x + bandW + 400, 0); ctx.lineTo(x + bandW, H); ctx.lineTo(x, H); ctx.closePath();
+  ctx.fillStyle = gradH(x, x + bandW + 400, [C.purple, C.magenta, C.pink, C.magenta, C.purple]);
+  ctx.fill();
+  ctx.restore();
+}
+
+function draw(t) {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  ctx.letterSpacing = '0px';
+  const sc = SCENES.find(([a, b]) => t >= a && t < b) || SCENES[SCENES.length - 1];
+  ctx.save();
+  sc[2](t - sc[0], t);
+  ctx.restore();
+  WIPES.forEach(B => wipe(t, B));
+  if (sc[2] !== S3) vignette();
+}
+
+window.draw = draw;
+window.DURATION = DURATION;
+window.ready = (async () => {
+  await Promise.all([
+    '400 40px "Noto Sans JP"', '700 40px "Noto Sans JP"', '900 40px "Noto Sans JP"',
+    '300 40px Montserrat', '600 40px Montserrat', '800 40px Montserrat',
+  ].map(f => document.fonts.load(f, 'あETERNAL')));
+  await document.fonts.ready;
+  await loadImages();
+  draw(0);
+  return true;
+})();
+
+// プレビュー再生（promo.html?play で音なしループ再生、?t=秒 で静止確認）
+const qs = new URLSearchParams(location.search);
+if (qs.has('play')) window.ready.then(() => { const s = performance.now(); const loop = () => { draw(((performance.now() - s) / 1000) % DURATION); requestAnimationFrame(loop); }; loop(); });
+if (qs.has('t')) window.ready.then(() => draw(parseFloat(qs.get('t'))));
+</script>
+</body>
+</html>
