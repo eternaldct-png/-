@@ -16,6 +16,7 @@ import hashlib
 import re
 import subprocess
 import sys
+import time
 import wave
 from pathlib import Path
 
@@ -46,8 +47,8 @@ def load_cues(path: Path) -> dict:
     return config
 
 
-def clip_path(out_dir: Path, index: int, text: str, voice: str, style: str) -> Path:
-    key = hashlib.sha1(f"{voice}\n{style}\n{text}".encode()).hexdigest()[:8]
+def clip_path(out_dir: Path, index: int, text: str, voice: str, style: str, model: str = "") -> Path:
+    key = hashlib.sha1(f"{model}\n{voice}\n{style}\n{text}".encode()).hexdigest()[:8]
     return out_dir / f"{index:02d}_{key}.wav"
 
 
@@ -61,18 +62,25 @@ def speed_for(duration: float, slot: float) -> float:
     return min(max(duration / slot, 1.0), MAX_SPEEDUP)
 
 
-def generate_clips(config: dict, out_dir: Path) -> list[dict]:
+def generate_clips(config: dict, out_dir: Path, pace: float = 0.0) -> list[dict]:
     """各セリフを音声化（キャッシュがあれば再利用）して、配置情報のリストを返す"""
     out_dir.mkdir(parents=True, exist_ok=True)
     voice = config.get("voice", gemini_tts.DEFAULT_VOICE)
+    model = gemini_tts._model_chain(None)[0]
     placed = []
+    last_call = 0.0
     for i, cue in enumerate(config["cues"], 1):
         style = cue.get("style", config.get("style", ""))
-        path = clip_path(out_dir, i, cue["text"], voice, style)
+        path = clip_path(out_dir, i, cue["text"], voice, style, model)
         if path.exists():
             print(f"[{i:02d}] キャッシュを使用: {path.name}")
         else:
+            # 無料枠は1分あたりの回数も少ないので、指定秒数ぶん間隔を空けて呼ぶ
+            wait = pace - (time.monotonic() - last_call)
+            if last_call and wait > 0:
+                time.sleep(wait)
             print(f"[{i:02d}] 生成中: {cue['text']}")
+            last_call = time.monotonic()
             _, used_model = gemini_tts.text_to_speech(cue["text"], output=path, voice=voice, style=style)
             if used_model != gemini_tts._model_chain(None)[0]:
                 print(f"      ※ 無料枠の上限のため {used_model} で作成")
@@ -164,6 +172,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("cues", help="ナレーション台本の YAML（media/narration/*.yaml）")
     parser.add_argument("--video", help="ナレーションを重ねる動画（省略時はナレーション音声だけ作る）")
     parser.add_argument("-o", "--out-dir", help="出力先フォルダ（省略時 media/tts_output/<YAML名>/）")
+    parser.add_argument("--pace", type=float, default=0.0,
+                        help="API 呼び出しの最小間隔（秒）。無料枠の1分あたり上限に当たるときは 13 など")
     args = parser.parse_args(argv)
 
     cue_file = Path(args.cues)
@@ -174,7 +184,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     try:
         config = load_cues(cue_file)
-        placed = generate_clips(config, out_dir)
+        placed = generate_clips(config, out_dir, pace=args.pace)
         outputs = build(config, placed, out_dir, video)
     except (gemini_tts.GeminiTTSError, subprocess.CalledProcessError) as e:
         print(f"エラー: {e}", file=sys.stderr)

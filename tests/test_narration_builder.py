@@ -42,6 +42,8 @@ class TimingTest(unittest.TestCase):
         self.assertNotEqual(base, nb.clip_path(Path("/x"), 1, "こんばんは", "Sulafat", "明るく"))
         self.assertNotEqual(base, nb.clip_path(Path("/x"), 1, "こんにちは", "Kore", "明るく"))
         self.assertNotEqual(base, nb.clip_path(Path("/x"), 1, "こんにちは", "Sulafat", "静かに"))
+        self.assertNotEqual(base, nb.clip_path(Path("/x"), 1, "こんにちは", "Sulafat", "明るく",
+                                               "gemini-3.8-flash-lite-tts"))
 
     def test_ducking_expression_depth(self):
         expr = nb.ducking_expression([{"at": 1.0, "end": 3.0}, {"at": 5.0, "end": 6.0}], duck_db=20)

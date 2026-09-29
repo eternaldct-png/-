@@ -34,11 +34,12 @@ class BuildRequestTest(unittest.TestCase):
         self.assertEqual(
             cfg["speechConfig"]["voiceConfig"]["prebuiltVoiceConfig"]["voiceName"], "Puck")
 
-    def test_style_is_prepended(self):
-        body = gemini_tts.build_request("こんにちは", style="明るく")
-        text = body["contents"][0]["parts"][0]["text"]
-        self.assertIn("明るく", text)
-        self.assertTrue(text.endswith("こんにちは"))
+    def test_style_goes_to_speech_metadata_not_text(self):
+        # 本文に混ぜると指示文まで読み上げられてしまう（実機で確認済み）
+        part = gemini_tts.build_request("こんにちは", style="明るく")["contents"][0]["parts"][0]
+        self.assertEqual(part["text"], "こんにちは")
+        self.assertEqual(part["speechMetadata"], {"style": "明るく"})
+        self.assertNotIn("speechMetadata", gemini_tts.build_request("こんにちは")["contents"][0]["parts"][0])
 
     def test_multi_speaker(self):
         body = gemini_tts.build_request(

@@ -14,6 +14,8 @@ Claude Code ──(MCP / stdio)──> src/mcp_gemini_tts.py ──> src/gemini_
    課金を有効にしたプロジェクトのキーは有料枠になり、使った分だけ請求される。
 3. 自分の無料枠の上限（1分あたり・1日あたりの回数）は AI Studio の「Rate limits / 使用量」画面で確認する。
    Google は TTS の無料枠の具体的な回数を公表しておらず、アカウントや時期で変わる。
+   **実測（2026年9月29日）: `gemini-3.8-flash-tts` の無料枠は1日10回**（Lite は別枠）。
+   ナレーション台本は1セリフ＝1回なので、9セリフの動画1本でほぼ1日分を使う。
 
 ### 無料枠の上限に達したとき（自動処理）
 | 状況 | 動き |
@@ -85,6 +87,8 @@ python3 src/narration_builder.py media/narration/eternaldct_promo_60s.yaml --vid
 | `NN_xxxxxxxx.wav` | セリフごとの音声。セリフ・声・指示が同じなら次回は再利用（無料枠の節約） |
 
 - セリフを直したら YAML を編集して同じコマンドを再実行 → 直した行だけ作り直される。
+- 無料枠で1分あたりの上限に当たるときは `--pace 13` を付けると13秒間隔で呼び出す。
+- Flash の1日上限を使い切ったら `GEMINI_TTS_MODEL=gemini-3.8-flash-lite-tts` を付けて実行（キャッシュはモデル別なので、翌日 Flash で作り直すこともできる）。
 - 気に入らない声が出たら、その行の `NN_*.wav` を削除して再実行すると作り直せる（同じ文でも毎回少しずつ読み方が変わる）。
 - ffmpeg は `requirements-mcp.txt` の `imageio-ffmpeg` に同梱されているので別途インストール不要。
 

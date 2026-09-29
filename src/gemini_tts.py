@@ -90,12 +90,15 @@ def build_request(text: str, voice: str = DEFAULT_VOICE, style: str = "",
                   speakers: dict[str, str] | None = None) -> dict:
     """generateContent 用のリクエストボディを組み立てる
 
-    style: 読み上げ方の指示（例: "明るく元気に"、"ささやくように"）。本文の前に指示として付ける。
+    style: 読み上げ方の指示（例: "明るく元気に"、"ささやくように"）。speechMetadata.style として渡す。
     speakers: {話者名: 音声名}。2人までの掛け合い。text は「話者名: セリフ」の行で書く。
     """
     if not text.strip():
         raise GeminiTTSError("読み上げるテキストが空です。")
-    prompt = f"次の文章を「{style}」の雰囲気で読み上げてください:\n{text}" if style else text
+    # 読み方の指示は本文に混ぜると指示文まで読み上げられるため、speechMetadata.style で渡す
+    part = {"text": text}
+    if style:
+        part["speechMetadata"] = {"style": style}
 
     if speakers:
         if len(speakers) > 2:
@@ -112,7 +115,7 @@ def build_request(text: str, voice: str = DEFAULT_VOICE, style: str = "",
         speech_config = {"voiceConfig": _voice_config(voice)}
 
     return {
-        "contents": [{"parts": [{"text": prompt}]}],
+        "contents": [{"parts": [part]}],
         "generationConfig": {
             "responseModalities": ["AUDIO"],
             "speechConfig": speech_config,
