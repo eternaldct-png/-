@@ -12,7 +12,9 @@
 セリフが区間（at〜until）より長い場合は最大 1.2 倍速まで詰め、それでも入らなければ警告を出す。
 """
 import argparse
+import array
 import hashlib
+import math
 import re
 import subprocess
 import sys
@@ -26,6 +28,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import gemini_tts  # noqa: E402
 
 MAX_SPEEDUP = 1.2
+TARGET_SPEECH_DB = -18.0   # 発話部分の平均音量の目標（dBFS）
+EDGE_FADE_IN = 0.01
+EDGE_FADE_OUT = 0.03
 
 
 def load_cues(path: Path) -> dict:
@@ -55,6 +60,23 @@ def clip_path(out_dir: Path, index: int, text: str, voice: str, style: str, mode
 def wav_duration(path: Path) -> float:
     with wave.open(str(path)) as wf:
         return wf.getnframes() / wf.getframerate()
+
+
+def speech_gain_db(path: Path, target_db: float = TARGET_SPEECH_DB) -> float:
+    """発話部分（20ms ごとに -45dBFS 以上の区間）の平均音量を target_db にそろえるゲイン"""
+    with wave.open(str(path)) as wf:
+        rate, width = wf.getframerate(), wf.getsampwidth()
+        samples = array.array("h", wf.readframes(wf.getnframes())) if width == 2 else array.array("h")
+    step = max(rate // 50, 1)
+    loud = []
+    for i in range(0, len(samples) - step + 1, step):
+        power = sum(v * v for v in samples[i:i + step]) / step / 32768 ** 2
+        if power > 10 ** (-45 / 10):
+            loud.append(power)
+    if not loud:
+        return 0.0
+    level_db = 10 * math.log10(sum(loud) / len(loud))
+    return max(min(target_db - level_db, 12.0), -12.0)
 
 
 def speed_for(duration: float, slot: float) -> float:
@@ -95,7 +117,8 @@ def generate_clips(config: dict, out_dir: Path, pace: float = 0.0) -> list[dict]
         if fitted > slot + 0.05:
             status = f"⚠ {fitted - slot:.1f}秒はみ出し（セリフを短くしてください）"
         print(f"      {cue['at']:5.1f}〜{cue['until']:5.1f}秒 枠{slot:.1f}秒 / 音声{duration:.1f}秒 → {status}")
-        placed.append({"path": path, "at": cue["at"], "end": cue["at"] + fitted, "speed": speed})
+        placed.append({"path": path, "at": cue["at"], "end": cue["at"] + fitted, "speed": speed,
+                       "gain_db": speech_gain_db(path)})
     return placed
 
 
@@ -107,7 +130,13 @@ def _narration_filters(placed: list[dict], first_input: int) -> tuple[list[str],
         if clip["speed"] > 1.0:
             chain.append(f"atempo={clip['speed']:.3f}")
         delay = int(round(clip["at"] * 1000))
-        chain += ["loudnorm=I=-16:TP=-1.5:LRA=11", "aresample=48000", f"adelay={delay}|{delay}"]
+        # 音量は固定ゲインでそろえる（loudnorm の動的処理は無音部の雑音まで持ち上げるため使わない）。
+        # 先頭・末尾に短いフェードを付けて、切れ目の「プツッ」を防ぐ
+        fade_out_at = max(clip["end"] - clip["at"] - EDGE_FADE_OUT, 0)
+        # deesser: TTS 音声の「ス・ツ・ズ」の刺さる高音を和らげる
+        chain += ["deesser=i=0.5:m=0.5:f=0.5", f"volume={clip['gain_db']:.1f}dB",
+                  f"afade=t=in:d={EDGE_FADE_IN}", f"afade=t=out:st={fade_out_at:.3f}:d={EDGE_FADE_OUT}",
+                  f"adelay={delay}|{delay}"]
         filters.append(f"[{first_input + n}:a]{','.join(chain)}[c{n}]")
         labels.append(f"[c{n}]")
     filters.append(f"{''.join(labels)}amix=inputs={len(labels)}:normalize=0:duration=longest[narr]")

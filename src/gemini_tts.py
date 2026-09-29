@@ -22,6 +22,7 @@ API のレスポンスは生の PCM（16bit / 24kHz / モノラル）なので�
 """
 import argparse
 import base64
+import io
 import os
 import re
 import shutil
@@ -123,8 +124,29 @@ def build_request(text: str, voice: str = DEFAULT_VOICE, style: str = "",
     }
 
 
-def _extract_audio(data: dict) -> tuple[bytes, int]:
-    """レスポンスから PCM バイト列とサンプリングレートを取り出す"""
+def _decode_wav(blob: bytes) -> tuple[bytes, int]:
+    """WAV ファイルのバイト列から PCM（16bit モノラル）とサンプリングレートを取り出す
+
+    Gemini 3.8 系は生の PCM ではなく完全な WAV（fmt / data / C2PA チャンク）を返す。
+    そのまま PCM 扱いするとヘッダーや C2PA（AI生成の来歴情報）を音として鳴らしてしまい、
+    「ブツ」「ザザザ」というノイズになる。wave モジュールは data チャンクだけを読むので安全。
+    """
+    try:
+        with wave.open(io.BytesIO(blob)) as wf:
+            channels, width, rate = wf.getnchannels(), wf.getsampwidth(), wf.getframerate()
+            frames = wf.readframes(wf.getnframes())
+    except (wave.Error, EOFError) as e:
+        raise GeminiTTSError(f"返ってきた WAV を読み取れませんでした: {e}")
+    if channels != 1 or width != 2:
+        raise GeminiTTSError(f"未対応の音声形式です（{channels}ch / {width * 8}bit）")
+    return frames, rate
+
+
+def _extract_audio(data: dict) -> tuple[bytes, int, bytes | None]:
+    """レスポンスから (PCM, サンプリングレート, 元の WAV ファイル or None) を取り出す
+
+    元の WAV は C2PA（AI生成であることを示す来歴情報）を含むので、保存時はそのまま書き出す。
+    """
     try:
         parts = data["candidates"][0]["content"]["parts"]
     except (KeyError, IndexError, TypeError):
@@ -134,17 +156,25 @@ def _extract_audio(data: dict) -> tuple[bytes, int]:
 
     pcm = b""
     rate = 24000
+    wav_files = []
     for part in parts:
         inline = part.get("inlineData") or part.get("inline_data")
         if not inline:
             continue
-        pcm += base64.b64decode(inline["data"])
+        blob = base64.b64decode(inline["data"])
+        if blob[:4] == b"RIFF":
+            chunk, rate = _decode_wav(blob)
+            pcm += chunk
+            wav_files.append(blob)
+            continue
+        pcm += blob  # 旧モデル（2.5 系など）は生の PCM（16bit little-endian）
         m = re.search(r"rate=(\d+)", inline.get("mimeType") or inline.get("mime_type") or "")
         if m:
             rate = int(m.group(1))
     if not pcm:
         raise GeminiTTSError("レスポンスに音声データが含まれていませんでした。")
-    return pcm, rate
+    original = wav_files[0] if len(wav_files) == 1 and len(parts) == 1 else None
+    return pcm, rate, original
 
 
 def _quota_error(resp, model: str) -> GeminiQuotaError:
@@ -172,8 +202,8 @@ def _quota_error(resp, model: str) -> GeminiQuotaError:
 
 def synthesize(text: str, voice: str = DEFAULT_VOICE, style: str = "",
                speakers: dict[str, str] | None = None,
-               model: str | None = None) -> tuple[bytes, int]:
-    """Gemini TTS を呼び出して (PCM バイト列, サンプリングレート) を返す
+               model: str | None = None) -> tuple[bytes, int, bytes | None]:
+    """Gemini TTS を呼び出して (PCM バイト列, サンプリングレート, 元の WAV or None) を返す
 
     1分あたりの上限（429）で API が短い待ち時間を指示してきた場合は、待って1回だけ再試行する。
     """
@@ -227,15 +257,21 @@ def ffmpeg_exe() -> str | None:
         return None
 
 
-def save_audio(pcm: bytes, rate: int, output: Path) -> Path:
-    """PCM を .wav で保存する。拡張子が .mp3 なら ffmpeg で変換する"""
+def save_audio(pcm: bytes, rate: int, output: Path, original_wav: bytes | None = None) -> Path:
+    """音声を .wav で保存する。拡張子が .mp3 なら ffmpeg で変換する
+
+    original_wav（API が返した WAV ファイル）があれば、C2PA の来歴情報ごとそのまま書き出す。
+    """
     output.parent.mkdir(parents=True, exist_ok=True)
     wav_path = output.with_suffix(".wav")
-    with wave.open(str(wav_path), "wb") as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(2)
-        wf.setframerate(rate)
-        wf.writeframes(pcm)
+    if original_wav:
+        wav_path.write_bytes(original_wav)
+    else:
+        with wave.open(str(wav_path), "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(rate)
+            wf.writeframes(pcm)
 
     if output.suffix.lower() != ".mp3":
         return wav_path
@@ -265,12 +301,12 @@ def text_to_speech(text: str, output: str | Path | None = None, voice: str = DEF
     errors = []
     for m in _model_chain(model):
         try:
-            pcm, rate = synthesize(text, voice=voice, style=style, speakers=speakers, model=m)
+            pcm, rate, original = synthesize(text, voice=voice, style=style, speakers=speakers, model=m)
         except GeminiQuotaError as e:
             errors.append(str(e))
             continue
         path = Path(output) if output else default_output_path()
-        return save_audio(pcm, rate, path), m
+        return save_audio(pcm, rate, path, original), m
     raise GeminiQuotaError(" / ".join(errors))
 
 

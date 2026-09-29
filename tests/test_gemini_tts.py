@@ -25,6 +25,39 @@ def _fake_response(pcm: bytes, rate: int = 24000, status: int = 200) -> MagicMoc
     return resp
 
 
+def _gemini_wav(pcm: bytes, rate: int = 24000) -> bytes:
+    """Gemini 3.8 系が返す形式: fmt / data の後ろに C2PA チャンクが付いた完全な WAV"""
+    import io
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(rate)
+        wf.writeframes(pcm)
+    body = buf.getvalue()
+    c2pa = b"C2PA" + (8).to_bytes(4, "little") + b"metadata"
+    riff_size = (len(body) - 8 + len(c2pa)).to_bytes(4, "little")
+    return b"RIFF" + riff_size + body[8:] + c2pa
+
+
+class WavResponseTest(unittest.TestCase):
+    def test_wav_response_is_not_played_as_pcm(self):
+        """ヘッダーや C2PA を音声として鳴らさない（「ブツッ」「ザザザ」ノイズの原因だった）"""
+        pcm = b"\x10\x00" * 240
+        blob = _gemini_wav(pcm, rate=24000)
+        resp = MagicMock(status_code=200)
+        resp.json.return_value = {"candidates": [{"content": {"parts": [{"inlineData": {
+            "mimeType": "audio/wav", "data": base64.b64encode(blob).decode()}}]}}]}
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.dict(os.environ, {"GEMINI_API_KEY": "k"}), \
+                patch.object(gemini_tts.requests, "post", return_value=resp):
+            path, _ = gemini_tts.text_to_speech("テスト", output=Path(tmp) / "out.wav")
+            # 保存したファイルは API が返した WAV そのもの（C2PA の来歴情報を保持）
+            self.assertEqual(path.read_bytes(), blob)
+            with wave.open(str(path)) as wf:
+                self.assertEqual(wf.readframes(wf.getnframes()), pcm)
+
+
 class BuildRequestTest(unittest.TestCase):
     def test_single_speaker(self):
         body = gemini_tts.build_request("こんにちは", voice="Puck")
