@@ -205,4 +205,5 @@ Claude Code から Gemini 3.8 Flash TTS を呼び出してテキストを音声�
 - `src/mcp_gemini_tts.py` — Claude Code 用 MCP サーバー（`.mcp.json` の `gemini-tts`）。ツール: `text_to_speech` / `list_voices`
 - 依存: `requirements-mcp.txt`（`mcp<2`）。環境変数: `GEMINI_API_KEY`（必須）、`GEMINI_TTS_MODEL`（任意、デフォルト `gemini-3.8-flash-tts`）
 - 出力先: `media/tts_output/`（Git管理外）
+- 無料枠（課金なしプロジェクトのAPIキー）前提。429（上限）時は待って再試行 → `gemini-3.8-flash-lite-tts` へ自動切り替え（`GEMINI_TTS_FALLBACK_MODELS` で変更、`none` で無効）
 - セットアップ手順: `docs/gemini_tts_setup.md`

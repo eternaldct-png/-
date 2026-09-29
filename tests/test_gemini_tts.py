@@ -66,7 +66,8 @@ class TextToSpeechTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, \
                 patch.dict(os.environ, {"GEMINI_API_KEY": "test-key"}, clear=False), \
                 patch.object(gemini_tts.requests, "post", return_value=_fake_response(pcm, 16000)) as post:
-            path = gemini_tts.text_to_speech("テスト", output=Path(tmp) / "out.wav")
+            path, used = gemini_tts.text_to_speech("テスト", output=Path(tmp) / "out.wav")
+            self.assertEqual(used, gemini_tts.DEFAULT_MODEL)
             with wave.open(str(path)) as wf:
                 self.assertEqual(wf.getframerate(), 16000)
                 self.assertEqual(wf.getnchannels(), 1)
@@ -102,6 +103,64 @@ class TextToSpeechTest(unittest.TestCase):
                 patch.object(gemini_tts.requests, "post", return_value=resp):
             with self.assertRaisesRegex(gemini_tts.GeminiTTSError, "SAFETY"):
                 gemini_tts.synthesize("テスト")
+
+
+def _quota_response(retry_delay: str | None = None, daily: bool = False) -> MagicMock:
+    details = []
+    if retry_delay:
+        details.append({"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": retry_delay})
+    quota_id = "GenerateRequestsPerDayPerProjectPerModel-FreeTier" if daily \
+        else "GenerateRequestsPerMinutePerProjectPerModel-FreeTier"
+    details.append({"@type": "type.googleapis.com/google.rpc.QuotaFailure",
+                    "violations": [{"quotaId": quota_id}]})
+    resp = MagicMock(status_code=429)
+    resp.json.return_value = {"error": {"code": 429, "message": "quota", "details": details}}
+    return resp
+
+
+class FreeTierQuotaTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.out = Path(self.tmp.name) / "out.wav"
+        env = patch.dict(os.environ, {"GEMINI_API_KEY": "k"})
+        env.start()
+        self.addCleanup(env.stop)
+        os.environ.pop("GEMINI_TTS_MODEL", None)
+        os.environ.pop("GEMINI_TTS_FALLBACK_MODELS", None)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_per_minute_limit_waits_and_retries(self):
+        responses = [_quota_response("5s"), _fake_response(b"\x00\x00")]
+        with patch.object(gemini_tts.requests, "post", side_effect=responses) as post, \
+                patch.object(gemini_tts.time, "sleep") as sleep:
+            _, used = gemini_tts.text_to_speech("テスト", output=self.out)
+        sleep.assert_called_once_with(6.0)
+        self.assertEqual(post.call_count, 2)
+        self.assertEqual(used, gemini_tts.DEFAULT_MODEL)
+
+    def test_daily_limit_falls_back_to_lite_without_waiting(self):
+        responses = [_quota_response("30s", daily=True), _fake_response(b"\x00\x00")]
+        with patch.object(gemini_tts.requests, "post", side_effect=responses) as post, \
+                patch.object(gemini_tts.time, "sleep") as sleep:
+            _, used = gemini_tts.text_to_speech("テスト", output=self.out)
+        sleep.assert_not_called()
+        self.assertEqual(used, "gemini-3.8-flash-lite-tts")
+        self.assertIn("/gemini-3.8-flash-lite-tts:", post.call_args_list[1].args[0])
+
+    def test_all_models_exhausted(self):
+        with patch.object(gemini_tts.requests, "post", return_value=_quota_response(daily=True)):
+            with self.assertRaisesRegex(gemini_tts.GeminiQuotaError, "1日あたり"):
+                gemini_tts.text_to_speech("テスト", output=self.out)
+        self.assertFalse(self.out.exists())
+
+    def test_fallback_can_be_disabled(self):
+        os.environ["GEMINI_TTS_FALLBACK_MODELS"] = "none"
+        with patch.object(gemini_tts.requests, "post", return_value=_quota_response(daily=True)) as post:
+            with self.assertRaises(gemini_tts.GeminiQuotaError):
+                gemini_tts.text_to_speech("テスト", output=self.out)
+        self.assertEqual(post.call_count, 1)
 
 
 if __name__ == "__main__":

@@ -40,9 +40,10 @@ def text_to_speech(
         speakers: 2人の掛け合い用。{"話者名": "音声名"} 例: {"kazuto": "Puck", "あまりん": "Kore"}
         output_path: 保存先（.wav か .mp3）。空なら media/tts_output/tts_日時.wav
         model: モデル名を上書きするとき（例: gemini-3.8-flash-lite-tts）。空なら環境変数かデフォルト。
+               利用上限（429）に達すると自動で gemini-3.8-flash-lite-tts に切り替える。
     """
     try:
-        path = gemini_tts.text_to_speech(
+        path, used_model = gemini_tts.text_to_speech(
             text,
             output=output_path or None,
             voice=voice,
@@ -52,7 +53,11 @@ def text_to_speech(
         )
     except gemini_tts.GeminiTTSError as e:
         return f"エラー: {e}"
-    return f"音声を保存しました: {path}"
+    note = ""
+    requested = model or gemini_tts._model_chain(None)[0]
+    if used_model != requested:
+        note = f"（{requested} の無料枠上限に達したため {used_model} で作成）"
+    return f"音声を保存しました: {path} [model: {used_model}]{note}"
 
 
 @mcp.tool()

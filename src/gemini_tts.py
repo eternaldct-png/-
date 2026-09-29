@@ -12,6 +12,10 @@ CLI としても直接使える:
     GEMINI_API_KEY    Google AI Studio で発行した API キー
     GEMINI_TTS_MODEL  （任意）使うモデル。デフォルト: gemini-3.8-flash-tts
                       安く大量に作るなら gemini-3.8-flash-lite-tts
+    GEMINI_TTS_FALLBACK_MODELS
+                      （任意）無料枠の上限（HTTP 429）に達したときに順に試すモデル（カンマ区切り）。
+                      デフォルト: gemini-3.8-flash-lite-tts。無効にするなら "none"
+                      無料枠の上限はモデルごとに別枠なので、切り替えると続けて作れることがある。
 
 API のレスポンスは生の PCM（16bit / 24kHz / モノラル）なので、WAV ヘッダーを付けて保存する。
 .mp3 を指定した場合は ffmpeg があれば変換する。
@@ -23,6 +27,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 import wave
 from datetime import datetime
 from pathlib import Path
@@ -31,7 +36,10 @@ import requests
 
 API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
 DEFAULT_MODEL = "gemini-3.8-flash-tts"
+DEFAULT_FALLBACK_MODELS = "gemini-3.8-flash-lite-tts"
 DEFAULT_VOICE = "Kore"
+# 1分あたりの上限に当たったとき、この秒数以内の待ち指示なら待って1回だけ再試行する
+MAX_RETRY_WAIT_SECONDS = 60
 DEFAULT_OUTPUT_DIR = Path(__file__).resolve().parent.parent / "media" / "tts_output"
 REQUEST_TIMEOUT = 180
 
@@ -53,6 +61,15 @@ PREBUILT_VOICES = {
 
 class GeminiTTSError(RuntimeError):
     pass
+
+
+class GeminiQuotaError(GeminiTTSError):
+    """無料枠などの利用上限（HTTP 429）に達した"""
+
+    def __init__(self, message: str, retry_after: float | None = None, daily: bool = False):
+        super().__init__(message)
+        self.retry_after = retry_after
+        self.daily = daily
 
 
 def _api_key() -> str:
@@ -127,25 +144,72 @@ def _extract_audio(data: dict) -> tuple[bytes, int]:
     return pcm, rate
 
 
+def _quota_error(resp, model: str) -> GeminiQuotaError:
+    """429 レスポンスから待ち秒数（RetryInfo）と「1日の上限かどうか」（QuotaFailure）を読み取る"""
+    try:
+        error = resp.json()["error"]
+    except Exception:
+        error = {}
+    retry_after = None
+    daily = False
+    for detail in error.get("details") or []:
+        m = re.fullmatch(r"([\d.]+)s", str(detail.get("retryDelay", "")))
+        if m:
+            retry_after = float(m.group(1))
+        for violation in detail.get("violations") or []:
+            if "PerDay" in str(violation.get("quotaId", "")):
+                daily = True
+    kind = "1日あたり" if daily else "1分あたり"
+    return GeminiQuotaError(
+        f"{model} の{kind}の利用上限に達しました（HTTP 429）。"
+        + ("明日（日本時間16〜17時ごろ＝米国太平洋時間の0時）にリセットされます。" if daily else "少し待ってから再実行してください。"),
+        retry_after=retry_after, daily=daily,
+    )
+
+
 def synthesize(text: str, voice: str = DEFAULT_VOICE, style: str = "",
                speakers: dict[str, str] | None = None,
                model: str | None = None) -> tuple[bytes, int]:
-    """Gemini TTS を呼び出して (PCM バイト列, サンプリングレート) を返す"""
+    """Gemini TTS を呼び出して (PCM バイト列, サンプリングレート) を返す
+
+    1分あたりの上限（429）で API が短い待ち時間を指示してきた場合は、待って1回だけ再試行する。
+    """
     model = model or os.environ.get("GEMINI_TTS_MODEL") or DEFAULT_MODEL
     body = build_request(text, voice=voice, style=style, speakers=speakers)
-    resp = requests.post(
-        f"{API_BASE}/{model}:generateContent",
-        headers={"x-goog-api-key": _api_key(), "Content-Type": "application/json"},
-        json=body,
-        timeout=REQUEST_TIMEOUT,
-    )
-    if resp.status_code != 200:
-        try:
-            message = resp.json()["error"]["message"]
-        except Exception:
-            message = resp.text[:500]
-        raise GeminiTTSError(f"Gemini API エラー（HTTP {resp.status_code}, model={model}）: {message}")
-    return _extract_audio(resp.json())
+    for attempt in range(2):
+        resp = requests.post(
+            f"{API_BASE}/{model}:generateContent",
+            headers={"x-goog-api-key": _api_key(), "Content-Type": "application/json"},
+            json=body,
+            timeout=REQUEST_TIMEOUT,
+        )
+        if resp.status_code == 200:
+            return _extract_audio(resp.json())
+        if resp.status_code != 429:
+            try:
+                message = resp.json()["error"]["message"]
+            except Exception:
+                message = resp.text[:500]
+            raise GeminiTTSError(f"Gemini API エラー（HTTP {resp.status_code}, model={model}）: {message}")
+
+        err = _quota_error(resp, model)
+        wait = err.retry_after
+        if attempt == 0 and not err.daily and wait is not None and wait <= MAX_RETRY_WAIT_SECONDS:
+            print(f"[gemini_tts] {model} の1分あたりの上限に達したため {wait:.0f} 秒待って再試行します",
+                  file=sys.stderr)
+            time.sleep(wait + 1)
+            continue
+        raise err
+
+
+def _model_chain(model: str | None) -> list[str]:
+    """最初に使うモデル + 無料枠切れのときの切り替え先（重複なし）"""
+    first = model or os.environ.get("GEMINI_TTS_MODEL") or DEFAULT_MODEL
+    fallbacks = os.environ.get("GEMINI_TTS_FALLBACK_MODELS", DEFAULT_FALLBACK_MODELS)
+    chain = [first]
+    if fallbacks.strip().lower() != "none":
+        chain += [m.strip() for m in fallbacks.split(",") if m.strip()]
+    return list(dict.fromkeys(chain))
 
 
 def save_audio(pcm: bytes, rate: int, output: Path) -> Path:
@@ -177,11 +241,21 @@ def default_output_path(fmt: str = "wav") -> Path:
 
 def text_to_speech(text: str, output: str | Path | None = None, voice: str = DEFAULT_VOICE,
                    style: str = "", speakers: dict[str, str] | None = None,
-                   model: str | None = None) -> Path:
-    """テキストを読み上げて音声ファイルに保存し、保存先パスを返す"""
-    pcm, rate = synthesize(text, voice=voice, style=style, speakers=speakers, model=model)
-    path = Path(output) if output else default_output_path()
-    return save_audio(pcm, rate, path)
+                   model: str | None = None) -> tuple[Path, str]:
+    """テキストを読み上げて音声ファイルに保存し、(保存先パス, 実際に使ったモデル) を返す
+
+    利用上限（429）に当たったら GEMINI_TTS_FALLBACK_MODELS のモデルに切り替えて作り直す。
+    """
+    errors = []
+    for m in _model_chain(model):
+        try:
+            pcm, rate = synthesize(text, voice=voice, style=style, speakers=speakers, model=m)
+        except GeminiQuotaError as e:
+            errors.append(str(e))
+            continue
+        path = Path(output) if output else default_output_path()
+        return save_audio(pcm, rate, path), m
+    raise GeminiQuotaError(" / ".join(errors))
 
 
 def parse_speakers(spec: str) -> dict[str, str]:
@@ -220,7 +294,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("テキストか --file を指定してください")
 
     try:
-        path = text_to_speech(
+        path, used_model = text_to_speech(
             text, output=args.output, voice=args.voice, style=args.style,
             speakers=parse_speakers(args.speakers) if args.speakers else None,
             model=args.model,
@@ -228,7 +302,7 @@ def main(argv: list[str] | None = None) -> int:
     except GeminiTTSError as e:
         print(f"エラー: {e}", file=sys.stderr)
         return 1
-    print(path)
+    print(f"{path}  (model: {used_model})")
     return 0
 
 
