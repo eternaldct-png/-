@@ -212,6 +212,18 @@ def _model_chain(model: str | None) -> list[str]:
     return list(dict.fromkeys(chain))
 
 
+def ffmpeg_exe() -> str | None:
+    """ffmpeg のパス。PATH になければ pip の imageio-ffmpeg に同梱のバイナリを使う"""
+    found = shutil.which("ffmpeg")
+    if found:
+        return found
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return None
+
+
 def save_audio(pcm: bytes, rate: int, output: Path) -> Path:
     """PCM を .wav で保存する。拡張子が .mp3 なら ffmpeg で変換する"""
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -224,10 +236,11 @@ def save_audio(pcm: bytes, rate: int, output: Path) -> Path:
 
     if output.suffix.lower() != ".mp3":
         return wav_path
-    if not shutil.which("ffmpeg"):
+    ffmpeg = ffmpeg_exe()
+    if not ffmpeg:
         raise GeminiTTSError(f"mp3 変換には ffmpeg が必要です（WAV は保存済み: {wav_path}）")
     subprocess.run(
-        ["ffmpeg", "-y", "-loglevel", "error", "-i", str(wav_path), "-b:a", "192k", str(output)],
+        [ffmpeg, "-y", "-loglevel", "error", "-i", str(wav_path), "-b:a", "192k", str(output)],
         check=True,
     )
     wav_path.unlink()

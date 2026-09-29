@@ -2,3 +2,6 @@
 # pip install -r requirements-mcp.txt
 mcp>=1.2,<2
 requests>=2.31.0
+pyyaml>=6.0.1
+# ffmpeg を別途インストールしなくても mp3 変換・動画へのナレーション合成ができるように
+imageio-ffmpeg>=0.5.0

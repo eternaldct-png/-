@@ -69,6 +69,25 @@ Windows (PowerShell): `setx GEMINI_API_KEY "取得したキー"` → ターミ�
 環境変数 `GEMINI_TTS_MODEL` で全体を切り替えるか、ツール呼び出し時に `model` を指定する。
 新しいモデルが出たら同じ方法で差し替えられる（コード変更不要）。
 
+## 動画にナレーションを付ける（台本YAML → 完成動画）
+```bash
+python3 src/narration_builder.py media/narration/eternaldct_promo_60s.yaml --video ~/Downloads/eternaldct_promo_60s.mp4
+```
+1. 台本（`media/narration/*.yaml`）の各セリフを Gemini TTS で音声化
+2. `at` 秒の位置に配置（`until` までに収まらなければ最大1.2倍速で詰め、それでも無理なら警告）
+3. ナレーション中だけ元動画の BGM を `bgm_duck_db`（デフォルト9dB）下げて合成
+
+出力先 `media/tts_output/<台本名>/`:
+| ファイル | 用途 |
+|---|---|
+| `<動画名>_narrated.mp4` | 完成動画 |
+| `narration.wav` | ナレーションだけの音声（CapCut などで細かく調整したいとき用） |
+| `NN_xxxxxxxx.wav` | セリフごとの音声。セリフ・声・指示が同じなら次回は再利用（無料枠の節約） |
+
+- セリフを直したら YAML を編集して同じコマンドを再実行 → 直した行だけ作り直される。
+- 気に入らない声が出たら、その行の `NN_*.wav` を削除して再実行すると作り直せる（同じ文でも毎回少しずつ読み方が変わる）。
+- ffmpeg は `requirements-mcp.txt` の `imageio-ffmpeg` に同梱されているので別途インストール不要。
+
 ## MCPを使わずにコマンドで使う
 ```bash
 python3 src/gemini_tts.py "こんにちは" --voice Kore --style "明るく元気に"
