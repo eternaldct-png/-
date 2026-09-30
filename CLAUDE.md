@@ -101,6 +101,42 @@ git push -u origin claude/homepage-payment-spreadsheet-DD1ly
 
 ---
 
+## /motion ページ（モーション動画の作例集）
+
+「こんな動画がつくれます」を見せるショーケース。作例を追加・編集するときも **コード変更は不要**。
+
+**設定ファイル:** `persona/motion_config.yaml`  
+**動画置き場:** `src/static/motion/`（または YouTube / 外部の https:// URL）
+
+### 仕組み
+- `video`（mp4/webm）の作例は、画面に入ったものだけ読み込んで無音ループ自動再生し、画面外に出たら止める。タップで拡大（音あり・コントロール付き）。
+- `youtube` の作例はサムネイル表示 → タップで YouTube（youtube-nocookie）を埋め込み再生。
+- `video` も `youtube` も空の枠は「制作中」扱いで、公開ページには出ない。`/motion?preview=1` で制作中の枠も含めて確認できる。
+- `page.contact_url` に公式LINEなどのURL（https://）を入れると「相談する」ボタンが表示される。空ならボタン非表示。
+
+### 作例を追加するときに確認すること
+1. どの枠か（`id`）/ 作例名 / カテゴリ
+2. 縦横比 `"16:9"` `"9:16"` `"1:1"` `"4:5"`（**必ず `""` で囲む**）
+3. 尺・用途（カードに表示される）
+4. 動画ファイル（短いループ）か、YouTube のURL（長尺・音あり）か
+5. サムネイル画像（`poster`、推奨）
+6. 使用素材・BGM・出演者・クライアントの掲載許可が取れているか
+
+### 動画ファイルのルール（Render無料プラン対策）
+- `src/static/motion/` に置くのは **1本 3MB 以下の短いループ（15秒以内・720p・音なし）** に限る。合計 50MB を超えそうなら YouTube（限定公開）か外部ストレージに移す。
+  （GitHub は 100MB 超のファイルを push できない。Render の無料枠は帯域を使い切ると全サービスが停止する）
+- 長尺・音ありの作品（リリックビデオ・会社紹介など）は YouTube 限定公開にして `youtube:` にURLを貼る。
+- 圧縮コマンド例（ffmpeg）:
+  ```bash
+  # 横長 → 720p・音なし・15秒
+  ffmpeg -i in.mp4 -t 15 -vf "scale=-2:720" -c:v libx264 -crf 28 -preset slow -an -movflags +faststart out.mp4
+  # 縦長（9:16）の場合は scale=720:-2
+  # サムネイル（1秒地点）
+  ffmpeg -ss 1 -i out.mp4 -frames:v 1 -q:v 3 out.jpg
+  ```
+
+---
+
 ## /stickers ページ（LINEスタンプメーカー）
 
 写真からLINEスタンプ（個別PNG・最大16枚）を作る無料ツール。OpenAI等の画像生成APIキーは使わない構成（従量課金を避けるため）。

@@ -1,0 +1,199 @@
+# /motion（モーション動画の作例ページ）の設定
+# 作例を増やす・編集するときはこのファイルを編集するだけでOK（コード変更不要）
+#
+# ── page（ページ全体） ──────────────────────────────
+# title         : ページの見出し（ブラウザのタブにも表示）
+# lead          : 見出しの下の説明文
+# contact_url   : 「相談する」ボタンのリンク先（公式LINEの友だち追加URLなど。https:// のみ。空ならボタン非表示）
+# contact_label : ボタンの文言
+#
+# ── works（作例1本ごと） ───────────────────────────
+# id          : 識別用（英数字とハイフン。ファイル名と揃えると管理しやすい）
+# title       : 作例名
+# category    : カテゴリ（同じ文字列の作例がまとまり、ページ上部の絞り込みボタンになる）
+# description : 説明文（任意）
+# aspect      : 縦横比 "16:9" / "9:16" / "1:1" / "4:5" のどれか（必ず "" で囲む）
+# video       : 動画ファイル（src/static/motion/ に置き "/static/motion/xxx.mp4"、または https:// のURL）
+# poster      : 読み込み前に表示するサムネイル画像（任意・推奨）
+# youtube     : YouTube のURLまたは動画ID（長尺・音あり向け。video とどちらか一方を指定）
+# duration    : 尺の表示（例: "15秒"）
+# use         : 用途の表示（例: "Instagramリール・TikTok広告"）
+#
+# video も youtube も空の作例は「制作中」扱いになり、公開ページには表示されない。
+# 制作中の枠も含めてレイアウトを確認したいときは /motion?preview=1 を開く。
+
+page:
+  title: "こんな動画、つくれます。"
+  lead: "配信・音楽・SNS広告・店舗や企業のPRまで。\nETERNALd.c.t が制作するモーション動画の作例集です。"
+  contact_url: ""
+  contact_label: "制作について相談する"
+
+works:
+  # ── 配信・ライバー ─────────────────────────
+  - id: "stream-opening"
+    title: "配信オープニング・待機画面"
+    category: "配信・ライバー"
+    description: "配信開始前の待機画面や、オープニング・エンディングに使えるループ動画。"
+    aspect: "16:9"
+    video: ""
+    poster: ""
+    youtube: ""
+    duration: "10〜20秒ループ"
+    use: "OBSの待機・開始・終了画面"
+
+  - id: "stream-alert"
+    title: "ギフト・フォロー演出"
+    category: "配信・ライバー"
+    description: "フォローやギフトが届いた瞬間に流れる短い演出動画。"
+    aspect: "1:1"
+    video: ""
+    poster: ""
+    youtube: ""
+    duration: "3〜5秒"
+    use: "配信中のアラート演出"
+
+  - id: "liver-profile"
+    title: "ライバー紹介プロフィール動画"
+    category: "配信・ライバー"
+    description: "名前・配信ジャンル・配信時間などを、テンポよく紹介する縦型動画。"
+    aspect: "9:16"
+    video: ""
+    poster: ""
+    youtube: ""
+    duration: "15秒"
+    use: "SNSプロフィール・所属ライバー紹介"
+
+  # ── 音楽 ─────────────────────────────────
+  - id: "lyric-motion"
+    title: "リリックモーション（歌詞動画）"
+    category: "音楽"
+    description: "歌詞が音に合わせて動く、リリックビデオ。"
+    aspect: "16:9"
+    video: ""
+    poster: ""
+    youtube: ""
+    duration: "サビ30秒〜1曲"
+    use: "YouTube・歌ってみた・オリジナル曲"
+
+  - id: "release-teaser"
+    title: "新曲リリース告知ショート"
+    category: "音楽"
+    description: "ジャケット写真と楽曲の一部を使った、リリース告知用のショート動画。"
+    aspect: "9:16"
+    video: ""
+    poster: ""
+    youtube: ""
+    duration: "15秒"
+    use: "リール・TikTok・YouTubeショート"
+
+  # ── SNS・広告 ────────────────────────────
+  - id: "sns-ad"
+    title: "SNS縦型広告"
+    category: "SNS・広告"
+    description: "最初の2秒で目を止める、スマホ向けの縦型広告動画。"
+    aspect: "9:16"
+    video: ""
+    poster: ""
+    youtube: ""
+    duration: "15秒"
+    use: "Instagramリール・TikTok広告"
+
+  - id: "goods-promo"
+    title: "グッズ・商品プロモーション"
+    category: "SNS・広告"
+    description: "商品写真を動かして魅力を伝える、商品紹介動画。"
+    aspect: "4:5"
+    video: ""
+    poster: ""
+    youtube: ""
+    duration: "10秒"
+    use: "ECサイト・Instagramフィード"
+
+  - id: "event-notice"
+    title: "イベント・キャンペーン告知"
+    category: "SNS・広告"
+    description: "日時・場所・特典をひと目で伝える告知動画。"
+    aspect: "9:16"
+    video: ""
+    poster: ""
+    youtube: ""
+    duration: "10〜15秒"
+    use: "ストーリーズ・公式LINE配信"
+
+  - id: "recruit"
+    title: "求人・オーディション募集動画"
+    category: "SNS・広告"
+    description: "募集要項を、雰囲気ごと伝える募集動画。"
+    aspect: "9:16"
+    video: ""
+    poster: ""
+    youtube: ""
+    duration: "15〜30秒"
+    use: "求人・ライバー募集・オーディション告知"
+
+  - id: "caption-edit"
+    title: "テロップ・字幕アニメーション"
+    category: "SNS・広告"
+    description: "撮影した素材に、動くテロップと効果音をのせて見やすく編集。"
+    aspect: "9:16"
+    video: ""
+    poster: ""
+    youtube: ""
+    duration: "15〜60秒"
+    use: "ショート動画の編集"
+
+  # ── 企業・店舗 ───────────────────────────
+  - id: "logo-animation"
+    title: "ロゴアニメーション"
+    category: "企業・店舗"
+    description: "会社やブランドのロゴが動いて登場する、短いオープニング映像。"
+    aspect: "16:9"
+    video: ""
+    poster: ""
+    youtube: ""
+    duration: "3〜5秒"
+    use: "動画の冒頭・会社紹介・展示会"
+
+  - id: "infographic"
+    title: "サービス紹介（数字が動くインフォグラフィック）"
+    category: "企業・店舗"
+    description: "実績の数字やサービスの流れを、図解アニメーションでわかりやすく説明。"
+    aspect: "16:9"
+    video: ""
+    poster: ""
+    youtube: ""
+    duration: "30秒"
+    use: "営業資料・ホームページ・商談"
+
+  - id: "signage"
+    title: "店頭サイネージ・メニュー動画"
+    category: "企業・店舗"
+    description: "店頭モニターやレジ横で流す、ループ再生のメニュー・おすすめ紹介。"
+    aspect: "9:16"
+    video: ""
+    poster: ""
+    youtube: ""
+    duration: "15秒ループ"
+    use: "店頭モニター・デジタルサイネージ"
+
+  - id: "company-intro"
+    title: "会社紹介ダイジェスト"
+    category: "企業・店舗"
+    description: "事業内容・強み・想いを短くまとめた会社紹介映像。"
+    aspect: "16:9"
+    video: ""
+    poster: ""
+    youtube: ""
+    duration: "30〜60秒"
+    use: "採用・ホームページ・展示会"
+
+  - id: "tool-demo"
+    title: "ツール操作デモ"
+    category: "企業・店舗"
+    description: "画面収録にモーションで注釈をつけた、ツールやサービスの使い方動画。"
+    aspect: "16:9"
+    video: ""
+    poster: ""
+    youtube: ""
+    duration: "30〜60秒"
+    use: "サービス説明・社内マニュアル"

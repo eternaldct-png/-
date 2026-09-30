@@ -3780,6 +3780,447 @@ def stickers_zip(job_id):
     return send_file(buf, mimetype="application/zip", as_attachment=True, download_name="line_stickers.zip")
 
 
+# ── /motion モーション動画ショーケース ───────────────────────────────
+
+MOTION_CONFIG_PATH = Path("persona/motion_config.yaml")
+_MOTION_ASPECTS = {"16:9", "9:16", "1:1", "4:5"}
+
+
+def _motion_aspect(value):
+    """縦横比を "16:9" 形式に正規化する。
+
+    YAML でクォートせずに 16:9 と書くと 60進数の整数（969）として読まれるため、
+    整数なら元の "16:9" に戻してから判定する。
+    """
+    if isinstance(value, int) and not isinstance(value, bool):
+        value = f"{value // 60}:{value % 60}"
+    value = str(value or "").strip()
+    return value if value in _MOTION_ASPECTS else "16:9"
+
+
+def _motion_media_url(value):
+    """動画・ポスター画像のURLを検証する（/static/ 配下か https:// のみ許可）"""
+    value = str(value or "").strip()
+    if value.startswith("/static/") or value.startswith("https://"):
+        return value
+    return ""
+
+
+def _youtube_id(value):
+    """YouTube の URL（通常・短縮・Shorts・埋め込み）または動画IDから11桁の動画IDを取り出す"""
+    import re
+
+    value = str(value or "").strip()
+    if re.fullmatch(r"[A-Za-z0-9_-]{11}", value):
+        return value
+    m = re.search(r"(?:youtu\.be/|[?&]v=|/shorts/|/embed/|/live/)([A-Za-z0-9_-]{11})", value)
+    return m.group(1) if m else ""
+
+
+def _load_motion_config():
+    """persona/motion_config.yaml からページ設定と作品一覧を読み込む"""
+    import yaml
+
+    if not MOTION_CONFIG_PATH.exists():
+        return {"title": "MOTION WORKS", "lead": "", "contact_url": "", "contact_label": ""}, []
+    with open(MOTION_CONFIG_PATH, "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+
+    page = data.get("page") or {}
+    contact_url = str(page.get("contact_url") or "").strip()
+    page_info = {
+        "title": str(page.get("title") or "MOTION WORKS"),
+        "lead": str(page.get("lead") or ""),
+        "contact_url": contact_url if contact_url.startswith("https://") else "",
+        "contact_label": str(page.get("contact_label") or "制作について相談する"),
+    }
+
+    works = []
+    for w in data.get("works") or []:
+        if not isinstance(w, dict) or not w.get("id") or not w.get("title"):
+            continue
+        work = {
+            "id": str(w["id"]),
+            "title": str(w["title"]),
+            "category": str(w.get("category") or ""),
+            "description": str(w.get("description") or ""),
+            "aspect": _motion_aspect(w.get("aspect")),
+            "video": _motion_media_url(w.get("video")),
+            "poster": _motion_media_url(w.get("poster")),
+            "youtube": _youtube_id(w.get("youtube")),
+            "duration": str(w.get("duration") or ""),
+            "use": str(w.get("use") or ""),
+        }
+        # 動画も YouTube も未設定の枠は「制作中」扱い（?preview=1 のときだけ表示）
+        work["placeholder"] = not (work["video"] or work["youtube"])
+        works.append(work)
+    return page_info, works
+
+
+MOTION_HTML = r"""<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__ | ETERNALd.c.t</title>
+<meta name="description" content="ETERNALd.c.t が制作するモーション動画の作例集です。">
+<meta property="og:title" content="__TITLE__ | ETERNALd.c.t">
+<meta property="og:description" content="ETERNALd.c.t が制作するモーション動画の作例集です。">
+<meta property="og:type" content="website">
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #0d0b14; --surface: #17141f; --surface2: #221e2c;
+  --grad: linear-gradient(135deg, #7c3aed, #d946ef, #ec4899);
+  --accent: #e879f9; --text: #f4f2f8; --muted: #a8a3b6; --border: #2c2738;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg); color: var(--text); min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic UI', 'Noto Sans JP', sans-serif;
+}
+body.modal-open { overflow: hidden; }
+a { color: inherit; }
+.hero {
+  position: relative; overflow: hidden; text-align: center;
+  padding: 64px 16px 44px; border-bottom: 1px solid var(--border);
+}
+.hero::before {
+  content: ""; position: absolute; inset: -40%; z-index: 0; opacity: 0.35;
+  background: radial-gradient(circle at 30% 40%, #7c3aed 0, transparent 38%),
+              radial-gradient(circle at 70% 60%, #ec4899 0, transparent 34%);
+  animation: drift 14s ease-in-out infinite alternate;
+}
+@keyframes drift { from { transform: translate(-4%, -3%) rotate(0deg); } to { transform: translate(4%, 3%) rotate(8deg); } }
+.hero > * { position: relative; z-index: 1; }
+.badge {
+  display: inline-block; font-size: 11px; font-weight: 800; letter-spacing: 0.24em;
+  color: white; background: var(--grad); padding: 5px 16px; border-radius: 999px; margin-bottom: 16px;
+}
+.hero h1 { font-size: clamp(24px, 5.4vw, 40px); font-weight: 900; line-height: 1.35; }
+.hero p {
+  font-size: 14px; color: var(--muted); margin: 14px auto 0; max-width: 560px;
+  line-height: 1.9; white-space: pre-wrap;
+}
+.cta {
+  display: inline-block; margin-top: 26px; padding: 14px 28px; border-radius: 999px;
+  background: var(--grad); color: white; font-weight: 800; font-size: 15px; text-decoration: none;
+  box-shadow: 0 8px 26px rgba(217,70,239,0.35); transition: transform 0.15s, opacity 0.15s;
+}
+.cta:hover { transform: translateY(-1px); }
+.cta:active { opacity: 0.85; transform: scale(0.98); }
+.preview-bar {
+  background: #3b2a06; color: #fcd34d; border-bottom: 1px solid #6b4e0e;
+  font-size: 12px; line-height: 1.7; text-align: center; padding: 10px 16px;
+}
+.filters {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 8px;
+  padding: 26px 16px 8px; max-width: 1120px; margin: 0 auto;
+}
+.chip {
+  border: 1px solid var(--border); background: var(--surface); color: var(--muted);
+  padding: 8px 16px; border-radius: 999px; font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.chip[aria-pressed="true"] { background: var(--grad); color: white; border-color: transparent; }
+.grid { max-width: 1120px; margin: 0 auto; padding: 18px 16px 8px; column-width: 300px; column-gap: 18px; }
+.card {
+  break-inside: avoid; -webkit-column-break-inside: avoid; margin-bottom: 18px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 18px; overflow: hidden;
+}
+.media {
+  position: relative; display: block; width: 100%; border: 0; padding: 0; cursor: pointer;
+  background: var(--surface2); color: white; overflow: hidden;
+}
+.media video, .media img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.ar-16x9 { aspect-ratio: 16 / 9; }
+.ar-9x16 { aspect-ratio: 9 / 16; }
+.ar-1x1 { aspect-ratio: 1 / 1; }
+.ar-4x5 { aspect-ratio: 4 / 5; }
+.play {
+  position: absolute; right: 12px; bottom: 12px; width: 40px; height: 40px; border-radius: 50%;
+  background: rgba(13,11,20,0.72); display: flex; align-items: center; justify-content: center;
+  font-size: 14px; padding-left: 3px; transition: transform 0.15s;
+}
+.media:hover .play, .media:focus-visible .play { transform: scale(1.1); background: #d946ef; }
+.media:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
+.placeholder {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  cursor: default; background: linear-gradient(120deg, #1d1828, #2d2140, #1d1828);
+  background-size: 300% 300%; animation: shimmer 6s ease-in-out infinite;
+  color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: 0.08em;
+}
+.placeholder strong { font-size: 15px; color: var(--text); letter-spacing: 0.2em; }
+@keyframes shimmer { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+.card-body { padding: 16px 18px 18px; }
+.tag {
+  display: inline-block; font-size: 11px; font-weight: 800; color: var(--accent);
+  border: 1px solid rgba(232,121,249,0.4); padding: 2px 10px; border-radius: 999px; margin-bottom: 10px;
+}
+.card h3 { font-size: 16px; font-weight: 800; line-height: 1.5; }
+.desc { font-size: 13px; color: var(--muted); line-height: 1.8; margin-top: 6px; white-space: pre-wrap; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 12px; font-size: 12px; color: var(--muted); }
+.meta b { color: var(--text); font-weight: 700; margin-right: 4px; }
+.empty { text-align: center; color: var(--muted); font-size: 14px; padding: 56px 16px; }
+.bottom-cta { text-align: center; padding: 48px 16px 20px; }
+.bottom-cta h2 { font-size: 20px; font-weight: 900; }
+.bottom-cta p { font-size: 13px; color: var(--muted); margin-top: 8px; line-height: 1.8; }
+footer { text-align: center; font-size: 12px; color: var(--muted); padding: 36px 16px 44px; }
+footer a { color: var(--muted); }
+.modal {
+  position: fixed; inset: 0; z-index: 100; background: rgba(5,4,9,0.9);
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.modal-inner {
+  position: relative; width: 100%; max-height: 100%; overflow-y: auto;
+  max-width: max(360px, min(960px, calc(68vh * var(--r, 1.7778))));
+  background: var(--surface); border: 1px solid var(--border); border-radius: 18px;
+}
+.modal-media { margin: 0 auto; background: #000; width: min(100%, calc(68vh * var(--r, 1.7778))); aspect-ratio: var(--ar, 16 / 9); }
+.modal-media video, .modal-media iframe { width: 100%; height: 100%; border: 0; display: block; background: #000; }
+.modal-body { padding: 16px 20px 22px; }
+.modal-body h2 { font-size: 18px; font-weight: 800; line-height: 1.5; }
+.modal-close {
+  position: absolute; top: 10px; right: 10px; z-index: 2; width: 38px; height: 38px; border-radius: 50%;
+  border: 0; background: rgba(13,11,20,0.8); color: white; font-size: 20px; cursor: pointer;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero::before, .placeholder { animation: none; }
+}
+</style>
+</head>
+<body>
+<header class="hero">
+  <span class="badge">MOTION WORKS</span>
+  <h1 id="pageTitle"></h1>
+  <p id="pageLead"></p>
+  <a class="cta" id="ctaTop" target="_blank" rel="noopener" hidden></a>
+</header>
+<div class="preview-bar" id="previewBar" hidden>
+  プレビュー表示中 —「制作中」の枠は公開ページ（URL末尾の ?preview=1 なし）には表示されません
+</div>
+<nav class="filters" id="filters" aria-label="カテゴリで絞り込み"></nav>
+<main class="grid" id="grid"></main>
+<p class="empty" id="empty" hidden>現在、作例を準備中です。</p>
+<section class="bottom-cta" id="ctaBottom" hidden>
+  <h2>「こんな動画がほしい」を、かたちに。</h2>
+  <p>用途・尺・ご予算がざっくりでも大丈夫です。お気軽にご相談ください。</p>
+  <a class="cta" id="ctaBottomLink" target="_blank" rel="noopener"></a>
+</section>
+<footer>&copy; ETERNALd.c.t ・ <a href="https://eternaldct.net" target="_blank" rel="noopener">eternaldct.net</a></footer>
+
+<div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" hidden>
+  <div class="modal-inner" id="modalInner">
+    <button class="modal-close" id="modalClose" aria-label="閉じる">&times;</button>
+    <div class="modal-media" id="modalMedia"></div>
+    <div class="modal-body">
+      <span class="tag" id="modalTag"></span>
+      <h2 id="modalTitle"></h2>
+      <p class="desc" id="modalDesc"></p>
+      <div class="meta" id="modalMeta"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const DATA = __MOTION_JSON__;
+const RATIOS = { "16:9": [16, 9], "9:16": [9, 16], "1:1": [1, 1], "4:5": [4, 5] };
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const visibleVideos = new Set();
+let activeFilter = "";
+let lastFocus = null;
+
+function el(tag, cls, text) {
+  const node = document.createElement(tag);
+  if (cls) node.className = cls;
+  if (text) node.textContent = text;
+  return node;
+}
+
+function metaRow(work) {
+  const meta = el("div", "meta");
+  [["尺", work.duration], ["用途", work.use]].forEach(([label, value]) => {
+    if (!value) return;
+    const item = el("span");
+    item.appendChild(el("b", "", label));
+    item.appendChild(document.createTextNode(value));
+    meta.appendChild(item);
+  });
+  return meta;
+}
+
+// 画面内に入った動画だけ読み込んで再生し、画面外に出たら止める（通信量とバッテリー対策）
+const observer = ("IntersectionObserver" in window && !reduceMotion) ? new IntersectionObserver((entries) => {
+  entries.forEach((entry) => {
+    const video = entry.target;
+    if (entry.isIntersecting) {
+      visibleVideos.add(video);
+      if (!video.getAttribute("src")) video.src = video.dataset.src;
+      if (!document.body.classList.contains("modal-open")) video.play().catch(() => {});
+    } else {
+      visibleVideos.delete(video);
+      video.pause();
+    }
+  });
+}, { threshold: 0.35 }) : null;
+
+function buildMedia(work) {
+  const ratioClass = "ar-" + work.aspect.replace(":", "x");
+  if (work.placeholder) {
+    const box = el("div", "media placeholder " + ratioClass);
+    box.appendChild(el("strong", "", "COMING SOON"));
+    box.appendChild(el("span", "", "制作中 ・ " + work.aspect));
+    return box;
+  }
+  const btn = el("button", "media " + ratioClass);
+  btn.type = "button";
+  btn.setAttribute("aria-label", "「" + work.title + "」を再生");
+  if (work.video) {
+    const video = document.createElement("video");
+    video.muted = true; video.loop = true; video.playsInline = true;
+    video.setAttribute("muted", ""); video.setAttribute("playsinline", "");
+    video.preload = "none";
+    if (work.poster) video.poster = work.poster;
+    video.dataset.src = work.video;
+    if (observer) {
+      observer.observe(video);
+    } else if (!work.poster) {
+      // 自動再生しない環境では、ポスター画像の代わりに冒頭のフレームを表示する
+      video.preload = "metadata";
+      video.src = work.video + "#t=0.1";
+    }
+    btn.appendChild(video);
+  } else {
+    const img = document.createElement("img");
+    img.loading = "lazy"; img.alt = "";
+    img.src = work.poster || ("https://i.ytimg.com/vi/" + work.youtube + "/hqdefault.jpg");
+    btn.appendChild(img);
+  }
+  btn.appendChild(el("span", "play", "▶"));
+  btn.addEventListener("click", () => openModal(work, btn));
+  return btn;
+}
+
+function render() {
+  const grid = document.getElementById("grid");
+  if (observer) grid.querySelectorAll("video").forEach((v) => observer.unobserve(v));
+  visibleVideos.clear();
+  grid.replaceChildren();
+  const works = DATA.works.filter((w) => !activeFilter || w.category === activeFilter);
+  works.forEach((work) => {
+    const card = el("article", "card");
+    card.appendChild(buildMedia(work));
+    const body = el("div", "card-body");
+    if (work.category) body.appendChild(el("span", "tag", work.category));
+    body.appendChild(el("h3", "", work.title));
+    if (work.description) body.appendChild(el("p", "desc", work.description));
+    body.appendChild(metaRow(work));
+    card.appendChild(body);
+    grid.appendChild(card);
+  });
+  document.getElementById("empty").hidden = DATA.works.length > 0;
+}
+
+function renderFilters() {
+  const cats = [...new Set(DATA.works.map((w) => w.category).filter(Boolean))];
+  const nav = document.getElementById("filters");
+  if (cats.length < 2) { nav.hidden = true; return; }
+  ["", ...cats].forEach((cat) => {
+    const chip = el("button", "chip", cat || "すべて");
+    chip.type = "button";
+    chip.setAttribute("aria-pressed", String(cat === activeFilter));
+    chip.addEventListener("click", () => {
+      activeFilter = cat;
+      nav.querySelectorAll(".chip").forEach((c) => c.setAttribute("aria-pressed", String(c === chip)));
+      render();
+    });
+    nav.appendChild(chip);
+  });
+}
+
+function openModal(work, trigger) {
+  lastFocus = trigger;
+  const [w, h] = RATIOS[work.aspect] || [16, 9];
+  const inner = document.getElementById("modalInner");
+  inner.style.setProperty("--ar", w + " / " + h);
+  inner.style.setProperty("--r", String(w / h));
+  const media = document.getElementById("modalMedia");
+  media.replaceChildren();
+  if (work.video) {
+    const video = document.createElement("video");
+    video.controls = true; video.autoplay = true; video.playsInline = true; video.loop = true;
+    video.setAttribute("playsinline", "");
+    if (work.poster) video.poster = work.poster;
+    video.src = work.video;
+    media.appendChild(video);
+  } else {
+    const iframe = document.createElement("iframe");
+    iframe.src = "https://www.youtube-nocookie.com/embed/" + work.youtube + "?autoplay=1&rel=0&playsinline=1";
+    iframe.title = work.title;
+    iframe.allow = "autoplay; encrypted-media; picture-in-picture; fullscreen";
+    iframe.allowFullscreen = true;
+    media.appendChild(iframe);
+  }
+  const tag = document.getElementById("modalTag");
+  tag.textContent = work.category; tag.hidden = !work.category;
+  document.getElementById("modalTitle").textContent = work.title;
+  document.getElementById("modalDesc").textContent = work.description;
+  document.getElementById("modalMeta").replaceWith(Object.assign(metaRow(work), { id: "modalMeta" }));
+  visibleVideos.forEach((v) => v.pause());
+  document.body.classList.add("modal-open");
+  document.getElementById("modal").hidden = false;
+  document.getElementById("modalClose").focus();
+}
+
+function closeModal() {
+  const modal = document.getElementById("modal");
+  if (modal.hidden) return;
+  modal.hidden = true;
+  document.getElementById("modalMedia").replaceChildren();
+  document.body.classList.remove("modal-open");
+  visibleVideos.forEach((v) => v.play().catch(() => {}));
+  if (lastFocus) lastFocus.focus();
+}
+
+document.getElementById("modalClose").addEventListener("click", closeModal);
+document.getElementById("modal").addEventListener("click", (e) => { if (e.target.id === "modal") closeModal(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
+
+(function init() {
+  document.getElementById("pageTitle").textContent = DATA.page.title;
+  document.getElementById("pageLead").textContent = DATA.page.lead;
+  if (DATA.page.contact_url) {
+    [document.getElementById("ctaTop"), document.getElementById("ctaBottomLink")].forEach((a) => {
+      a.href = DATA.page.contact_url;
+      a.textContent = DATA.page.contact_label;
+      a.hidden = false;
+    });
+    document.getElementById("ctaBottom").hidden = false;
+  }
+  document.getElementById("previewBar").hidden = !DATA.preview;
+  renderFilters();
+  render();
+})();
+</script>
+</body>
+</html>"""
+
+
+@app.route("/motion")
+def motion_index():
+    import json
+
+    page_info, works = _load_motion_config()
+    preview = request.args.get("preview") == "1"
+    if not preview:
+        works = [w for w in works if not w["placeholder"]]
+    payload = {"page": page_info, "works": works, "preview": preview}
+    # "<" を < に置き換えて、YAML 内の文字列で </script> が閉じられないようにする
+    data_json = json.dumps(payload, ensure_ascii=False).replace("<", "\\u003c")
+    html = MOTION_HTML.replace("__TITLE__", str(escape(page_info["title"]))).replace("__MOTION_JSON__", data_json)
+    return html, 200, {"Content-Type": "text/html; charset=utf-8"}
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
