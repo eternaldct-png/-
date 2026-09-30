@@ -26,3 +26,7 @@ media/fonts/*.ttf
 # Instagram生成画像（ワークフローで明示的にコミットするため除外）
 posts/media/*.png
 posts/media/*.jpg
+
+# モーションPVの書き出し結果（YouTube等にアップして使う）
+media/motion_pv/*.mp4
+media/motion_pv/*.png

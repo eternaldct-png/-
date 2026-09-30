@@ -135,6 +135,10 @@ git push -u origin claude/homepage-payment-spreadsheet-DD1ly
   ffmpeg -ss 1 -i out.mp4 -frames:v 1 -q:v 3 out.jpg
   ```
 
+### 作例PV（約1分・14スタイルのダイジェスト）
+- 元データは `media/motion_pv/`（`pv.html` を `render.js` で1フレームずつ撮影して MP4 化）。手順・シーン構成は `media/motion_pv/README.md`。
+- 書き出した MP4 はコミットしない。YouTube 限定公開にして `/motion` の `youtube:` に貼る。
+
 ---
 
 ## /stickers ページ（LINEスタンプメーカー）

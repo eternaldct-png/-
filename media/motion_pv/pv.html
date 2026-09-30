@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ETERNAL d.c.t — MOTION WORKS PV</title>
+<!--
+  モーション動画の作例PV（1920×1080 / 約62秒 / 120BPMのグリッドでカット）
+  - ブラウザで開くとプレビュー再生、?t=秒 でその時刻の静止画、?render=1 は render.js からの書き出し用
+  - フォントは media/fonts/ に置く（README.md 参照）
+-->
+<script>
+  const PARAMS = new URLSearchParams(location.search);
+</script>
+<style>
+@font-face { font-family: "NotoJP"; src: url("../fonts/NotoSansCJKjp-Medium.otf") format("opentype"); font-weight: 500; }
+@font-face { font-family: "NotoJP"; src: url("../fonts/NotoSansCJKjp-Bold.otf") format("opentype"); font-weight: 700; }
+@font-face { font-family: "NotoJP"; src: url("../fonts/NotoSansCJKjp-Black.otf") format("opentype"); font-weight: 900; }
+@font-face { font-family: "Mont"; src: url("../fonts/Montserrat.ttf") format("truetype"); font-weight: 100 900; }
+
+:root { --grad: linear-gradient(135deg, #7c3aed, #d946ef, #ec4899); --ink: #0d0b14; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+/* すべてのアニメーションは JS の seek() で時刻を指定して動かす */
+*, *::before, *::after { animation-play-state: paused !important; }
+html, body { background: #000; }
+#stage {
+  position: relative; width: 1920px; height: 1080px; overflow: hidden;
+  background: var(--ink); color: #fff; font-family: "Mont", "NotoJP", sans-serif;
+}
+.jp { font-family: "NotoJP", sans-serif; }
+.abs { position: absolute; }
+.center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.split span { display: inline-block; white-space: pre; }
+
+/* ── シーンの表示区間とアニメーションの共通設定 ───────────────── */
+.scene { position: absolute; inset: 0; overflow: hidden; visibility: hidden; animation: vis var(--len) linear var(--s); }
+.timed { visibility: hidden; animation: vis var(--len) linear var(--s); }
+@keyframes vis { from { visibility: visible; } to { visibility: visible; } }
+.fx {
+  animation-duration: var(--dur, .7s);
+  animation-delay: calc(var(--s) + var(--d, 0s));
+  animation-fill-mode: var(--fill, both);
+  animation-timing-function: var(--ease, cubic-bezier(.16, 1, .3, 1));
+  animation-iteration-count: var(--it, 1);
+  animation-direction: var(--dir, normal);
+}
+.svg-c { transform-box: fill-box; transform-origin: center; }
+
+.fadeIn { animation-name: fadeIn; }   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.fadeOut { animation-name: fadeOut; } @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; transform: scale(.97); } }
+.fadeUp { animation-name: fadeUp; }   @keyframes fadeUp { from { opacity: 0; transform: translateY(60px); } to { opacity: 1; transform: none; } }
+.fadeDown { animation-name: fadeDown; } @keyframes fadeDown { from { opacity: 0; transform: translateY(-50px); } to { opacity: 1; transform: none; } }
+.slideL { animation-name: slideL; }   @keyframes slideL { from { opacity: 0; transform: translateX(-140px); } to { opacity: 1; transform: none; } }
+.slideR { animation-name: slideR; }   @keyframes slideR { from { opacity: 0; transform: translateX(140px); } to { opacity: 1; transform: none; } }
+.pop { animation-name: pop; }         @keyframes pop { 0% { opacity: 0; transform: scale(.3); } 60% { opacity: 1; transform: scale(1.1); } 100% { opacity: 1; transform: scale(1); } }
+.slam { animation-name: slam; }       @keyframes slam { 0% { opacity: 0; transform: scale(3); } 65% { opacity: 1; transform: scale(.94); } 100% { opacity: 1; transform: scale(1); } }
+.maskUp { animation-name: maskUp; }   @keyframes maskUp { from { clip-path: inset(100% -20% -20% -20%); transform: translateY(50px); } to { clip-path: inset(-20% -20% -20% -20%); transform: none; } }
+.wipeR { animation-name: wipeR; }     @keyframes wipeR { from { clip-path: inset(-10% 100% -10% -10%); } to { clip-path: inset(-10% -10% -10% -10%); } }
+.growX { animation-name: growX; transform-origin: left center; } @keyframes growX { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.growY { animation-name: growY; transform-origin: center bottom; } @keyframes growY { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+.blurIn { animation-name: blurIn; }   @keyframes blurIn { from { opacity: 0; filter: blur(30px); transform: scale(1.25); } to { opacity: 1; filter: blur(0); transform: none; } }
+.flipIn { animation-name: flipIn; }   @keyframes flipIn { from { opacity: 0; transform: perspective(1400px) rotateY(80deg); } to { opacity: 1; transform: perspective(1400px) rotateY(0); } }
+.draw { stroke-dasharray: var(--pl); animation-name: draw; } @keyframes draw { from { stroke-dashoffset: var(--pl); } to { stroke-dashoffset: 0; } }
+.donut { stroke-dasharray: var(--pl); animation-name: donut; } @keyframes donut { from { stroke-dashoffset: var(--pl); } to { stroke-dashoffset: var(--to); } }
+.spin { animation-name: spin; }       @keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+.pulse { animation-name: pulse; }     @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.07); } }
+.floaty { animation-name: floaty; }   @keyframes floaty { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-18px); } }
+.drift { animation-name: drift; }     @keyframes drift { from { transform: translate(0, 0) scale(1); } to { transform: translate(90px, 60px) scale(1.12); } }
+.zoomSlow { animation-name: zoomSlow; } @keyframes zoomSlow { from { transform: scale(1); } to { transform: scale(1.08); } }
+.shake { animation-name: shake; }     @keyframes shake { 0%, 100% { transform: none; } 20% { transform: translateX(-10px) rotate(-2deg); } 40% { transform: translateX(10px) rotate(2deg); } 60% { transform: translateX(-6px) rotate(-1deg); } 80% { transform: translateX(6px) rotate(1deg); } }
+.blink { animation-name: blink; }     @keyframes blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+.flicker { animation-name: flicker; } @keyframes flicker { 0% { opacity: 0; } 8% { opacity: 1; } 12% { opacity: .15; } 18% { opacity: 1; } 34% { opacity: .5; } 40% { opacity: 1; } 100% { opacity: 1; } }
+.marquee { animation-name: marquee; } @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.twinkle { animation-name: twinkle; } @keyframes twinkle { 0%, 100% { opacity: .15; transform: scale(.6); } 50% { opacity: 1; transform: scale(1); } }
+.burst { animation-name: burst; }     @keyframes burst { 0% { opacity: 0; transform: rotate(var(--a)) translateY(0) scale(.2); } 15% { opacity: 1; } 100% { opacity: 0; transform: rotate(var(--a)) translateY(calc(var(--dist) * -1)) scale(1.3); } }
+.fall { animation-name: fall; }       @keyframes fall { from { transform: translateY(-120px) rotate(0); } to { transform: translateY(1250px) rotate(720deg); } }
+.steam { animation-name: steam; }     @keyframes steam { 0% { opacity: 0; transform: translateY(30px) scaleY(.7); } 35% { opacity: .85; } 100% { opacity: 0; transform: translateY(-90px) scaleY(1.2); } }
+.swing { animation-name: swing; transform-origin: 50% -40px; } @keyframes swing { 0% { opacity: 0; transform: rotate(-50deg); } 45% { opacity: 1; transform: rotate(16deg); } 70% { transform: rotate(-7deg); } 100% { opacity: 1; transform: rotate(0); } }
+.panelUp { animation-name: panelUp; } @keyframes panelUp { from { transform: translateY(101%); } to { transform: none; } }
+.press { animation-name: press; }     @keyframes press { 0%, 100% { transform: scale(1); } 40% { transform: scale(.92); } }
+.ripple { animation-name: ripple; }   @keyframes ripple { from { opacity: .7; transform: scale(0); } to { opacity: 0; transform: scale(4); } }
+.cdNum { animation-name: cdNum; }     @keyframes cdNum { 0% { opacity: 0; transform: scale(1.9); } 18% { opacity: 1; transform: scale(1); } 82% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(.6); } }
+.gridMove { animation-name: gridMove; } @keyframes gridMove { from { background-position: 0 0; } to { background-position: 0 100px; } }
+.prog { animation-name: prog; }       @keyframes prog { from { width: 30%; } to { width: 32%; } }
+
+/* ── 共通パーツ ──────────────────────────────────────── */
+.label {
+  position: absolute; left: 72px; bottom: 60px; z-index: 50;
+  display: flex; align-items: center; gap: 16px; padding: 12px 24px 12px 12px; border-radius: 999px;
+  background: rgba(13, 11, 20, .78); color: #fff; font-family: "NotoJP"; font-weight: 700; font-size: 28px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .25);
+}
+.label b { font-family: "Mont"; font-weight: 800; font-size: 24px; background: var(--grad); border-radius: 999px; padding: 5px 16px; }
+.label i { font-style: normal; font-family: "Mont"; font-weight: 700; font-size: 20px; color: #ddd6fe; border: 1.5px solid rgba(221, 214, 254, .55); border-radius: 6px; padding: 2px 9px; }
+#bug {
+  position: absolute; right: 56px; top: 44px; z-index: 60; padding: 10px 20px; border-radius: 999px;
+  background: rgba(13, 11, 20, .6); font-family: "Mont"; font-weight: 700; font-size: 20px; letter-spacing: .22em; color: #fff;
+}
+#bug span { color: #f0abfc; }
+#wipeWrap { position: absolute; inset: 0; z-index: 90; pointer-events: none; }
+#wipe { position: absolute; top: -200px; left: 0; width: 3200px; height: 1480px; background: linear-gradient(90deg, #7c3aed, #d946ef 45%, #ec4899); transform: translateX(-4000px) skewX(-16deg); }
+#flash { position: absolute; inset: 0; z-index: 91; background: #fff; opacity: 0; pointer-events: none; }
+.orb { position: absolute; border-radius: 50%; opacity: .55; }
+.phone {
+  position: absolute; width: 478px; height: 828px; border-radius: 58px; border: 14px solid #16141c; background: #16141c;
+  box-shadow: 0 40px 90px rgba(0, 0, 0, .35); overflow: hidden;
+}
+.phone::before { content: ""; position: absolute; top: 12px; left: 50%; margin-left: -60px; width: 120px; height: 30px; border-radius: 20px; background: #16141c; z-index: 20; }
+.phone .screen { position: absolute; inset: 0; border-radius: 44px; overflow: hidden; }
+
+/* S0 イントロ */
+.s-intro .intro-line { width: 560px; height: 3px; background: var(--grad); margin-bottom: 30px; transform-origin: center; }
+.s-intro .intro-kicker { font-weight: 600; font-size: 30px; letter-spacing: .5em; padding-left: .5em; color: #c4b5fd; margin-bottom: 6px; }
+.s-intro .intro-title { font-weight: 900; font-size: 200px; line-height: 1.05; letter-spacing: .02em; white-space: nowrap; }
+.s-intro .intro-jp { font-weight: 900; font-size: 74px; letter-spacing: .06em; margin-top: 16px; }
+.s-intro .intro-sub { font-weight: 600; font-size: 26px; letter-spacing: .6em; padding-left: .6em; color: #a8a3b6; margin-top: 34px; }
+
+/* S1 ロゴ */
+.s-logo { background: #f5f3ee; color: #1c1a22; }
+.s-logo .logo-word { font-weight: 800; font-size: 124px; letter-spacing: .32em; padding-left: .32em; margin-top: 40px; line-height: 1.1; }
+.s-logo .logo-tag { font-weight: 500; font-size: 30px; letter-spacing: .5em; padding-left: .5em; color: #8a8494; margin-top: 16px; }
+
+/* S2 配信オープニング */
+.s-stream { background: linear-gradient(#070a1f 0%, #1c0b33 57%, #070a1f 100%); }
+.s-stream .sun {
+  position: absolute; left: 50%; margin-left: -310px; top: 190px; width: 620px; height: 620px; border-radius: 50%; opacity: .55;
+  background: linear-gradient(#fbbf24, #f472b6 55%, #7c3aed);
+  -webkit-mask: linear-gradient(#000 0 52%, transparent 52% 56%, #000 56% 63%, transparent 63% 67%, #000 67% 73%, transparent 73% 78%, #000 78% 83%, transparent 83% 88%, #000 88%);
+}
+.s-stream .floor {
+  position: absolute; left: -50%; width: 200%; top: 660px; height: 900px; transform: perspective(520px) rotateX(64deg); transform-origin: top center;
+  background-image: linear-gradient(rgba(236, 72, 153, .8) 3px, transparent 3px), linear-gradient(90deg, rgba(167, 139, 250, .65) 3px, transparent 3px);
+  background-size: 100px 100px;
+}
+.s-stream .horizon { position: absolute; left: 0; right: 0; top: 656px; height: 5px; background: #f472b6; box-shadow: 0 0 30px 8px rgba(236, 72, 153, .8); }
+.s-stream .stream-center { justify-content: flex-start; padding-top: 230px; }
+.s-stream .stream-title { font-weight: 900; font-size: 150px; letter-spacing: .05em; text-shadow: 0 0 12px #f0abfc, 0 0 40px #d946ef, 0 0 90px #ec4899; }
+.s-stream .stream-jp { font-weight: 900; font-size: 60px; letter-spacing: .12em; margin-top: 4px; text-shadow: 0 4px 30px rgba(0, 0, 0, .7); }
+.s-stream .countdown { position: relative; width: 200px; height: 200px; margin-top: 44px; }
+.s-stream .countdown svg { position: absolute; inset: 0; }
+.s-stream .cd { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 116px; opacity: 0; text-shadow: 0 0 30px #d946ef; }
+.s-stream .onair { position: absolute; left: 72px; top: 60px; display: flex; align-items: center; gap: 14px; background: #ef4444; padding: 12px 26px; border-radius: 10px; font-weight: 800; font-size: 30px; letter-spacing: .12em; }
+.s-stream .onair .dot { width: 16px; height: 16px; border-radius: 50%; background: #fff; }
+.s-stream .stream-name { position: absolute; right: 72px; bottom: 70px; font-weight: 900; font-size: 40px; letter-spacing: .1em; color: #f0abfc; text-shadow: 0 0 20px #d946ef; }
+
+/* S3 ギフト演出 */
+.s-gift .feed { position: absolute; inset: 0; background: radial-gradient(circle at 25% 30%, #fbcfe8, transparent 45%), radial-gradient(circle at 75% 75%, #c4b5fd, transparent 50%), linear-gradient(135deg, #fde68a, #f9a8d4 50%, #a5b4fc); }
+.s-gift .feed svg { position: absolute; left: 330px; bottom: -40px; filter: blur(10px); opacity: .5; }
+.s-gift .bokeh { position: absolute; border-radius: 50%; background: rgba(255, 255, 255, .45); filter: blur(4px); }
+.s-gift .chat { position: absolute; right: 72px; top: 150px; width: 470px; padding: 26px; border-radius: 24px; background: rgba(20, 16, 30, .55); display: flex; flex-direction: column; gap: 16px; }
+.s-gift .chat-h { font-weight: 800; font-size: 22px; letter-spacing: .25em; color: #f0abfc; }
+.s-gift .msg { font-family: "NotoJP"; font-weight: 500; font-size: 28px; background: rgba(255, 255, 255, .12); padding: 12px 18px; border-radius: 14px; }
+.s-gift .msg b { font-weight: 700; color: #fde68a; margin-right: 14px; }
+.s-gift .alert-wrap { position: absolute; left: 380px; top: 250px; width: 580px; height: 580px; }
+.s-gift .alert {
+  position: absolute; inset: 0; border-radius: 40px; background: #fff; color: #3b0764;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  box-shadow: 0 0 0 10px rgba(255, 255, 255, .5), 0 30px 80px rgba(124, 58, 237, .45);
+}
+.s-gift .particles { position: absolute; left: 50%; top: 44%; width: 0; height: 0; }
+.s-gift .particles span { position: absolute; left: -24px; top: -30px; width: 48px; text-align: center; font-size: 52px; line-height: 60px; }
+.s-gift .gift { position: relative; width: 190px; height: 170px; }
+.s-gift .gift .box { position: absolute; left: 10px; top: 58px; width: 170px; height: 112px; background: #d946ef; border-radius: 0 0 14px 14px; }
+.s-gift .gift .lid { position: absolute; left: 0; top: 30px; width: 190px; height: 44px; background: #ec4899; border-radius: 10px; }
+.s-gift .gift .rib { position: absolute; left: 83px; top: 30px; width: 24px; height: 140px; background: #fde047; }
+.s-gift .gift .bow { position: absolute; top: -8px; width: 56px; height: 46px; border: 12px solid #fde047; border-radius: 50%; }
+.s-gift .alert-en { white-space: nowrap; font-weight: 900; font-size: 76px; margin-top: 26px; background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; line-height: 1.1; }
+.s-gift .alert-jp { font-weight: 900; font-size: 38px; margin-top: 8px; }
+
+/* S4 ライバー紹介（9:16） */
+.s-profile { background: #fdf2f8; color: #1f1330; }
+.s-profile .bg-word { position: absolute; left: 0; top: 720px; white-space: nowrap; font-weight: 900; font-size: 240px; color: transparent; -webkit-text-stroke: 3px rgba(124, 58, 237, .14); }
+.s-profile .prof-screen { background: linear-gradient(160deg, #f9a8d4, #c084fc 60%, #818cf8); display: flex; flex-direction: column; align-items: center; padding-top: 70px; color: #fff; }
+.s-profile .prof-screen > * { flex-shrink: 0; }
+.s-profile .prof-top { font-weight: 800; font-size: 22px; letter-spacing: .35em; opacity: .9; }
+.s-profile .avatar-wrap { position: relative; width: 210px; height: 210px; margin-top: 24px; }
+.s-profile .avatar-wrap svg.ring { position: absolute; inset: 0; }
+.s-profile .avatar { position: absolute; inset: 18px; border-radius: 50%; background: linear-gradient(#fff, #fce7f3); overflow: hidden; box-shadow: 0 10px 30px rgba(88, 28, 135, .3); }
+.s-profile .prof-name { font-weight: 900; font-size: 80px; letter-spacing: .06em; margin-top: 18px; line-height: 1.05; text-shadow: 0 6px 24px rgba(88, 28, 135, .35); }
+.s-profile .prof-kana { font-weight: 700; font-size: 30px; letter-spacing: .3em; }
+.s-profile .chips { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-top: 20px; }
+.s-profile .chip { background: rgba(255, 255, 255, .94); color: #6d28d9; font-weight: 700; font-size: 28px; padding: 8px 28px; border-radius: 999px; }
+.s-profile .prof-btn { margin-top: 24px; }
+.s-profile .prof-btn span { display: inline-block; background: #16141c; color: #fff; font-weight: 800; font-size: 26px; letter-spacing: .2em; padding: 16px 44px; border-radius: 999px; }
+.s-profile .side { position: absolute; left: 1010px; top: 250px; }
+.s-profile .big-ratio { font-weight: 900; font-size: 250px; line-height: 1; color: transparent; -webkit-text-stroke: 4px #c084fc; }
+.s-profile .side-h { font-weight: 900; font-size: 88px; margin-top: 20px; }
+.s-profile .side-sub { font-weight: 700; font-size: 34px; color: #7c3aed; margin-top: 18px; letter-spacing: .04em; }
+
+/* S5 リリック */
+.s-lyric { background: radial-gradient(circle at 80% 15%, #312e81 0, transparent 40%), linear-gradient(#0b1437, #1e1b4b); }
+.s-lyric .star { position: absolute; width: 6px; height: 6px; border-radius: 50%; background: #fff; box-shadow: 0 0 10px #fff; }
+.s-lyric .moon { position: absolute; right: 230px; top: 110px; width: 170px; height: 170px; border-radius: 50%; background: #fef9c3; box-shadow: 0 0 80px 20px rgba(254, 249, 195, .35); }
+.s-lyric .song { position: absolute; left: 80px; top: 60px; font-family: "NotoJP"; font-weight: 700; font-size: 30px; color: #c7d2fe; letter-spacing: .1em; }
+.s-lyric .ly { position: absolute; white-space: nowrap; font-weight: 900; line-height: 1.2; text-shadow: 0 0 30px rgba(167, 139, 250, .7); }
+.s-lyric .ly-sky { background: linear-gradient(#e0e7ff, #a78bfa 55%, #f472b6); -webkit-background-clip: text; background-clip: text; color: transparent; text-shadow: none; filter: drop-shadow(0 0 40px rgba(244, 114, 182, .55)); }
+.s-lyric .player { position: absolute; right: 110px; bottom: 76px; width: 720px; display: flex; align-items: center; gap: 20px; font-weight: 600; font-size: 24px; color: #c7d2fe; }
+.s-lyric .player .bar { flex: 1; height: 6px; border-radius: 3px; background: rgba(199, 210, 254, .25); }
+.s-lyric .player .fill { height: 100%; border-radius: 3px; background: #f0abfc; }
+
+/* S6 新曲リリース */
+.s-release { background: #0c0a12; }
+.s-release .band { position: absolute; left: -260px; top: 0; width: 1160px; height: 1080px; background: var(--grad); transform: skewX(-12deg); }
+.s-release .jacket-wrap { position: absolute; left: 220px; top: 210px; width: 640px; height: 640px; }
+.s-release .jacket { position: absolute; inset: 0; border-radius: 12px; overflow: hidden; background: #0f172a; box-shadow: 0 40px 100px rgba(0, 0, 0, .55); }
+.s-release .jacket .c { position: absolute; border-radius: 50%; mix-blend-mode: screen; }
+.s-release .jacket .jt { position: absolute; left: 36px; bottom: 30px; font-family: "NotoJP"; font-weight: 900; font-size: 44px; letter-spacing: .1em; }
+.s-release .jacket .js { position: absolute; right: 36px; top: 30px; font-weight: 700; font-size: 20px; letter-spacing: .4em; }
+.s-release .text { position: absolute; left: 990px; top: 240px; }
+.s-release .kicker { font-weight: 800; font-size: 40px; letter-spacing: .4em; color: #f472b6; }
+.s-release .title { font-weight: 900; font-size: 150px; line-height: 1.25; }
+.s-release .date { font-weight: 900; font-size: 84px; line-height: 1.2; }
+.s-release .date b { background: linear-gradient(90deg, #a78bfa, #f472b6); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.s-release .info { font-weight: 700; font-size: 36px; color: #cbd5e1; margin-top: 18px; }
+.s-release .pills { display: flex; gap: 16px; margin-top: 30px; }
+.s-release .pills span { font-weight: 700; font-size: 26px; letter-spacing: .12em; border: 2px solid rgba(255, 255, 255, .7); border-radius: 999px; padding: 10px 30px; }
+
+/* S7 SNS縦型広告 */
+.s-ad { background: #ffe600; color: #111; }
+.s-ad .copy { position: absolute; left: 150px; top: 290px; }
+.s-ad .ad-h { font-weight: 900; font-size: 108px; line-height: 1.3; }
+.s-ad .ad-sub { font-weight: 800; font-size: 36px; margin-top: 30px; display: flex; align-items: center; gap: 20px; }
+.s-ad .ad-sub span { background: #111; color: #ffe600; padding: 8px 20px; border-radius: 10px; }
+.s-ad .ad-screen { background: #111; color: #fff; }
+.s-ad .story { position: absolute; left: 24px; right: 24px; top: 56px; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, .3); z-index: 5; }
+.s-ad .story div { height: 100%; background: #fff; border-radius: 3px; }
+.s-ad .hook { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; }
+.s-ad .hook .hk { font-weight: 900; font-size: 62px; line-height: 1.3; }
+.s-ad .hook mark { background: linear-gradient(transparent 58%, #ffe600 58%); color: #fff; padding: 0 4px; }
+.s-ad .panel { position: absolute; inset: 0; background: #fff; color: #111; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.s-ad .p1, .s-ad .p2 { font-weight: 900; font-size: 54px; }
+.s-ad .pnum { font-weight: 900; font-size: 210px; line-height: 1.05; }
+.s-ad .pnum small { font-size: 100px; }
+.s-ad .pnote { font-weight: 500; font-size: 20px; color: #666; margin-top: 14px; }
+.s-ad .cta { position: absolute; left: 0; right: 0; bottom: 66px; display: flex; justify-content: center; z-index: 6; }
+.s-ad .cta span { display: inline-block; background: #ffe600; color: #111; font-weight: 900; font-size: 30px; padding: 18px 38px; border-radius: 999px; }
+.s-ad .side-ui { position: absolute; right: 22px; bottom: 60px; display: flex; flex-direction: column; align-items: center; gap: 22px; z-index: 6; color: #fff; font-weight: 700; font-size: 20px; text-shadow: 0 1px 6px rgba(0, 0, 0, .6); }
+.s-ad .side-ui .ic { font-size: 46px; line-height: 1; color: #fff; text-shadow: 0 2px 10px rgba(0, 0, 0, .4); }
+
+/* S8 グッズ（4:5） */
+.s-goods { background: #f6ede3; color: #2b1d14; }
+.s-goods .card { position: absolute; left: 250px; top: 110px; width: 640px; height: 800px; border-radius: 36px; background: #fffaf4; box-shadow: 0 30px 80px rgba(120, 72, 36, .18); overflow: hidden; }
+.s-goods .disc { position: absolute; left: 90px; top: 150px; width: 460px; height: 460px; border-radius: 50%; background: #f4d9c6; }
+.s-goods .shirt { position: absolute; left: 30px; top: 150px; }
+.s-goods .mug { position: absolute; left: 290px; top: 330px; }
+.s-goods .gname { position: absolute; left: 0; right: 0; top: 60px; text-align: center; font-weight: 800; font-size: 34px; letter-spacing: .3em; }
+.s-goods .price-wrap { position: absolute; right: 50px; top: 150px; }
+.s-goods .price { background: #2b1d14; color: #fff; font-weight: 900; font-size: 60px; padding: 12px 28px; border-radius: 14px; }
+.s-goods .price small { font-size: 34px; }
+.s-goods .price::before { content: ""; position: absolute; left: 50%; top: -40px; width: 3px; height: 40px; background: #2b1d14; }
+.s-goods .badge { position: absolute; left: 50px; bottom: 60px; width: 150px; height: 150px; }
+.s-goods .badge .in { position: absolute; inset: 14px; border-radius: 50%; background: #ec4899; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 40px; }
+.s-goods .spark { position: absolute; color: #f59e0b; font-size: 54px; }
+.s-goods .copy { position: absolute; left: 1060px; top: 300px; }
+.s-goods .g-h { font-weight: 900; font-size: 92px; line-height: 1.3; }
+.s-goods .g-list { list-style: none; margin-top: 40px; display: flex; flex-direction: column; gap: 18px; }
+.s-goods .g-list li { font-weight: 700; font-size: 36px; display: flex; align-items: center; gap: 16px; }
+.s-goods .g-list li::before { content: ""; width: 16px; height: 16px; border-radius: 50%; background: #ec4899; }
+
+/* S9 イベント告知 */
+.s-event { background: #ffd400; color: #111; }
+.s-event .confetti i { position: absolute; top: 0; width: 16px; height: 26px; border-radius: 3px; }
+.s-event .band { position: absolute; left: -120px; width: 2200px; height: 96px; background: #111; overflow: hidden; display: flex; align-items: center; }
+.s-event .band div { white-space: nowrap; font-weight: 900; font-size: 52px; letter-spacing: .1em; color: #ffd400; }
+.s-event .main { position: absolute; left: 150px; top: 200px; }
+.s-event .date { font-weight: 900; font-size: 290px; line-height: .95; letter-spacing: -.02em; }
+.s-event .sun { position: absolute; left: 700px; top: -16px; }
+.s-event .sun span { display: inline-block; background: #111; color: #ffd400; font-weight: 900; font-size: 62px; padding: 8px 26px; border-radius: 14px; transform: rotate(8deg); }
+.s-event .ev-name { font-weight: 900; font-size: 100px; margin-top: 10px; }
+.s-event .info { position: absolute; left: 1190px; top: 650px; display: flex; flex-direction: column; gap: 14px; }
+.s-event .row { font-family: "NotoJP"; font-weight: 700; font-size: 40px; }
+.s-event .row b { font-family: "Mont"; font-weight: 900; }
+.s-event .ticket { margin-top: 12px; }
+.s-event .ticket span { display: inline-block; background: #111; color: #ffd400; font-weight: 900; font-size: 46px; padding: 14px 40px; border-radius: 999px; }
+
+/* S10 オーディション */
+.s-aud { background: linear-gradient(135deg, #6d28d9, #c026d3 55%, #ec4899); }
+.s-aud .bub { position: absolute; border-radius: 50%; border: 3px solid rgba(255, 255, 255, .35); }
+.s-aud .aud-en { font-weight: 900; font-size: 150px; letter-spacing: .03em; line-height: 1.05; }
+.s-aud .aud-jp { font-weight: 900; font-size: 116px; text-shadow: 0 10px 40px rgba(76, 5, 25, .35); }
+.s-aud .list { display: flex; gap: 30px; margin-top: 40px; }
+.s-aud .item { display: flex; align-items: center; gap: 16px; font-family: "NotoJP"; font-weight: 700; font-size: 40px; background: rgba(255, 255, 255, .16); border: 2px solid rgba(255, 255, 255, .5); padding: 14px 32px 14px 18px; border-radius: 999px; }
+.s-aud .cta { margin-top: 56px; }
+.s-aud .cta span { display: inline-block; background: #fff; color: #7c3aed; font-weight: 900; font-size: 42px; padding: 20px 54px; border-radius: 999px; box-shadow: 0 16px 40px rgba(76, 5, 25, .3); }
+
+/* S11 テロップ */
+.s-cap { background: #18181b; }
+.s-cap .cap-title { position: absolute; left: 0; right: 0; top: 96px; text-align: center; font-weight: 900; font-size: 66px; }
+.s-cap .panel { position: absolute; top: 270px; width: 860px; height: 484px; border-radius: 22px; overflow: hidden; }
+.s-cap .footage { position: absolute; inset: 0; background: radial-gradient(circle at 20% 30%, rgba(255, 255, 255, .5), transparent 25%), linear-gradient(135deg, #fcd9b6, #f59e8b 60%, #c084fc); }
+.s-cap .footage svg { position: absolute; left: 250px; bottom: -30px; }
+.s-cap .tag { position: absolute; left: 20px; top: 20px; font-weight: 800; font-size: 24px; letter-spacing: .2em; background: rgba(0, 0, 0, .6); padding: 6px 16px; border-radius: 8px; }
+.s-cap .tag.after { background: var(--grad); }
+.s-cap .plain { position: absolute; left: 0; right: 0; bottom: 30px; text-align: center; font-family: "NotoJP"; font-weight: 500; font-size: 28px; text-shadow: 0 1px 3px #000; }
+.s-cap .t1, .s-cap .t2 { position: absolute; font-weight: 900; white-space: nowrap; paint-order: stroke fill; }
+.s-cap .t1 { left: 70px; top: 130px; font-size: 76px; color: #fff; -webkit-text-stroke: 14px #111; }
+.s-cap .t2 { left: 200px; top: 205px; font-size: 112px; color: #ffe600; -webkit-text-stroke: 18px #111; }
+.s-cap .lines { position: absolute; left: 730px; top: 170px; }
+.s-cap .sticker { position: absolute; right: 36px; top: 34px; }
+.s-cap .sticker span { display: inline-block; background: #ec4899; color: #fff; font-weight: 900; font-size: 38px; padding: 10px 24px; border-radius: 14px; transform: rotate(-8deg); }
+.s-cap .lower { position: absolute; left: 30px; bottom: 30px; display: flex; font-size: 28px; }
+.s-cap .lower b { background: #ec4899; font-weight: 900; padding: 8px 16px; }
+.s-cap .lower span { background: #fff; color: #111; font-weight: 700; padding: 8px 20px; }
+
+/* S12 インフォグラフィック */
+.s-info { background: #0b1224; }
+.s-info .head { position: absolute; left: 120px; top: 96px; display: flex; align-items: center; gap: 26px; }
+.s-info .title { font-weight: 900; font-size: 66px; }
+.s-info .tag { font-weight: 800; font-size: 22px; letter-spacing: .2em; color: #2dd4bf; border: 2px solid #2dd4bf; padding: 6px 14px; border-radius: 8px; }
+.s-info .grid { position: absolute; left: 120px; top: 240px; display: flex; gap: 30px; }
+.s-info .card { width: 540px; height: 600px; background: #111c33; border: 1px solid #1f2d4d; border-radius: 28px; padding: 40px; position: relative; }
+.s-info .ch { font-family: "NotoJP"; font-weight: 700; font-size: 32px; color: #cbd5e1; }
+.s-info .bars { position: absolute; left: 40px; right: 40px; bottom: 40px; height: 400px; display: flex; align-items: flex-end; gap: 22px; }
+.s-info .bcol { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 12px; }
+.s-info .bar { width: 100%; border-radius: 10px 10px 4px 4px; background: linear-gradient(#2dd4bf, #7c3aed); }
+.s-info .bcol span { font-weight: 600; font-size: 22px; color: #94a3b8; }
+.s-info .donut-box { position: absolute; left: 50%; top: 150px; margin-left: -170px; width: 340px; height: 340px; }
+.s-info .donut-box .num { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 96px; }
+.s-info .donut-box .num small { font-size: 50px; }
+.s-info .big { font-weight: 900; font-size: 230px; line-height: 1; color: #2dd4bf; margin-top: 40px; }
+.s-info .big small { font-family: "NotoJP"; font-size: 46px; color: #fff; margin-left: 10px; }
+.s-info .spark-line { position: absolute; left: 40px; bottom: 50px; }
+.s-info .note { position: absolute; right: 100px; bottom: 70px; font-family: "NotoJP"; font-weight: 500; font-size: 22px; color: #94a3b8; }
+
+/* S13 サイネージ */
+.s-sign { background: repeating-linear-gradient(90deg, rgba(255, 255, 255, .025) 0 3px, transparent 3px 70px), radial-gradient(circle at 75% 30%, #5b3a22, #2a1d15 60%); color: #f5ecd9; }
+.s-sign .board { position: absolute; left: 110px; top: 100px; width: 1020px; height: 810px; background: #1d1612; border: 12px solid #6b4a2e; border-radius: 22px; padding: 56px 64px; box-shadow: 0 30px 80px rgba(0, 0, 0, .45); }
+.s-sign .en { font-weight: 800; font-size: 78px; letter-spacing: .12em; color: #fbbf24; }
+.s-sign .jp-h { font-weight: 700; font-size: 40px; margin-top: 6px; }
+.s-sign .menu { margin-top: 50px; display: flex; flex-direction: column; gap: 34px; }
+.s-sign .row { display: flex; align-items: baseline; }
+.s-sign .row .nm { font-family: "NotoJP"; font-weight: 700; font-size: 44px; }
+.s-sign .row i { flex: 1; border-bottom: 4px dotted rgba(245, 236, 217, .35); margin: 0 22px; }
+.s-sign .row b { font-weight: 800; font-size: 50px; color: #fbbf24; }
+.s-sign .cup { position: absolute; left: 1250px; top: 330px; }
+.s-sign .steam { position: absolute; left: 1250px; top: 180px; }
+.s-sign .new { position: absolute; left: 1600px; top: 250px; width: 170px; height: 170px; }
+.s-sign .new div { width: 100%; height: 100%; border-radius: 50%; background: #ef4444; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 50px; transform: rotate(12deg); box-shadow: 0 12px 30px rgba(0, 0, 0, .35); }
+.s-sign .foot { position: absolute; left: 1230px; top: 800px; font-weight: 700; font-size: 40px; }
+
+/* S14 ツールデモ */
+.s-tool { background: linear-gradient(135deg, #eef2ff, #fae8ff); color: #0f172a; }
+.s-tool .win { position: absolute; left: 200px; top: 90px; width: 1520px; height: 830px; background: #fff; border-radius: 22px; box-shadow: 0 30px 90px rgba(76, 29, 149, .18); overflow: hidden; }
+.s-tool .bar { height: 60px; background: #f1f5f9; display: flex; align-items: center; gap: 12px; padding: 0 24px; }
+.s-tool .bar i { width: 16px; height: 16px; border-radius: 50%; }
+.s-tool .url { margin-left: 30px; background: #fff; color: #64748b; font-weight: 500; font-size: 22px; padding: 6px 24px; border-radius: 999px; }
+.s-tool .body { position: absolute; left: 0; right: 0; top: 60px; bottom: 0; display: flex; }
+.s-tool aside { width: 300px; background: #f8fafc; border-right: 1px solid #e2e8f0; padding: 40px 24px; display: flex; flex-direction: column; gap: 10px; }
+.s-tool aside div { font-family: "NotoJP"; font-weight: 700; font-size: 26px; color: #475569; padding: 14px 18px; border-radius: 12px; }
+.s-tool aside div.on { background: #ede9fe; color: #6d28d9; }
+.s-tool main { flex: 1; padding: 50px; }
+.s-tool .mh { font-family: "NotoJP"; font-weight: 900; font-size: 48px; height: 70px; }
+.s-tool .field { margin-top: 30px; height: 90px; border: 2px solid #c7d2fe; border-radius: 16px; padding: 0 28px; display: flex; align-items: center; font-family: "NotoJP"; font-weight: 500; font-size: 34px; }
+.s-tool .caret { width: 3px; height: 42px; background: #7c3aed; margin-left: 4px; }
+.s-tool .btn { margin-top: 30px; position: relative; overflow: hidden; width: 360px; height: 80px; border-radius: 16px; background: var(--grad); color: #fff; display: flex; align-items: center; justify-content: center; font-family: "NotoJP"; font-weight: 900; font-size: 34px; }
+.s-tool .btn .rp { position: absolute; left: 50%; top: 50%; margin: -40px 0 0 -40px; width: 80px; height: 80px; border-radius: 50%; background: #fff; opacity: 0; }
+.s-tool .results { margin-top: 40px; display: flex; gap: 30px; }
+.s-tool .res { flex: 1; height: 190px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 16px; padding: 24px; }
+.s-tool .res-t { font-family: "NotoJP"; font-weight: 700; font-size: 28px; color: #6d28d9; }
+.s-tool .ln { height: 14px; border-radius: 7px; background: #e2e8f0; margin-top: 18px; }
+.s-tool .ln.short { width: 60%; }
+.s-tool .ring { position: absolute; left: 530px; top: 400px; width: 400px; height: 120px; border: 5px solid #ec4899; border-radius: 26px; }
+.s-tool .callout { position: absolute; left: 975px; top: 418px; }
+.s-tool .callout span { position: relative; display: inline-block; background: #16141c; color: #fff; font-family: "NotoJP"; font-weight: 900; font-size: 40px; padding: 16px 30px; border-radius: 18px; }
+.s-tool .callout span::before { content: ""; position: absolute; left: -22px; top: 50%; margin-top: -14px; border: 14px solid transparent; border-right: 12px solid #16141c; border-left: 0; }
+.s-tool .cursor { position: absolute; left: 0; top: 0; z-index: 10; animation-name: cursorPath; }
+@keyframes cursorPath { 0% { transform: translate(1480px, 930px); } 55% { transform: translate(1180px, 380px); } 100% { transform: translate(738px, 468px); } }
+
+/* S15 アウトロ */
+.s-outro .tiles-h { position: absolute; left: 0; right: 0; top: 150px; text-align: center; font-weight: 800; font-size: 40px; letter-spacing: .4em; color: #c4b5fd; }
+.s-outro .tiles { position: absolute; left: 89px; top: 300px; width: 1742px; display: flex; flex-wrap: wrap; gap: 22px; }
+.s-outro .tile { width: 230px; height: 150px; border-radius: 16px; padding: 18px; display: flex; flex-direction: column; justify-content: space-between; }
+.s-outro .tile b { font-weight: 900; font-size: 34px; }
+.s-outro .tile span { font-family: "NotoJP"; font-weight: 700; font-size: 24px; line-height: 1.3; white-space: nowrap; }
+.s-outro .o1 { font-weight: 900; font-size: 88px; }
+.s-outro .o2 { font-weight: 900; font-size: 170px; line-height: 1.15; background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.s-outro .o-line { width: 520px; height: 3px; background: var(--grad); margin-top: 26px; transform-origin: center; }
+.s-outro .o-brand { font-weight: 800; font-size: 52px; letter-spacing: .3em; padding-left: .3em; margin-top: 28px; }
+.s-outro .o-sub { font-weight: 700; font-size: 32px; color: #c4b5fd; margin-top: 14px; letter-spacing: .08em; }
+</style>
+</head>
+<body>
+<div id="stage">
+
+<!-- S0 イントロ -->
+<section class="scene s-intro" data-s="0" data-len="4">
+  <div class="orb fx drift" style="--dur:4s;--ease:ease-in-out;left:-220px;top:-280px;width:1000px;height:1000px;background:radial-gradient(circle,#7c3aed 0,transparent 65%)"></div>
+  <div class="orb fx drift" style="--dur:4s;--ease:ease-in-out;--dir:reverse;right:-280px;bottom:-340px;width:1100px;height:1100px;background:radial-gradient(circle,#ec4899 0,transparent 62%)"></div>
+  <div class="center">
+    <div class="intro-line fx growX" style="--d:.1s;--dur:.9s"></div>
+    <div class="intro-kicker fx fadeUp" style="--d:.35s">ETERNAL d.c.t presents</div>
+    <div class="intro-title split" data-split="pop" data-at="0.8" data-step="0.05" data-grad-from="7">MOTION WORKS</div>
+    <div class="intro-jp jp fx maskUp" style="--d:1.9s;--dur:.8s">こんな動画、つくれます。</div>
+    <div class="intro-sub fx fadeIn" style="--d:2.6s">14 STYLES OF MOTION GRAPHICS</div>
+  </div>
+</section>
+
+<!-- S1 ロゴアニメーション -->
+<section class="scene s-logo" data-s="4" data-len="3.5" data-no="01" data-short="ロゴアニメ" data-name="ロゴアニメーション" data-ar="16:9" data-color="#8b5cf6">
+  <div class="center">
+    <svg width="280" height="280" viewBox="0 0 280 280" overflow="visible">
+      <defs><linearGradient id="gLogo" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7c3aed"/><stop offset="1" stop-color="#ec4899"/></linearGradient></defs>
+      <circle class="fx draw" cx="140" cy="140" r="120" fill="none" stroke="#1c1a22" stroke-width="6" transform="rotate(-90 140 140)" style="--pl:754;--dur:1.1s;--d:.1s;--ease:cubic-bezier(.65,0,.35,1)"/>
+      <path class="fx pop svg-c" d="M140 56 C148 116 164 132 224 140 C164 148 148 164 140 224 C132 164 116 148 56 140 C116 132 132 116 140 56 Z" fill="url(#gLogo)" style="--d:.75s"/>
+      <g class="fx fadeIn" style="--d:1s"><g class="fx spin" style="--dur:2.5s;--it:infinite;--ease:linear;--d:1s;transform-box:view-box;transform-origin:140px 140px"><circle cx="140" cy="20" r="10" fill="#ec4899"/></g></g>
+    </svg>
+    <div class="logo-word split" data-split="maskUp" data-at="1.05" data-step="0.06">LUMINA</div>
+    <div class="logo-tag fx fadeIn" style="--d:2s">light for every day</div>
+  </div>
+</section>
+
+<!-- S2 配信オープニング・待機画面 -->
+<section class="scene s-stream" data-s="7.5" data-len="4" data-no="02" data-short="配信オープニング" data-name="配信オープニング・待機画面" data-ar="16:9" data-color="#4338ca">
+  <div class="sun fx fadeUp" style="--d:.05s;--dur:1s"></div>
+  <div class="floor fx gridMove" style="--dur:.5s;--it:infinite;--ease:linear"></div>
+  <div class="horizon"></div>
+  <div class="onair fx slideL" style="--d:.3s"><span class="dot fx blink" style="--dur:1s;--it:infinite;--ease:linear"></span>ON AIR 21:00</div>
+  <div class="center stream-center">
+    <div class="stream-title fx flicker" style="--d:.2s;--dur:1.1s;--ease:linear">STARTING SOON</div>
+    <div class="stream-jp jp fx fadeUp" style="--d:.8s">まもなく配信スタート</div>
+    <div class="countdown fx pop" style="--d:.9s;--dur:.5s">
+      <svg width="200" height="200" viewBox="0 0 200 200">
+        <circle cx="100" cy="100" r="88" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="8"/>
+        <circle class="fx draw" cx="100" cy="100" r="88" fill="none" stroke="#f0abfc" stroke-width="8" stroke-linecap="round" transform="rotate(-90 100 100)" style="--pl:553;--d:1s;--dur:3s;--ease:linear"/>
+      </svg>
+      <span class="cd fx cdNum" style="--d:1s;--dur:1s;--fill:none;--ease:linear">3</span>
+      <span class="cd fx cdNum" style="--d:2s;--dur:1s;--fill:none;--ease:linear">2</span>
+      <span class="cd fx cdNum" style="--d:3s;--dur:1s;--fill:none;--ease:linear">1</span>
+    </div>
+  </div>
+  <div class="stream-name jp fx fadeIn" style="--d:.6s">NEON NIGHT 歌枠</div>
+</section>
+
+<!-- S3 ギフト・フォロー演出 -->
+<section class="scene s-gift" data-s="11.5" data-len="3" data-no="03" data-short="ギフト演出" data-name="ギフト・フォロー演出" data-ar="1:1" data-color="#db2777">
+  <div class="feed fx zoomSlow" style="--dur:3s;--ease:linear">
+    <svg width="560" height="620" viewBox="0 0 560 620"><circle cx="280" cy="200" r="150" fill="#fff"/><path d="M20 620 C40 400 160 360 280 360 C400 360 520 400 540 620 Z" fill="#fff"/></svg>
+  </div>
+  <div class="bokeh fx floaty" style="--dur:2.6s;--it:infinite;--ease:ease-in-out;left:140px;top:140px;width:90px;height:90px"></div>
+  <div class="bokeh fx floaty" style="--dur:3.1s;--it:infinite;--ease:ease-in-out;--d:-1s;left:1060px;top:820px;width:130px;height:130px"></div>
+  <div class="bokeh fx floaty" style="--dur:2.2s;--it:infinite;--ease:ease-in-out;--d:-.5s;left:220px;top:830px;width:60px;height:60px"></div>
+  <div class="chat">
+    <div class="chat-h">COMMENT</div>
+    <div class="msg fx slideR" style="--d:.1s"><b>ゆう</b>こんばんは〜</div>
+    <div class="msg fx slideR" style="--d:.4s"><b>みお</b>今日の歌枠楽しみ！</div>
+    <div class="msg fx slideR" style="--d:.7s"><b>ゆう</b>ギフト送ったよ</div>
+    <div class="msg fx slideR" style="--d:1.4s"><b>そら</b>おめでとう〜！</div>
+  </div>
+  <div class="alert-wrap">
+    <div class="alert fx pop" style="--d:.3s;--dur:.7s">
+      <div class="particles" data-burst="16" data-at="0.45"></div>
+      <div class="fx floaty" style="--d:1s;--dur:1s;--it:infinite;--ease:ease-in-out">
+        <div class="gift fx pop" style="--d:.5s">
+          <div class="box"></div><div class="lid"></div><div class="rib"></div>
+          <div class="bow" style="left:40px;transform:rotate(-25deg)"></div><div class="bow" style="left:94px;transform:rotate(25deg)"></div>
+        </div>
+      </div>
+      <div class="alert-en fx fadeUp" style="--d:.7s">THANK YOU!</div>
+      <div class="alert-jp jp fx fadeUp" style="--d:.85s">ゆうさん、ギフトありがとう！</div>
+    </div>
+  </div>
+</section>
+
+<!-- S4 ライバー紹介プロフィール（9:16） -->
+<section class="scene s-profile" data-s="14.5" data-len="4" data-no="04" data-short="ライバー紹介" data-name="ライバー紹介プロフィール" data-ar="9:16" data-color="#ec4899">
+  <div class="bg-word"><div class="fx marquee" style="--dur:8s;--it:infinite;--ease:linear">PROFILE PROFILE PROFILE PROFILE PROFILE PROFILE PROFILE PROFILE </div></div>
+  <div class="phone fx fadeUp" style="--dur:.8s;left:330px;top:126px">
+    <div class="screen prof-screen">
+      <div class="prof-top fx fadeIn" style="--d:.3s">LIVER PROFILE</div>
+      <div class="avatar-wrap fx pop" style="--d:.4s">
+        <svg class="ring fx spin" style="--dur:6s;--it:infinite;--ease:linear" width="210" height="210" viewBox="0 0 210 210"><circle cx="105" cy="105" r="100" fill="none" stroke="#fff" stroke-width="5" stroke-dasharray="14 12"/></svg>
+        <div class="avatar"><svg width="174" height="174" viewBox="0 0 206 206"><circle cx="103" cy="86" r="42" fill="#c084fc"/><path d="M22 206 C28 154 66 136 103 136 C140 136 178 154 184 206 Z" fill="#c084fc"/></svg></div>
+      </div>
+      <div class="prof-name fx maskUp" style="--d:.9s">HIKARI</div>
+      <div class="prof-kana jp fx fadeUp" style="--d:1.1s">ひかり</div>
+      <div class="chips">
+        <span class="chip jp fx slideL" style="--d:1.5s">♪ 歌配信</span>
+        <span class="chip jp fx slideL" style="--d:1.75s">毎日 21:00〜</span>
+        <span class="chip jp fx slideL" style="--d:2s">まったり雑談</span>
+      </div>
+      <div class="prof-btn fx pop" style="--d:2.5s"><span class="fx pulse" style="--d:2.9s;--dur:.8s;--it:infinite;--ease:ease-in-out">FOLLOW ME</span></div>
+    </div>
+  </div>
+  <div class="side">
+    <div class="big-ratio fx fadeIn" style="--d:.2s">9:16</div>
+    <div class="side-h jp fx maskUp" style="--d:.6s">縦型も、おまかせ。</div>
+    <div class="side-sub fx fadeUp" style="--d:1s">Reels / TikTok / YouTube Shorts</div>
+  </div>
+</section>
+
+<!-- S5 リリックモーション -->
+<section class="scene s-lyric" data-s="18.5" data-len="4" data-no="05" data-short="リリック動画" data-name="リリックモーション（歌詞動画）" data-ar="16:9" data-color="#1d4ed8">
+  <div data-stars="46"></div>
+  <div class="moon fx fadeIn" style="--dur:1.2s"></div>
+  <div class="song fx fadeIn" style="--d:.1s">♪ ソラノオト</div>
+  <div class="ly jp fx slideL" style="left:210px;top:240px;font-size:94px;--d:.15s">君と見た</div>
+  <div class="ly jp fx slideR" style="left:470px;top:400px;font-size:94px;--d:.75s">あの夏の</div>
+  <div class="ly ly-sky jp fx blurIn" style="left:1030px;top:150px;font-size:370px;--d:1.35s;--dur:1s">空</div>
+  <div class="ly jp fx maskUp" style="left:850px;top:690px;font-size:80px;--d:2.2s">を、忘れない。</div>
+  <div class="player fx fadeIn" style="--d:.3s"><span>1:12</span><div class="bar"><div class="fill fx prog" style="--dur:4s;--ease:linear"></div></div><span>3:58</span></div>
+</section>
+
+<!-- S6 新曲リリース告知 -->
+<section class="scene s-release" data-s="22.5" data-len="3.5" data-no="06" data-short="リリース告知" data-name="新曲リリース告知" data-ar="16:9" data-color="#9333ea">
+  <div class="band fx wipeR" style="--dur:.6s"></div>
+  <div class="jacket-wrap">
+    <div class="jacket fx flipIn" style="--d:.1s;--dur:.9s">
+      <div class="fx spin" style="--dur:9s;--it:infinite;--ease:linear;position:absolute;inset:0">
+        <div class="c" style="left:60px;top:80px;width:380px;height:380px;background:#22d3ee"></div>
+        <div class="c" style="left:230px;top:180px;width:360px;height:360px;background:#a855f7"></div>
+        <div class="c" style="left:120px;top:300px;width:300px;height:300px;background:#f472b6"></div>
+      </div>
+      <div class="js">SINGLE</div>
+      <div class="jt">ソラノオト</div>
+    </div>
+  </div>
+  <div class="text">
+    <div class="kicker fx fadeUp" style="--d:.45s">NEW SINGLE</div>
+    <div class="title jp fx maskUp" style="--d:.65s">ソラノオト</div>
+    <div class="date fx slideR" style="--d:1.1s"><b>2026.10.10</b> RELEASE</div>
+    <div class="info jp fx fadeUp" style="--d:1.5s">各種音楽配信サービスで配信スタート</div>
+    <div class="pills fx fadeUp" style="--d:1.75s"><span>STREAMING</span><span>DOWNLOAD</span></div>
+  </div>
+</section>
+
+<!-- S7 SNS縦型広告（9:16） -->
+<section class="scene s-ad" data-s="26" data-len="4" data-no="07" data-short="SNS縦型広告" data-name="SNS縦型広告" data-ar="9:16" data-color="#ca8a04">
+  <div class="copy">
+    <div class="ad-h jp fx maskUp" style="--d:.2s">最初の2秒で、</div>
+    <div class="ad-h jp fx maskUp" style="--d:.45s">指を止める。</div>
+    <div class="ad-sub fx fadeUp" style="--d:.9s"><span class="jp">SNS縦型広告</span>15s / 9:16</div>
+  </div>
+  <div class="phone fx slideR" style="left:1220px;top:126px">
+    <div class="screen ad-screen">
+      <div class="story"><div class="fx growX" style="--dur:4s;--ease:linear"></div></div>
+      <div class="hook fx fadeOut" style="--d:1.55s;--dur:.25s">
+        <div class="hk jp fx pop" style="--d:.25s">まだ<mark>手作業</mark>で</div>
+        <div class="hk jp fx pop" style="--d:.5s"><span class="fx shake" style="display:inline-block;--d:.9s;--dur:.5s;--ease:linear">消耗してる？</span></div>
+        <div class="side-ui fx fadeIn" style="--d:.4s"><div class="ic">♥</div><div>12.4K</div><div class="ic">★</div><div>2,318</div></div>
+      </div>
+      <div class="panel fx panelUp" style="--d:1.6s;--dur:.5s">
+        <div class="p1 jp">AIにまかせて</div>
+        <div class="pnum"><span data-count="70" data-at="1.9" data-dur="1">0</span><small>%</small></div>
+        <div class="p2 jp">作業時間カット</div>
+        <div class="pnote jp">※数値はイメージです</div>
+      </div>
+      <div class="cta jp fx pop" style="--d:2.7s"><span class="fx pulse" style="--d:3.1s;--dur:.7s;--it:infinite;--ease:ease-in-out">詳しくはプロフィールへ</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- S8 グッズ・商品プロモーション（4:5） -->
+<section class="scene s-goods" data-s="30" data-len="4" data-no="08" data-short="商品プロモ" data-name="グッズ・商品プロモーション" data-ar="4:5" data-color="#c2410c">
+  <div class="card fx fadeUp" style="--dur:.8s">
+    <div class="gname fx fadeIn" style="--d:.9s">ORIGINAL GOODS</div>
+    <div class="disc fx pop" style="--d:.2s"></div>
+    <div class="shirt fx slideL" style="--d:.3s"><div class="fx floaty" style="--d:1s;--dur:2s;--it:infinite;--ease:ease-in-out">
+      <svg width="380" height="380" viewBox="0 0 400 400"><path d="M120 40 L165 18 Q200 52 235 18 L280 40 L362 112 L316 162 L286 136 L286 372 L114 372 L114 136 L84 162 L38 112 Z" fill="#2d2a32"/><path d="M165 18 Q200 60 235 18" fill="none" stroke="#4a4652" stroke-width="8"/><circle cx="200" cy="200" r="34" fill="none" stroke="#f5ecd9" stroke-width="4"/></svg>
+    </div></div>
+    <div class="mug fx slideR" style="--d:.5s"><div class="fx floaty" style="--d:1.2s;--dur:2.2s;--it:infinite;--ease:ease-in-out">
+      <svg width="300" height="280" viewBox="0 0 300 280">
+        <defs><linearGradient id="gMug" x1="0" x2="1"><stop offset="0" stop-color="#e9e3dc"/><stop offset=".45" stop-color="#ffffff"/><stop offset="1" stop-color="#dcd4cb"/></linearGradient></defs>
+        <path d="M212 96 C286 96 286 206 208 206" fill="none" stroke="#e2dbd3" stroke-width="26" stroke-linecap="round"/>
+        <path d="M40 50 L222 50 L214 240 Q212 262 190 262 L72 262 Q50 262 48 240 Z" fill="url(#gMug)"/>
+        <ellipse cx="131" cy="50" rx="91" ry="18" fill="#d9d2ca"/><ellipse cx="131" cy="52" rx="78" ry="12" fill="#6b4226"/>
+        <g fill="#2d2a32"><ellipse cx="131" cy="172" rx="24" ry="20"/><circle cx="104" cy="140" r="10"/><circle cx="122" cy="128" r="10"/><circle cx="142" cy="128" r="10"/><circle cx="159" cy="140" r="10"/></g>
+      </svg>
+    </div></div>
+    <div class="price-wrap"><div class="price fx swing" style="--d:1.2s;--dur:1s;--ease:ease-out;position:relative">¥2,190<small>〜</small></div></div>
+    <div class="badge fx pop" style="--d:1.5s"><svg class="fx spin" style="--dur:5s;--it:infinite;--ease:linear;position:absolute;inset:0" width="150" height="150" viewBox="0 0 150 150"><circle cx="75" cy="75" r="71" fill="none" stroke="#ec4899" stroke-width="4" stroke-dasharray="10 8"/></svg><div class="in">NEW</div></div>
+    <div class="spark fx pop" style="--d:1.7s;left:70px;top:190px">★</div>
+    <div class="spark fx pop" style="--d:1.9s;left:540px;top:620px">★</div>
+  </div>
+  <div class="copy">
+    <div class="g-h jp fx maskUp" style="--d:.5s">商品の魅力を、</div>
+    <div class="g-h jp fx maskUp" style="--d:.75s">動きで伝える。</div>
+    <ul class="g-list">
+      <li class="jp fx slideR" style="--d:1.3s">価格や特徴をポップに表示</li>
+      <li class="jp fx slideR" style="--d:1.5s">EC・Instagram用に書き出し</li>
+      <li class="jp fx slideR" style="--d:1.7s">4:5 / 1:1 / 9:16 に対応</li>
+    </ul>
+  </div>
+</section>
+
+<!-- S9 イベント・キャンペーン告知 -->
+<section class="scene s-event" data-s="34" data-len="3.5" data-no="09" data-short="イベント告知" data-name="イベント・キャンペーン告知" data-ar="16:9" data-color="#a16207">
+  <div class="confetti" data-confetti="34"></div>
+  <div class="band" style="top:40px;transform:rotate(-3deg)"><div class="fx marquee" style="--dur:4s;--it:infinite;--ease:linear">LIVE EVENT ★ LIVE EVENT ★ LIVE EVENT ★ LIVE EVENT ★ LIVE EVENT ★ LIVE EVENT ★ LIVE EVENT ★ LIVE EVENT ★ </div></div>
+  <div class="band" style="top:920px;transform:rotate(2deg)"><div class="fx marquee" style="--dur:4s;--it:infinite;--ease:linear;--dir:reverse">TICKET ON SALE ★ TICKET ON SALE ★ TICKET ON SALE ★ TICKET ON SALE ★ TICKET ON SALE ★ TICKET ON SALE ★ </div></div>
+  <div class="main">
+    <div class="date fx slam" style="--d:.15s;--dur:.6s">11.23</div>
+    <div class="sun fx pop" style="--d:.55s"><span>SUN</span></div>
+    <div class="ev-name fx maskUp" style="--d:.8s">ETERNAL LIVE 2026</div>
+  </div>
+  <div class="info">
+    <div class="row fx slideR" style="--d:1.1s"><b>OPEN</b> 17:00 / <b>START</b> 18:00</div>
+    <div class="row fx slideR" style="--d:1.3s">会場：〇〇ライブホール</div>
+    <div class="ticket jp fx pop" style="--d:1.7s"><span class="fx pulse" style="--d:2.1s;--dur:.7s;--it:infinite;--ease:ease-in-out">チケット発売中</span></div>
+  </div>
+</section>
+
+<!-- S10 求人・オーディション募集 -->
+<section class="scene s-aud" data-s="37.5" data-len="4" data-no="10" data-short="オーディション" data-name="求人・オーディション募集" data-ar="16:9" data-color="#c026d3">
+  <div class="bub fx floaty" style="--dur:3s;--it:infinite;--ease:ease-in-out;left:120px;top:120px;width:200px;height:200px"></div>
+  <div class="bub fx floaty" style="--dur:3.4s;--it:infinite;--ease:ease-in-out;--d:-1s;left:1600px;top:700px;width:260px;height:260px"></div>
+  <div class="bub fx floaty" style="--dur:2.6s;--it:infinite;--ease:ease-in-out;--d:-.6s;left:1500px;top:130px;width:90px;height:90px"></div>
+  <div class="center">
+    <div class="aud-en fx wipeR" style="--d:.1s;--dur:.7s">LIVER AUDITION</div>
+    <div class="aud-jp jp fx pop" style="--d:.55s">ライバー募集中！</div>
+    <div class="list">
+      <div class="item fx slideL" style="--d:1.1s"><svg width="46" height="46" viewBox="0 0 46 46"><circle cx="23" cy="23" r="23" fill="#fff"/><path class="fx draw" d="M12 24 L20 32 L35 15" fill="none" stroke="#d946ef" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" style="--pl:36;--d:1.3s;--dur:.4s"/></svg>未経験OK</div>
+      <div class="item fx slideL" style="--d:1.45s"><svg width="46" height="46" viewBox="0 0 46 46"><circle cx="23" cy="23" r="23" fill="#fff"/><path class="fx draw" d="M12 24 L20 32 L35 15" fill="none" stroke="#d946ef" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" style="--pl:36;--d:1.65s;--dur:.4s"/></svg>顔出しなしでもOK</div>
+      <div class="item fx slideL" style="--d:1.8s"><svg width="46" height="46" viewBox="0 0 46 46"><circle cx="23" cy="23" r="23" fill="#fff"/><path class="fx draw" d="M12 24 L20 32 L35 15" fill="none" stroke="#d946ef" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" style="--pl:36;--d:2s;--dur:.4s"/></svg>スマホ1台ではじめられる</div>
+    </div>
+    <div class="cta jp fx pop" style="--d:2.5s"><span class="fx pulse" style="--d:2.9s;--dur:.8s;--it:infinite;--ease:ease-in-out">応募はプロフィールのリンクから</span></div>
+  </div>
+</section>
+
+<!-- S11 テロップ・字幕アニメーション -->
+<section class="scene s-cap" data-s="41.5" data-len="3.5" data-no="11" data-short="テロップ編集" data-name="テロップ・字幕アニメーション" data-ar="16:9" data-color="#475569">
+  <div class="cap-title jp fx fadeDown" style="--d:.05s">テロップで、伝わり方が変わる。</div>
+  <div class="panel fx slideL" style="left:70px;--d:.1s">
+    <div class="footage fx zoomSlow" style="--dur:3.5s;--ease:linear"><svg width="360" height="400" viewBox="0 0 360 400"><circle cx="180" cy="130" r="92" fill="#3b2a4a" opacity=".55"/><path d="M10 400 C24 280 100 238 180 238 C260 238 336 280 350 400 Z" fill="#3b2a4a" opacity=".55"/></svg></div>
+    <div class="tag">BEFORE</div>
+    <div class="plain">ここがポイントなんですけど</div>
+  </div>
+  <div class="panel fx slideR" style="left:990px;--d:.1s">
+    <div class="footage fx zoomSlow" style="--dur:3.5s;--ease:linear"><svg width="360" height="400" viewBox="0 0 360 400"><circle cx="180" cy="130" r="92" fill="#3b2a4a" opacity=".55"/><path d="M10 400 C24 280 100 238 180 238 C260 238 336 280 350 400 Z" fill="#3b2a4a" opacity=".55"/></svg></div>
+    <div class="tag after">AFTER</div>
+    <div class="lower fx wipeR" style="--d:.35s;--dur:.5s"><b>POINT</b><span class="jp">動画編集のコツ</span></div>
+    <div class="t1 jp fx pop" style="--d:.55s">ここが</div>
+    <div class="t2 jp fx slam" style="--d:.9s;--dur:.5s"><span class="fx shake" style="display:inline-block;--d:1.4s;--dur:.4s;--ease:linear">ポイント！</span></div>
+    <svg class="lines fx pop" style="--d:1s" width="110" height="120" viewBox="0 0 110 120"><g stroke="#fff" stroke-width="12" stroke-linecap="round"><line x1="20" y1="70" x2="50" y2="20"/><line x1="60" y1="80" x2="98" y2="46"/><line x1="66" y1="112" x2="104" y2="104"/></g></svg>
+    <div class="sticker jp fx pop" style="--d:1.8s"><span>なるほど〜！</span></div>
+  </div>
+</section>
+
+<!-- S12 サービス紹介（インフォグラフィック） -->
+<section class="scene s-info" data-s="45" data-len="4" data-no="12" data-short="図解・データ" data-name="サービス紹介（インフォグラフィック）" data-ar="16:9" data-color="#0f766e">
+  <div class="head"><div class="title jp fx maskUp" style="--d:.1s">導入効果レポート</div><div class="tag fx fadeIn" style="--d:.4s">SAMPLE DATA</div></div>
+  <div class="grid">
+    <div class="card fx fadeUp" style="--d:.2s">
+      <div class="ch">月別の対応件数</div>
+      <div class="bars">
+        <div class="bcol"><div class="bar fx growY" style="--d:.5s;height:32%"></div><span>4月</span></div>
+        <div class="bcol"><div class="bar fx growY" style="--d:.6s;height:45%"></div><span>5月</span></div>
+        <div class="bcol"><div class="bar fx growY" style="--d:.7s;height:52%"></div><span>6月</span></div>
+        <div class="bcol"><div class="bar fx growY" style="--d:.8s;height:68%"></div><span>7月</span></div>
+        <div class="bcol"><div class="bar fx growY" style="--d:.9s;height:80%"></div><span>8月</span></div>
+        <div class="bcol"><div class="bar fx growY" style="--d:1s;height:96%"></div><span>9月</span></div>
+      </div>
+    </div>
+    <div class="card fx fadeUp" style="--d:.35s">
+      <div class="ch">自動化率</div>
+      <div class="donut-box">
+        <svg width="340" height="340" viewBox="0 0 340 340">
+          <defs><linearGradient id="gDonut" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2dd4bf"/><stop offset="1" stop-color="#a78bfa"/></linearGradient></defs>
+          <circle cx="170" cy="170" r="130" fill="none" stroke="#1f2d4d" stroke-width="38"/>
+          <circle class="fx donut" cx="170" cy="170" r="130" fill="none" stroke="url(#gDonut)" stroke-width="38" stroke-linecap="round" transform="rotate(-90 170 170)" style="--pl:817;--to:229;--d:.6s;--dur:1.4s"/>
+        </svg>
+        <div class="num"><span data-count="72" data-at="0.6" data-dur="1.4">0</span><small>%</small></div>
+      </div>
+    </div>
+    <div class="card fx fadeUp" style="--d:.5s">
+      <div class="ch">作業時間の削減（月あたり）</div>
+      <div class="big"><span data-count="40" data-at="0.8" data-dur="1.4">0</span><small>時間</small></div>
+      <svg class="spark-line" width="460" height="160" viewBox="0 0 460 160"><polyline class="fx draw" points="0,140 64,128 128,104 192,110 256,74 320,62 384,30 452,16" fill="none" stroke="#f472b6" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" style="--pl:520;--d:.9s;--dur:1.3s"/></svg>
+    </div>
+  </div>
+  <div class="note fx fadeIn" style="--d:1s">※表示の数値はサンプルです</div>
+</section>
+
+<!-- S13 店頭サイネージ・メニュー -->
+<section class="scene s-sign" data-s="49" data-len="3.5" data-no="13" data-short="店頭サイネージ" data-name="店頭サイネージ・メニュー" data-ar="16:9" data-color="#92400e">
+  <div class="board fx fadeIn" style="--dur:.5s">
+    <div class="en fx fadeDown" style="--d:.1s">TODAY'S MENU</div>
+    <div class="jp-h jp fx fadeIn" style="--d:.3s">本日のおすすめ</div>
+    <div class="menu">
+      <div class="row fx slideL" style="--d:.5s"><span class="nm">季節のフルーツタルト</span><i></i><b>¥680</b></div>
+      <div class="row fx slideL" style="--d:.7s"><span class="nm">自家焙煎カフェラテ</span><i></i><b>¥520</b></div>
+      <div class="row fx slideL" style="--d:.9s"><span class="nm">ほうじ茶ラテ</span><i></i><b>¥480</b></div>
+      <div class="row fx slideL" style="--d:1.1s"><span class="nm">本日のキッシュプレート</span><i></i><b>¥980</b></div>
+    </div>
+  </div>
+  <svg class="steam" width="420" height="200" viewBox="0 0 420 200"><g fill="none" stroke="rgba(255,255,255,.7)" stroke-width="10" stroke-linecap="round">
+    <path class="fx steam" style="--dur:1.6s;--it:infinite;--ease:ease-out" d="M150 190 C120 150 180 120 150 80"/>
+    <path class="fx steam" style="--dur:1.6s;--it:infinite;--ease:ease-out;--d:-.55s" d="M210 190 C180 150 240 120 210 80"/>
+    <path class="fx steam" style="--dur:1.6s;--it:infinite;--ease:ease-out;--d:-1.1s" d="M270 190 C240 150 300 120 270 80"/>
+  </g></svg>
+  <svg class="cup fx fadeUp" style="--d:.3s" width="420" height="380" viewBox="0 0 420 380">
+    <ellipse cx="210" cy="330" rx="200" ry="40" fill="#e8dccb"/><ellipse cx="210" cy="322" rx="150" ry="26" fill="#d6c7b2"/>
+    <path d="M318 110 C400 110 400 230 310 230" fill="none" stroke="#f3ece2" stroke-width="30"/>
+    <path d="M70 60 L350 60 Q346 250 270 312 L150 312 Q74 250 70 60 Z" fill="#f3ece2"/>
+    <ellipse cx="210" cy="60" rx="140" ry="30" fill="#b88a5f"/><ellipse cx="210" cy="62" rx="118" ry="22" fill="#9a6b43"/>
+    <path d="M210 82 C188 64 172 50 190 44 C200 41 207 48 210 54 C213 48 220 41 230 44 C248 50 232 64 210 82 Z" fill="#fff5e6"/>
+  </svg>
+  <div class="new fx pop" style="--d:1.3s"><div class="jp">NEW</div></div>
+  <div class="foot jp fx fadeUp" style="--d:1.5s">店内でも、テイクアウトでも。</div>
+</section>
+
+<!-- S14 ツール操作デモ -->
+<section class="scene s-tool" data-s="52.5" data-len="4" data-no="14" data-short="操作デモ" data-name="ツール操作デモ" data-ar="16:9" data-color="#6366f1">
+  <div class="win fx fadeUp" style="--dur:.6s">
+    <div class="bar"><i style="background:#f87171"></i><i style="background:#fbbf24"></i><i style="background:#34d399"></i><div class="url">app.example.com/generator</div></div>
+    <div class="body">
+      <aside><div>ダッシュボード</div><div class="on">投稿を作成</div><div>予約投稿</div><div>分析レポート</div></aside>
+      <main>
+        <div class="mh">投稿文ジェネレーター</div>
+        <div class="field"><span data-type="来週のイベント告知を3本つくって" data-at="0.4" data-dur="1"></span><span class="caret fx blink" style="--dur:.8s;--it:infinite;--ease:linear"></span></div>
+        <div class="btn fx press" style="--d:1.65s;--dur:.3s;--ease:ease-in-out">AIで作成する<span class="rp fx ripple" style="--d:1.7s;--dur:.6s;--fill:none;--ease:ease-out"></span></div>
+        <div class="results">
+          <div class="res fx pop" style="--d:2s"><div class="res-t">イベント告知 ①</div><div class="ln fx growX" style="--d:2.15s"></div><div class="ln short fx growX" style="--d:2.25s"></div></div>
+          <div class="res fx pop" style="--d:2.2s"><div class="res-t">イベント告知 ②</div><div class="ln fx growX" style="--d:2.35s"></div><div class="ln short fx growX" style="--d:2.45s"></div></div>
+          <div class="res fx pop" style="--d:2.4s"><div class="res-t">イベント告知 ③</div><div class="ln fx growX" style="--d:2.55s"></div><div class="ln short fx growX" style="--d:2.65s"></div></div>
+        </div>
+      </main>
+    </div>
+  </div>
+  <div class="ring fx pop" style="--d:1.4s;--dur:.5s"></div>
+  <div class="callout fx pop" style="--d:2.6s"><span>ワンクリックで完成！</span></div>
+  <div class="cursor fx" style="--d:.2s;--dur:1.4s;--ease:cubic-bezier(.45,0,.2,1)"><svg width="40" height="54" viewBox="0 0 40 54"><path d="M2 2 L2 44 L13 34 L21 52 L29 48 L21 31 L36 31 Z" fill="#111" stroke="#fff" stroke-width="3" stroke-linejoin="round"/></svg></div>
+</section>
+
+<!-- S15 アウトロ -->
+<section class="scene s-outro" data-s="56.5" data-len="5.5">
+  <div class="orb fx drift" style="--dur:5.5s;--ease:ease-in-out;left:-240px;top:-300px;width:1000px;height:1000px;background:radial-gradient(circle,#7c3aed 0,transparent 65%)"></div>
+  <div class="orb fx drift" style="--dur:5.5s;--ease:ease-in-out;--dir:reverse;right:-300px;bottom:-360px;width:1100px;height:1100px;background:radial-gradient(circle,#ec4899 0,transparent 62%)"></div>
+  <div class="fx fadeOut" style="--d:2.05s;--dur:.35s;position:absolute;inset:0">
+    <div class="tiles-h fx fadeIn" style="--d:.05s">14 STYLES &amp; MORE</div>
+    <div class="tiles" data-tiles></div>
+  </div>
+  <div class="center">
+    <div class="o1 jp fx maskUp" style="--d:2.4s">あなたの「伝えたい」を、</div>
+    <div class="o2 jp fx pop" style="--d:2.9s">動きで。</div>
+    <div class="o-line fx growX" style="--d:3.4s"></div>
+    <div class="o-brand fx fadeUp" style="--d:3.6s">ETERNAL d.c.t</div>
+    <div class="o-sub jp fx fadeUp" style="--d:3.9s">モーション動画制作のご相談はお気軽に</div>
+  </div>
+</section>
+
+<div id="bug" class="timed" style="--s:4s;--len:52.5s">ETERNAL d.c.t <span>MOTION WORKS</span></div>
+<div id="wipeWrap"><div id="wipe"></div></div>
+<div id="flash"></div>
+</div>
+
+<script>
+const DURATION = 62;
+
+// 乱数は毎回同じ結果になるよう固定シード
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const rand = rng(20261010);
+const lerpColor = (a, b, k) => { const pa = a.match(/\w\w/g).map(h => parseInt(h, 16)), pb = b.match(/\w\w/g).map(h => parseInt(h, 16)); return "rgb(" + pa.map((v, i) => Math.round(v + (pb[i] - v) * k)).join(",") + ")"; };
+
+const scenes = [...document.querySelectorAll(".scene")];
+scenes.forEach(sc => { sc.style.setProperty("--s", sc.dataset.s + "s"); sc.style.setProperty("--len", sc.dataset.len + "s"); });
+const sceneStart = el => parseFloat(el.closest(".scene").dataset.s);
+
+// シーン名ラベル
+scenes.filter(sc => sc.dataset.no).forEach(sc => {
+  const label = document.createElement("div");
+  label.className = "label fx slideL";
+  label.style.setProperty("--d", ".15s");
+  label.innerHTML = "<b></b><span></span><i></i>";
+  label.querySelector("b").textContent = sc.dataset.no;
+  label.querySelector("span").textContent = sc.dataset.name;
+  label.querySelector("i").textContent = sc.dataset.ar;
+  sc.appendChild(label);
+});
+
+// 1文字ずつ動くテキスト
+document.querySelectorAll("[data-split]").forEach(el => {
+  const chars = [...el.textContent];
+  const at = parseFloat(el.dataset.at), step = parseFloat(el.dataset.step);
+  const gradFrom = el.dataset.gradFrom ? parseInt(el.dataset.gradFrom, 10) : -1;
+  el.textContent = "";
+  chars.forEach((ch, i) => {
+    const span = document.createElement("span");
+    span.className = "fx " + el.dataset.split;
+    span.style.setProperty("--d", (at + i * step).toFixed(3) + "s");
+    span.textContent = ch;
+    if (gradFrom >= 0 && i >= gradFrom) span.style.color = lerpColor("c084fc", "f472b6", (i - gradFrom) / Math.max(1, chars.length - 1 - gradFrom));
+    el.appendChild(span);
+  });
+});
+
+// ギフトの弾けるパーティクル
+document.querySelectorAll("[data-burst]").forEach(el => {
+  const n = parseInt(el.dataset.burst, 10), at = parseFloat(el.dataset.at);
+  const glyphs = ["♥", "★", "♥", "✦"], colors = ["#ec4899", "#f59e0b", "#a855f7", "#f472b6"];
+  for (let i = 0; i < n; i++) {
+    const p = document.createElement("span");
+    p.className = "fx burst";
+    p.textContent = glyphs[i % glyphs.length];
+    p.style.color = colors[i % colors.length];
+    p.style.setProperty("--a", (i * 360 / n + rand() * 12) + "deg");
+    p.style.setProperty("--dist", (250 + rand() * 120) + "px");
+    p.style.setProperty("--d", (at + rand() * .15) + "s");
+    p.style.setProperty("--dur", "1.3s");
+    p.style.setProperty("--ease", "cubic-bezier(.2,.7,.3,1)");
+    el.appendChild(p);
+  }
+});
+
+// 星空
+document.querySelectorAll("[data-stars]").forEach(el => {
+  for (let i = 0; i < parseInt(el.dataset.stars, 10); i++) {
+    const s = document.createElement("div");
+    s.className = "star fx twinkle";
+    s.style.left = (rand() * 1920) + "px";
+    s.style.top = (rand() * 900) + "px";
+    s.style.setProperty("--dur", (1.2 + rand() * 1.6) + "s");
+    s.style.setProperty("--d", (-rand() * 2) + "s");
+    s.style.setProperty("--it", "infinite");
+    s.style.setProperty("--ease", "ease-in-out");
+    el.appendChild(s);
+  }
+});
+
+// 紙吹雪
+document.querySelectorAll("[data-confetti]").forEach(el => {
+  const colors = ["#111", "#ec4899", "#7c3aed", "#fff", "#22d3ee"];
+  for (let i = 0; i < parseInt(el.dataset.confetti, 10); i++) {
+    const c = document.createElement("i");
+    c.className = "fx fall";
+    c.style.left = (rand() * 1920) + "px";
+    c.style.background = colors[i % colors.length];
+    c.style.setProperty("--dur", (2.4 + rand() * 1.6) + "s");
+    c.style.setProperty("--d", (-rand() * 3) + "s");
+    c.style.setProperty("--it", "infinite");
+    c.style.setProperty("--ease", "linear");
+    el.appendChild(c);
+  }
+});
+
+// アウトロのタイル（各シーンの名前と色）
+document.querySelectorAll("[data-tiles]").forEach(el => {
+  scenes.filter(sc => sc.dataset.no).forEach((sc, i) => {
+    const t = document.createElement("div");
+    t.className = "tile fx flipIn";
+    t.style.background = sc.dataset.color;
+    t.style.setProperty("--d", (.1 + i * .05) + "s");
+    t.innerHTML = "<b></b><span></span>";
+    t.querySelector("b").textContent = sc.dataset.no;
+    t.querySelector("span").textContent = sc.dataset.short || sc.dataset.name;
+    el.appendChild(t);
+  });
+});
+
+// カウントアップ・タイピング・シーン切り替えのワイプ（CSSで表せない部分）
+const counters = [...document.querySelectorAll("[data-count]")].map(el => ({ el, to: parseFloat(el.dataset.count), t0: sceneStart(el) + parseFloat(el.dataset.at), dur: parseFloat(el.dataset.dur) }));
+const typers = [...document.querySelectorAll("[data-type]")].map(el => ({ el, text: [...el.dataset.type], t0: sceneStart(el) + parseFloat(el.dataset.at), dur: parseFloat(el.dataset.dur) }));
+const CUTS = scenes.slice(1).map(sc => parseFloat(sc.dataset.s));
+const CUT_TYPES = ["wipe", "flash", "wipeRev"];
+const easeOut = k => 1 - Math.pow(1 - k, 3);
+const clamp01 = k => Math.min(1, Math.max(0, k));
+
+function renderJS(t) {
+  counters.forEach(c => { c.el.textContent = Math.round(c.to * easeOut(clamp01((t - c.t0) / c.dur))).toLocaleString("ja-JP"); });
+  typers.forEach(ty => { ty.el.textContent = ty.text.slice(0, Math.floor(ty.text.length * clamp01((t - ty.t0) / ty.dur))).join(""); });
+  const wipe = document.getElementById("wipe"), wrap = document.getElementById("wipeWrap"), flash = document.getElementById("flash");
+  let x = -4000, rev = false, flashOp = 0;
+  CUTS.forEach((c, i) => {
+    const type = CUT_TYPES[i % CUT_TYPES.length];
+    if (type === "flash") {
+      const dt = t - c;
+      if (dt >= -.1 && dt < 0) flashOp = Math.max(flashOp, (dt + .1) / .1);
+      else if (dt >= 0 && dt < .35) flashOp = Math.max(flashOp, 1 - dt / .35);
+    } else {
+      const p = (t - (c - .22)) / .44;
+      if (p >= 0 && p <= 1) { x = -3600 + 6000 * p; rev = type === "wipeRev"; }
+    }
+  });
+  wipe.style.transform = "translateX(" + x + "px) skewX(-16deg)";
+  wrap.style.transform = rev ? "scaleX(-1)" : "none";
+  flash.style.opacity = flashOp;
+}
+
+let ANIMS = null;
+window.seek = ms => {
+  if (!ANIMS) ANIMS = document.getAnimations();
+  ANIMS.forEach(a => { a.currentTime = ms; });
+  renderJS(ms / 1000);
+};
+window.PV_DURATION = DURATION;
+window.pvReady = (async () => {
+  await Promise.all(["500 40px NotoJP", "700 40px NotoJP", "900 40px NotoJP", "600 40px Mont", "900 40px Mont"].map(f => document.fonts.load(f, "あA")));
+  await document.fonts.ready;
+  window.seek(0);
+})();
+
+// プレビュー: ?render=1 以外はブラウザ上でそのまま再生（?t=秒 でその時刻に固定）
+pvReady.then(() => {
+  if (PARAMS.has("render")) return;
+  if (PARAMS.has("t")) { window.seek(parseFloat(PARAMS.get("t")) * 1000); return; }
+  const start = performance.now();
+  const loop = now => { window.seek(((now - start) % (DURATION * 1000))); requestAnimationFrame(loop); };
+  requestAnimationFrame(loop);
+});
+</script>
+</body>
+</html>
