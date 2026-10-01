@@ -1,0 +1,33 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<link rel="stylesheet" href="fonts/fonts.css">
+<style>html,body{margin:0;background:#000}canvas{display:block}</style>
+</head><body>
+<canvas id="c"></canvas>
+<script src="lib.js"></script>
+<script>
+(async () => {
+  const q = new URLSearchParams(location.search);
+  await new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = 'scenes/' + q.get('scene') + '.js';
+    s.onload = res; s.onerror = rej;
+    document.body.appendChild(s);
+  });
+  await L.init();
+  if (SCENE.init) await SCENE.init();
+  const c = document.getElementById('c');
+  c.width = SCENE.w; c.height = SCENE.h;
+  const ctx = c.getContext('2d');
+  window.drawAt = (t) => {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+    ctx.filter = 'none'; ctx.shadowBlur = 0; ctx.shadowColor = 'transparent';
+    ctx.clearRect(0, 0, SCENE.w, SCENE.h);
+    ctx.save(); SCENE.draw(ctx, t); ctx.restore();
+  };
+  window.grab = (quality) => c.toDataURL('image/jpeg', quality);
+  window.READY = { w: SCENE.w, h: SCENE.h, dur: SCENE.dur, fps: SCENE.fps || 30, poster: SCENE.poster || 0 };
+})().catch((e) => { window.FAILED = String(e && e.stack || e); });
+</script>
+</body></html>

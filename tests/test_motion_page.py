@@ -77,6 +77,20 @@ class MotionPageTest(unittest.TestCase):
         self.assertGreaterEqual(len(works), 10)
         self.assertEqual(len({w["id"] for w in works}), len(works))
 
+    def test_repository_media_files_exist(self):
+        """YAML に書いた動画・ポスターが src/static/ に実在すること（配置漏れ・ファイル名違いの検出）"""
+        with patch.object(web_app, "MOTION_CONFIG_PATH", Path("persona/motion_config.yaml")):
+            _, works = web_app._load_motion_config()
+        for w in works:
+            for key in ("video", "poster"):
+                url = w[key]
+                if url.startswith("/static/"):
+                    path = Path("src") / url.lstrip("/")
+                    self.assertTrue(path.is_file(), f"{w['id']} の {key} が見つかりません: {path}")
+                    if key == "video":
+                        # Render無料プラン対策：1本 3MB 以下（CLAUDE.md のルール）
+                        self.assertLessEqual(path.stat().st_size, 3 * 1024 * 1024, f"{path} が 3MB を超えています")
+
 
 if __name__ == "__main__":
     unittest.main()

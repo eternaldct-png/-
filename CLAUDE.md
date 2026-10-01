@@ -135,6 +135,12 @@ git push -u origin claude/homepage-payment-spreadsheet-DD1ly
   ffmpeg -ss 1 -i out.mp4 -frames:v 1 -q:v 3 out.jpg
   ```
 
+### 現在の作例（全15枠に動画あり）
+- 15枠すべてに、所属キャラ5体（`tools/motion_render/chars/`）をランダムに割り当てたサンプル動画（5〜13秒・各1.3MB以下・合計約12MB）とポスター画像を `src/static/motion/<id>.mp4 / .jpg` に配置済み。
+- 動画は `tools/motion_render/` のスクリプトから書き出している。文字や色を変えて作り直す手順は `tools/motion_render/README.md`。
+- 店名・価格・日付・名前（「LIVER NAME」「20XX」「〇〇ライブホール」など）はサンプル表記。インフォグラフィックの数値には「※数値はイメージです」を表示している。
+- `tests/test_motion_page.py` が、YAML に書いた動画・ポスターの実在と 3MB 以下であることをチェックする。
+
 ---
 
 ## /stickers ページ（LINEスタンプメーカー）
