@@ -35,3 +35,13 @@ node render.mjs all video                    # 全作例を書き出し
 - 1本 3MB を超えたら警告が出ます。`CRF=28 node render.mjs ...` のように CRF を上げると軽くなります。
 - 店名・価格・日付・名前（「LIVER NAME」「20XX」「〇〇ライブホール」など）はサンプル表記です。
   実案件用に変えるときは各 `scenes/*.js` の文字列を書き換えてください。
+
+## ホームページ（eternaldct.net）への反映
+ホームページは静的サイト（`eternaldct-png/ETERNAL-` リポジトリの `eternaldct-new-site/`）。作例集は `motion.html`。
+```bash
+# 作例の一覧と動画・ポスターを motion.html / assets/motion/ に反映（このリポジトリのルートで）
+python3 tools/motion_render/export_homepage.py <eternaldct-new-site のパス>
+# SNS共有用の画像（1200×630・作例ポスター3枚を合成）
+python3 tools/motion_render/make_eyecatch.py <eternaldct-new-site のパス>/assets/motion/ogp.jpg
+```
+その後、サイトの管理画面からいつもどおりサーバーに反映する。

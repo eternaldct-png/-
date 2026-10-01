@@ -4,7 +4,8 @@
 eternaldct-png/- は ETERNAL d.c.t の投稿自動化 & グッズ販売サイト。
 - Flask アプリ（`src/web_app.py`）を Render でホスト
 - 本番URL: `https://kazuto-post-generator.onrender.com`
-- ホームページ: `https://eternaldct.net`（WordPress、別管理）
+- ホームページ: `https://eternaldct.net`（静的サイト。`eternaldct-png/ETERNAL-` リポジトリの `eternaldct-new-site/`。
+  Mac の `ETERNALライバー事務所/` フォルダで管理し、管理ツールから FTPS で Xserver に反映する）
 
 ---
 
@@ -140,6 +141,13 @@ git push -u origin claude/homepage-payment-spreadsheet-DD1ly
 - 動画は `tools/motion_render/` のスクリプトから書き出している。文字や色を変えて作り直す手順は `tools/motion_render/README.md`。
 - 店名・価格・日付・名前（「LIVER NAME」「20XX」「〇〇ライブホール」など）はサンプル表記。インフォグラフィックの数値には「※数値はイメージです」を表示している。
 - `tests/test_motion_page.py` が、YAML に書いた動画・ポスターの実在と 3MB 以下であることをチェックする。
+
+### ホームページ（eternaldct.net）への掲載
+- ホームページの `motion.html`（動画制作・作例集）とトップの紹介枠に、同じ作例を載せている
+  （`eternaldct-png/ETERNAL-` の `eternaldct-new-site/`。動画・ポスターは `assets/motion/` にコピーして使う。Render には依存しない）。
+- 作例を追加・変更したら、このリポジトリで `python tools/motion_render/export_homepage.py <eternaldct-new-site のパス>` を実行し、
+  サイト側で管理ツールからサーバーに反映する（`motion.html` の `MOTION:FILTERS` / `MOTION:CARDS` の目印の間だけ書き換わる）。
+- トップの紹介枠（`index.html` の「MOTION WORKS preview」）に並べる4本は手で選んでいる。
 
 ---
 
