@@ -137,6 +137,7 @@ git push -u origin claude/homepage-payment-spreadsheet-DD1ly
 
 ### 作例PV（約1分・14スタイルのダイジェスト）
 - 元データは `media/motion_pv/`（`pv.html` を `render.js` で1フレームずつ撮影して MP4 化）。手順・シーン構成は `media/motion_pv/README.md`。
+- 同じ仕組みでライバー募集動画（縦型60秒、`media/motion_pv/liver_recruit.html`）もある。所属ライバー数が変わったら更新して書き出し直す。
 - 書き出した MP4 はコミットしない。YouTube 限定公開にして `/motion` の `youtube:` に貼る。
 
 ---

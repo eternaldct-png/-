@@ -1,0 +1,82 @@
+/*
+  モーション動画の共通スタイル（pv.html / liver_recruit.html などで共有）
+  - .scene に data-s（開始秒）と data-len（長さ秒）を書くと、その区間だけ表示される
+  - 要素に class="fx fadeUp" のように動きを指定し、--d（シーン開始からの遅れ）と --dur（長さ）で調整する
+  - 注意: --d / --dur などは CSS 変数なので親から引き継がれる。.fx の中に .fx を入れるときは子にも --d を必ず書く
+*/
+@font-face { font-family: "NotoJP"; src: url("../fonts/NotoSansCJKjp-Medium.otf") format("opentype"); font-weight: 500; }
+@font-face { font-family: "NotoJP"; src: url("../fonts/NotoSansCJKjp-Bold.otf") format("opentype"); font-weight: 700; }
+@font-face { font-family: "NotoJP"; src: url("../fonts/NotoSansCJKjp-Black.otf") format("opentype"); font-weight: 900; }
+@font-face { font-family: "Mont"; src: url("../fonts/Montserrat.ttf") format("truetype"); font-weight: 100 900; }
+
+:root { --grad: linear-gradient(135deg, #7c3aed, #d946ef, #ec4899); --ink: #0d0b14; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+/* すべてのアニメーションは JS の seek() で時刻を指定して動かす */
+*, *::before, *::after { animation-play-state: paused !important; }
+html, body { background: #000; }
+/* #stage の width / height は各ページで指定する */
+#stage {
+  position: relative; overflow: hidden;
+  background: var(--ink); color: #fff; font-family: "Mont", "NotoJP", sans-serif;
+}
+.jp { font-family: "NotoJP", sans-serif; }
+.abs { position: absolute; }
+.center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.split span { display: inline-block; white-space: pre; }
+
+/* ── シーンの表示区間とアニメーションの共通設定 ───────────────── */
+.scene { position: absolute; inset: 0; overflow: hidden; visibility: hidden; animation: vis var(--len) linear var(--s); }
+.timed { visibility: hidden; animation: vis var(--len) linear var(--s); }
+@keyframes vis { from { visibility: visible; } to { visibility: visible; } }
+.fx {
+  animation-duration: var(--dur, .7s);
+  animation-delay: calc(var(--s) + var(--d, 0s));
+  animation-fill-mode: var(--fill, both);
+  animation-timing-function: var(--ease, cubic-bezier(.16, 1, .3, 1));
+  animation-iteration-count: var(--it, 1);
+  animation-direction: var(--dir, normal);
+}
+.svg-c { transform-box: fill-box; transform-origin: center; }
+
+.fadeIn { animation-name: fadeIn; }   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.fadeOut { animation-name: fadeOut; } @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; transform: scale(.97); } }
+.fadeUp { animation-name: fadeUp; }   @keyframes fadeUp { from { opacity: 0; transform: translateY(60px); } to { opacity: 1; transform: none; } }
+.fadeDown { animation-name: fadeDown; } @keyframes fadeDown { from { opacity: 0; transform: translateY(-50px); } to { opacity: 1; transform: none; } }
+.slideL { animation-name: slideL; }   @keyframes slideL { from { opacity: 0; transform: translateX(-140px); } to { opacity: 1; transform: none; } }
+.slideR { animation-name: slideR; }   @keyframes slideR { from { opacity: 0; transform: translateX(140px); } to { opacity: 1; transform: none; } }
+.pop { animation-name: pop; }         @keyframes pop { 0% { opacity: 0; transform: scale(.3); } 60% { opacity: 1; transform: scale(1.1); } 100% { opacity: 1; transform: scale(1); } }
+.slam { animation-name: slam; }       @keyframes slam { 0% { opacity: 0; transform: scale(3); } 65% { opacity: 1; transform: scale(.94); } 100% { opacity: 1; transform: scale(1); } }
+.maskUp { animation-name: maskUp; }   @keyframes maskUp { from { clip-path: inset(100% -20% -20% -20%); transform: translateY(50px); } to { clip-path: inset(-20% -20% -20% -20%); transform: none; } }
+.wipeR { animation-name: wipeR; }     @keyframes wipeR { from { clip-path: inset(-10% 100% -10% -10%); } to { clip-path: inset(-10% -10% -10% -10%); } }
+.growX { animation-name: growX; transform-origin: left center; } @keyframes growX { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.growY { animation-name: growY; transform-origin: center bottom; } @keyframes growY { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+.blurIn { animation-name: blurIn; }   @keyframes blurIn { from { opacity: 0; filter: blur(30px); transform: scale(1.25); } to { opacity: 1; filter: blur(0); transform: none; } }
+.flipIn { animation-name: flipIn; }   @keyframes flipIn { from { opacity: 0; transform: perspective(1400px) rotateY(80deg); } to { opacity: 1; transform: perspective(1400px) rotateY(0); } }
+.draw { stroke-dasharray: var(--pl); animation-name: draw; } @keyframes draw { from { stroke-dashoffset: var(--pl); } to { stroke-dashoffset: 0; } }
+.donut { stroke-dasharray: var(--pl); animation-name: donut; } @keyframes donut { from { stroke-dashoffset: var(--pl); } to { stroke-dashoffset: var(--to); } }
+.spin { animation-name: spin; }       @keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+.pulse { animation-name: pulse; }     @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.07); } }
+.floaty { animation-name: floaty; }   @keyframes floaty { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-18px); } }
+.drift { animation-name: drift; }     @keyframes drift { from { transform: translate(0, 0) scale(1); } to { transform: translate(90px, 60px) scale(1.12); } }
+.zoomSlow { animation-name: zoomSlow; } @keyframes zoomSlow { from { transform: scale(1); } to { transform: scale(1.08); } }
+.shake { animation-name: shake; }     @keyframes shake { 0%, 100% { transform: none; } 20% { transform: translateX(-10px) rotate(-2deg); } 40% { transform: translateX(10px) rotate(2deg); } 60% { transform: translateX(-6px) rotate(-1deg); } 80% { transform: translateX(6px) rotate(1deg); } }
+.blink { animation-name: blink; }     @keyframes blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+.flicker { animation-name: flicker; } @keyframes flicker { 0% { opacity: 0; } 8% { opacity: 1; } 12% { opacity: .15; } 18% { opacity: 1; } 34% { opacity: .5; } 40% { opacity: 1; } 100% { opacity: 1; } }
+.marquee { animation-name: marquee; } @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.twinkle { animation-name: twinkle; } @keyframes twinkle { 0%, 100% { opacity: .15; transform: scale(.6); } 50% { opacity: 1; transform: scale(1); } }
+.burst { animation-name: burst; }     @keyframes burst { 0% { opacity: 0; transform: rotate(var(--a)) translateY(0) scale(.2); } 15% { opacity: 1; } 100% { opacity: 0; transform: rotate(var(--a)) translateY(calc(var(--dist) * -1)) scale(1.3); } }
+.fall { animation-name: fall; }       @keyframes fall { from { transform: translateY(-120px) rotate(0); } to { transform: translateY(1250px) rotate(720deg); } }
+.steam { animation-name: steam; }     @keyframes steam { 0% { opacity: 0; transform: translateY(30px) scaleY(.7); } 35% { opacity: .85; } 100% { opacity: 0; transform: translateY(-90px) scaleY(1.2); } }
+.swing { animation-name: swing; transform-origin: 50% -40px; } @keyframes swing { 0% { opacity: 0; transform: rotate(-50deg); } 45% { opacity: 1; transform: rotate(16deg); } 70% { transform: rotate(-7deg); } 100% { opacity: 1; transform: rotate(0); } }
+.panelUp { animation-name: panelUp; } @keyframes panelUp { from { transform: translateY(101%); } to { transform: none; } }
+.press { animation-name: press; }     @keyframes press { 0%, 100% { transform: scale(1); } 40% { transform: scale(.92); } }
+.ripple { animation-name: ripple; }   @keyframes ripple { from { opacity: .7; transform: scale(0); } to { opacity: 0; transform: scale(4); } }
+.cdNum { animation-name: cdNum; }     @keyframes cdNum { 0% { opacity: 0; transform: scale(1.9); } 18% { opacity: 1; transform: scale(1); } 82% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(.6); } }
+.gridMove { animation-name: gridMove; } @keyframes gridMove { from { background-position: 0 0; } to { background-position: 0 100px; } }
+.prog { animation-name: prog; }       @keyframes prog { from { width: 30%; } to { width: 32%; } }
+
+/* ── シーン切り替え・共通パーツ ─────────────────────────── */
+#wipeWrap { position: absolute; inset: 0; z-index: 90; pointer-events: none; }
+#wipe { position: absolute; left: 0; background: linear-gradient(90deg, #7c3aed, #d946ef 45%, #ec4899); transform: translateX(-99999px); }
+#flash { position: absolute; inset: 0; z-index: 91; background: #fff; opacity: 0; pointer-events: none; }
+.orb { position: absolute; border-radius: 50%; opacity: .55; }

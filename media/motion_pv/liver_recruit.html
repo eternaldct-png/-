@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ETERNAL d.c.t — ライバー募集（縦型・60秒）</title>
+<!--
+  ライバー募集動画（1080×1920 / 60秒 / 120BPMのグリッドでカット）
+  SNS（リール・TikTok・ショート）向け。文字は上下・右端のUIに隠れにくい中央寄りに配置。
+  所属ライバー数は data-count="61" と「2026年10月時点」の2か所を更新する。
+-->
+<link rel="stylesheet" href="motion.css">
+<style>
+#stage { width: 1080px; height: 1920px; }
+.nowrap { white-space: nowrap; }
+.grad-text { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+#bug { position: absolute; left: 60px; top: 110px; z-index: 60; padding: 10px 22px; border-radius: 999px; background: rgba(13, 11, 20, .55); font-weight: 700; font-size: 26px; letter-spacing: .22em; color: #fff; }
+
+/* S1 フック */
+.s-hook .mic { position: absolute; left: 50%; margin-left: -60px; top: 330px; }
+.s-hook .stack { position: absolute; left: 0; right: 0; top: 620px; display: flex; flex-direction: column; align-items: center; }
+.s-hook .l1 { font-weight: 900; font-size: 104px; line-height: 1.25; }
+.s-hook .l2 { font-weight: 900; font-size: 150px; line-height: 1.15; }
+.s-hook .q { position: absolute; left: 0; right: 0; top: 760px; display: flex; flex-direction: column; align-items: center; gap: 18px; }
+.s-hook .q1 { font-weight: 900; font-size: 96px; }
+.s-hook .q2 { font-weight: 900; font-size: 80px; }
+.s-hook .particles { position: absolute; left: 50%; top: 880px; width: 0; height: 0; }
+.s-hook .particles span { position: absolute; left: -24px; top: -30px; width: 48px; text-align: center; font-size: 56px; line-height: 60px; }
+
+/* S2 タイトル */
+.s-title { background: linear-gradient(150deg, #6d28d9, #c026d3 55%, #ec4899); }
+.s-title .ring { position: absolute; border-radius: 50%; border: 4px solid rgba(255, 255, 255, .3); }
+.s-title .brand { font-weight: 700; font-size: 40px; letter-spacing: .32em; padding-left: .32em; }
+.s-title .liver { font-weight: 900; font-size: 230px; line-height: 1; margin-top: 30px; }
+.s-title .audition { font-weight: 900; font-size: 128px; line-height: 1.05; letter-spacing: .02em; }
+.s-title .boshu { font-weight: 900; font-size: 100px; margin-top: 50px; text-shadow: 0 12px 40px rgba(76, 5, 25, .35); }
+.s-title .band { position: absolute; left: -200px; top: 1420px; width: 1600px; height: 104px; background: #fff; transform: rotate(-6deg); overflow: hidden; display: flex; align-items: center; }
+.s-title .band div { white-space: nowrap; font-family: "Mont", "NotoJP"; font-weight: 900; font-size: 52px; letter-spacing: .06em; color: #a21caf; }
+
+/* S3 所属ライバー数 */
+.s-count .center { justify-content: flex-start; padding-top: 270px; }
+.s-count .ttl { font-weight: 900; font-size: 84px; }
+.s-count .num-row { display: flex; align-items: baseline; margin-top: -10px; }
+.s-count .num { font-weight: 900; font-size: 330px; line-height: 1.05; }
+.s-count .mei { font-weight: 900; font-size: 110px; margin-left: 16px; }
+.s-count .asof { font-weight: 500; font-size: 30px; color: #a8a3b6; margin-top: -6px; }
+.s-count .dots { display: grid; grid-template-columns: repeat(9, 72px); gap: 16px; margin-top: 50px; }
+.s-count .dot { width: 72px; height: 72px; border-radius: 50%; display: flex; align-items: flex-end; justify-content: center; overflow: hidden; }
+.s-count .dot.empty { border: 4px dashed rgba(240, 171, 252, .7); align-items: center; font-weight: 900; font-size: 20px; color: #f0abfc; }
+.s-count .next { font-weight: 900; font-size: 80px; margin-top: 56px; }
+
+/* S4 こんな人を待っています */
+.s-who { background: #fdf2f8; color: #1f1330; }
+.s-who .center { justify-content: flex-start; padding-top: 260px; }
+.s-who .h { font-weight: 900; font-size: 96px; line-height: 1.25; text-align: center; }
+.s-who .uline { width: 360px; height: 10px; border-radius: 5px; background: var(--grad); margin-top: 18px; transform-origin: center; }
+.s-who .cards { display: flex; flex-direction: column; gap: 26px; margin-top: 56px; }
+.s-who .card { display: flex; align-items: center; gap: 30px; width: 840px; height: 150px; background: #fff; border-radius: 30px; padding: 0 30px; box-shadow: 0 16px 40px rgba(124, 58, 237, .12); }
+.s-who .ic { width: 100px; height: 100px; border-radius: 50%; background: var(--grad); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.s-who .tx { flex: 1; font-family: "NotoJP"; font-weight: 900; font-size: 52px; white-space: nowrap; }
+.s-who .last { font-weight: 900; font-size: 58px; margin-top: 50px; }
+
+/* S5 ETERNAL d.c.t とは */
+.s-about { background: linear-gradient(#1e1b4b, #0d0b14 70%); }
+.s-about .star { position: absolute; width: 6px; height: 6px; border-radius: 50%; background: #fff; box-shadow: 0 0 10px #fff; }
+.s-about .center { justify-content: flex-start; padding-top: 290px; }
+.s-about .h { font-weight: 900; font-size: 90px; white-space: nowrap; }
+.s-about .tiles { display: flex; flex-direction: column; gap: 28px; margin-top: 64px; }
+.s-about .tile { display: flex; align-items: center; gap: 34px; width: 840px; height: 210px; border-radius: 30px; padding: 0 40px; background: rgba(255, 255, 255, .07); border: 2px solid rgba(196, 181, 253, .25); }
+.s-about .ic { width: 130px; height: 130px; border-radius: 34px; background: var(--grad); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.s-about .t1 { font-family: "NotoJP"; font-weight: 900; font-size: 60px; }
+.s-about .t2 { font-family: "NotoJP"; font-weight: 500; font-size: 32px; color: #c4b5fd; margin-top: 6px; }
+.s-about .rep { display: flex; align-items: center; gap: 20px; margin-top: 70px; font-weight: 900; font-size: 62px; }
+
+/* S6 応募の流れ */
+.s-flow { background: #f5f3ff; color: #1f1330; }
+.s-flow .head { position: absolute; left: 0; right: 0; top: 270px; text-align: center; }
+.s-flow .head b { display: block; font-weight: 800; font-size: 34px; letter-spacing: .4em; padding-left: .4em; color: #a855f7; }
+.s-flow .head div { font-weight: 900; font-size: 100px; }
+.s-flow .rail { position: absolute; left: 196px; top: 660px; width: 8px; height: 600px; border-radius: 4px; background: linear-gradient(#7c3aed, #ec4899); transform-origin: top center; }
+.s-flow .step { position: absolute; left: 140px; display: flex; align-items: center; gap: 34px; }
+.s-flow .circle { width: 120px; height: 120px; border-radius: 50%; background: #fff; border: 8px solid #c084fc; display: flex; flex-direction: column; align-items: center; justify-content: center; flex-shrink: 0; box-shadow: 0 10px 30px rgba(124, 58, 237, .18); }
+.s-flow .circle small { font-weight: 800; font-size: 18px; letter-spacing: .1em; color: #a855f7; }
+.s-flow .circle b { font-weight: 900; font-size: 50px; line-height: 1; color: #7c3aed; }
+.s-flow .st1 { font-family: "NotoJP"; font-weight: 900; font-size: 50px; white-space: nowrap; }
+.s-flow .st2 { font-family: "NotoJP"; font-weight: 500; font-size: 30px; color: #6b5b85; margin-top: 4px; white-space: nowrap; }
+.s-flow .goal .circle { background: var(--grad); border-color: #fff; }
+.s-flow .goal .circle small, .s-flow .goal .circle b { color: #fff; }
+.s-flow .note { position: absolute; left: 0; right: 0; top: 1470px; text-align: center; font-weight: 500; font-size: 32px; color: #6b5b85; }
+
+/* S7 応募の呼びかけ */
+.s-cta { background: linear-gradient(160deg, #4c1d95, #a21caf 55%, #db2777); }
+.s-cta .confetti i { position: absolute; top: 0; width: 18px; height: 30px; border-radius: 4px; opacity: .85; }
+.s-cta .center { justify-content: flex-start; padding-top: 330px; }
+.s-cta .c1 { font-weight: 900; font-size: 84px; }
+.s-cta .c2 { font-weight: 900; font-size: 100px; margin-top: 10px; }
+.s-cta .line { width: 420px; height: 4px; background: rgba(255, 255, 255, .7); margin-top: 60px; transform-origin: center; }
+.s-cta .brand { font-weight: 800; font-size: 60px; letter-spacing: .24em; padding-left: .24em; margin-top: 56px; }
+.s-cta .sub { font-weight: 700; font-size: 34px; letter-spacing: .4em; padding-left: .4em; color: #f5d0fe; margin-top: 10px; }
+.s-cta .chev { margin-top: 90px; }
+.s-cta .btn { margin-top: 20px; }
+.s-cta .btn span { display: inline-block; background: #fff; color: #7c3aed; font-family: "NotoJP"; font-weight: 900; font-size: 46px; padding: 30px 56px; border-radius: 999px; box-shadow: 0 20px 50px rgba(59, 7, 100, .35); white-space: nowrap; }
+.s-cta .tags { font-weight: 700; font-size: 34px; color: #f5d0fe; margin-top: 44px; }
+</style>
+</head>
+<body>
+<div id="stage" data-duration="60" data-seed="61">
+
+<!-- S1 フック（0〜6秒） -->
+<section class="scene s-hook" data-s="0" data-len="6">
+  <div class="orb fx drift" style="--dur:6s;--ease:ease-in-out;left:-360px;top:-200px;width:1100px;height:1100px;background:radial-gradient(circle,#7c3aed 0,transparent 65%)"></div>
+  <div class="orb fx drift" style="--dur:6s;--ease:ease-in-out;--dir:reverse;right:-420px;bottom:-200px;width:1200px;height:1200px;background:radial-gradient(circle,#ec4899 0,transparent 62%)"></div>
+  <div class="fx fadeOut" style="--d:3.05s;--dur:.3s;position:absolute;inset:0">
+    <svg class="mic" width="120" height="200" viewBox="0 0 120 200" overflow="visible">
+      <g fill="none" stroke="#f0abfc" stroke-width="8" stroke-linecap="round">
+        <rect class="fx draw" x="30" y="6" width="60" height="110" rx="30" style="--pl:300;--d:0s;--dur:.9s"/>
+        <path class="fx draw" d="M10 90 C10 160 110 160 110 90" style="--pl:170;--d:.4s;--dur:.6s"/>
+        <path class="fx draw" d="M60 146 L60 190 M36 192 L84 192" style="--pl:100;--d:.7s;--dur:.5s"/>
+      </g>
+    </svg>
+    <div class="stack jp">
+      <div class="l1 fx maskUp" style="--d:.2s">歌うのが、</div>
+      <div class="l2 grad-text fx pop" style="--d:.7s">好き。</div>
+      <div class="l1 fx maskUp" style="--d:1.6s;margin-top:30px">話すのが、</div>
+      <div class="l2 grad-text fx pop" style="--d:2.1s">好き。</div>
+    </div>
+  </div>
+  <div class="q jp">
+    <div class="q1 nowrap fx maskUp" style="--d:3.4s">その「好き」を、</div>
+    <div class="q2 nowrap fx maskUp" style="--d:4s">配信してみませんか？</div>
+  </div>
+  <div class="particles" data-burst="18" data-at="4.4"></div>
+</section>
+
+<!-- S2 タイトル（6〜12秒） -->
+<section class="scene s-title" data-s="6" data-len="6">
+  <div class="ring fx floaty" style="--dur:3s;--it:infinite;--ease:ease-in-out;left:-80px;top:240px;width:300px;height:300px"></div>
+  <div class="ring fx floaty" style="--dur:3.6s;--it:infinite;--ease:ease-in-out;--d:-1s;left:820px;top:1150px;width:340px;height:340px"></div>
+  <div class="ring fx floaty" style="--dur:2.6s;--it:infinite;--ease:ease-in-out;--d:-.6s;left:860px;top:330px;width:110px;height:110px"></div>
+  <div class="center" style="padding-bottom:180px">
+    <div class="brand fx fadeDown" style="--d:.1s">ETERNAL d.c.t</div>
+    <div class="liver split" data-split="slam" data-at="0.3" data-step="0.07">LIVER</div>
+    <div class="audition split" data-split="pop" data-at="0.75" data-step="0.05">AUDITION</div>
+    <div class="boshu jp nowrap fx pop" style="--d:1.5s;--dur:.8s"><span class="fx pulse" style="display:inline-block;--d:2.4s;--dur:.9s;--it:infinite;--ease:ease-in-out">ライバー募集中！</span></div>
+  </div>
+  <div class="band fx wipeR" style="--d:1.9s;--dur:.6s"><div class="fx marquee" style="--dur:5s;--it:infinite;--ease:linear">LIVER AUDITION ★ ライバー募集 ★ LIVER AUDITION ★ ライバー募集 ★ LIVER AUDITION ★ ライバー募集 ★ LIVER AUDITION ★ ライバー募集 ★ </div></div>
+</section>
+
+<!-- S3 所属ライバー数（12〜20秒） -->
+<section class="scene s-count" data-s="12" data-len="8">
+  <div class="orb fx drift" style="--dur:8s;--ease:ease-in-out;left:-300px;top:900px;width:1000px;height:1000px;background:radial-gradient(circle,#7c3aed 0,transparent 65%)"></div>
+  <div class="center">
+    <div class="ttl jp fx fadeUp" style="--d:.15s">所属ライバー</div>
+    <div class="num-row fx pop" style="--d:.35s;--dur:.6s"><span class="num grad-text" data-count="61" data-at="0.5" data-dur="2">0</span><span class="mei jp">名</span></div>
+    <div class="asof jp fx fadeIn" style="--d:1.2s">2026年10月時点</div>
+    <div class="dots" data-dots="61" data-total="63" data-at="0.5" data-dur="2"></div>
+    <div class="next jp nowrap fx maskUp" style="--d:3.4s">次は、あなたの番。</div>
+  </div>
+</section>
+
+<!-- S4 こんな人を待っています（20〜32秒） -->
+<section class="scene s-who" data-s="20" data-len="12">
+  <div class="center">
+    <div class="h jp"><div class="fx maskUp" style="--d:.1s">こんな人を</div><div class="fx maskUp" style="--d:.4s">待っています！</div></div>
+    <div class="uline fx growX" style="--d:.8s"></div>
+    <div class="cards">
+      <div class="card fx slideR" style="--d:1s">
+        <div class="ic"><svg width="56" height="56" viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round"><rect x="22" y="4" width="20" height="36" rx="10" fill="#fff"/><path d="M12 30 C12 56 52 56 52 30"/><path d="M32 48 V60 M22 60 H42"/></svg></div>
+        <div class="tx">歌うことが好き</div>
+        <svg width="64" height="64" viewBox="0 0 46 46"><circle cx="23" cy="23" r="23" fill="#f3e8ff"/><path class="fx draw" d="M12 24 L20 32 L35 15" fill="none" stroke="#a855f7" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" style="--pl:36;--d:1.35s;--dur:.4s"/></svg>
+      </div>
+      <div class="card fx slideR" style="--d:2.7s">
+        <div class="ic"><svg width="58" height="58" viewBox="0 0 64 64"><path d="M8 10 H56 Q60 10 60 14 V42 Q60 46 56 46 H26 L14 56 V46 H8 Q4 46 4 42 V14 Q4 10 8 10 Z" fill="#fff"/><g fill="#d946ef"><circle cx="20" cy="28" r="4"/><circle cx="32" cy="28" r="4"/><circle cx="44" cy="28" r="4"/></g></svg></div>
+        <div class="tx">人と話すのが好き</div>
+        <svg width="64" height="64" viewBox="0 0 46 46"><circle cx="23" cy="23" r="23" fill="#f3e8ff"/><path class="fx draw" d="M12 24 L20 32 L35 15" fill="none" stroke="#a855f7" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" style="--pl:36;--d:3.05s;--dur:.4s"/></svg>
+      </div>
+      <div class="card fx slideR" style="--d:4.4s">
+        <div class="ic"><svg width="58" height="58" viewBox="0 0 64 64"><path d="M22 16 V10 Q22 6 26 6 H38 Q42 6 42 10 V16" fill="none" stroke="#fff" stroke-width="5"/><rect x="4" y="16" width="56" height="40" rx="7" fill="#fff"/><rect x="4" y="30" width="56" height="5" fill="#d946ef"/></svg></div>
+        <div class="tx">副業ではじめたい</div>
+        <svg width="64" height="64" viewBox="0 0 46 46"><circle cx="23" cy="23" r="23" fill="#f3e8ff"/><path class="fx draw" d="M12 24 L20 32 L35 15" fill="none" stroke="#a855f7" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" style="--pl:36;--d:4.75s;--dur:.4s"/></svg>
+      </div>
+      <div class="card fx slideR" style="--d:6.1s">
+        <div class="ic"><svg width="58" height="58" viewBox="0 0 64 64"><path d="M32 6 L60 30 H52 V58 H38 V40 H26 V58 H12 V30 H4 Z" fill="#fff"/></svg></div>
+        <div class="tx">主婦・主夫の方も歓迎</div>
+        <svg width="64" height="64" viewBox="0 0 46 46"><circle cx="23" cy="23" r="23" fill="#f3e8ff"/><path class="fx draw" d="M12 24 L20 32 L35 15" fill="none" stroke="#a855f7" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" style="--pl:36;--d:6.45s;--dur:.4s"/></svg>
+      </div>
+      <div class="card fx slideR" style="--d:7.8s">
+        <div class="ic"><svg width="58" height="58" viewBox="0 0 64 64"><path d="M32 60 V30" stroke="#fff" stroke-width="6" stroke-linecap="round"/><path d="M32 34 C32 18 20 10 6 12 C6 28 18 36 32 34 Z" fill="#fff"/><path d="M32 28 C32 12 44 4 58 6 C58 22 46 30 32 28 Z" fill="#fff"/></svg></div>
+        <div class="tx">配信は未経験でもOK</div>
+        <svg width="64" height="64" viewBox="0 0 46 46"><circle cx="23" cy="23" r="23" fill="#f3e8ff"/><path class="fx draw" d="M12 24 L20 32 L35 15" fill="none" stroke="#a855f7" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" style="--pl:36;--d:8.15s;--dur:.4s"/></svg>
+      </div>
+    </div>
+    <div class="last jp nowrap fx pop" style="--d:9.6s"><span class="grad-text">ひとつでも当てはまれば、ぜひ！</span></div>
+  </div>
+</section>
+
+<!-- S5 ETERNAL d.c.t とは（32〜40秒） -->
+<section class="scene s-about" data-s="32" data-len="8">
+  <div data-stars="40"></div>
+  <div class="center">
+    <div class="h fx maskUp" style="--d:.1s">ETERNAL d.c.t <span class="jp">って？</span></div>
+    <div class="tiles">
+      <div class="tile fx slideL" style="--d:.8s">
+        <div class="ic"><svg width="74" height="74" viewBox="0 0 64 64"><circle cx="32" cy="32" r="9" fill="#fff"/><g fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round"><path d="M18 18 C10 26 10 38 18 46"/><path d="M46 18 C54 26 54 38 46 46"/><path d="M10 10 C-2 22 -2 42 10 54"/><path d="M54 10 C66 22 66 42 54 54"/></g></svg></div>
+        <div><div class="t1">ライバー事務所</div><div class="t2">所属ライバー61名</div></div>
+      </div>
+      <div class="tile fx slideL" style="--d:1.6s">
+        <div class="ic"><svg width="70" height="70" viewBox="0 0 64 64"><path d="M24 48 V12 L56 6 V42" fill="none" stroke="#fff" stroke-width="5" stroke-linejoin="round"/><ellipse cx="17" cy="48" rx="9" ry="7" fill="#fff"/><ellipse cx="49" cy="42" rx="9" ry="7" fill="#fff"/></svg></div>
+        <div><div class="t1">音楽制作</div><div class="t2">楽曲づくりも手がけています</div></div>
+      </div>
+      <div class="tile fx slideL" style="--d:2.4s">
+        <div class="ic"><svg width="74" height="74" viewBox="0 0 64 64"><path d="M20 8 L26 6 Q32 12 38 6 L44 8 L60 20 L52 30 L46 26 V58 H18 V26 L12 30 L4 20 Z" fill="#fff"/></svg></div>
+        <div><div class="t1">グッズ制作・販売</div><div class="t2">オリジナルグッズを展開中</div></div>
+      </div>
+    </div>
+    <div class="rep jp fx pop" style="--d:4s">
+      <svg width="64" height="64" viewBox="0 0 64 64" fill="none" stroke="#f0abfc" stroke-width="5" stroke-linecap="round"><rect x="22" y="4" width="20" height="36" rx="10" fill="#f0abfc"/><path d="M12 30 C12 56 52 56 52 30"/><path d="M32 48 V60 M22 60 H42"/></svg>
+      <span>代表も、現役の配信者です。</span>
+    </div>
+  </div>
+</section>
+
+<!-- S6 応募の流れ（40〜50秒） -->
+<section class="scene s-flow" data-s="40" data-len="10">
+  <div class="head"><b class="fx fadeDown" style="--d:.1s">FLOW</b><div class="jp fx maskUp" style="--d:.25s">応募の流れ</div></div>
+  <div class="rail fx growY" style="--d:.6s;--dur:4s;--ease:linear;transform-origin:top center"></div>
+  <div class="step fx slideR" style="top:600px;--d:.6s">
+    <div class="circle"><small>STEP</small><b>1</b></div>
+    <div><div class="st1">応募フォームから応募</div><div class="st2">プロフィールのリンクから</div></div>
+  </div>
+  <div class="step fx slideR" style="top:800px;--d:1.9s">
+    <div class="circle"><small>STEP</small><b>2</b></div>
+    <div><div class="st1">審査結果をメールでご連絡</div><div class="st2">応募時のメールアドレスにお送りします</div></div>
+  </div>
+  <div class="step fx slideR" style="top:1000px;--d:3.2s">
+    <div class="circle"><small>STEP</small><b>3</b></div>
+    <div><div class="st1">面談</div><div class="st2">活動について、お話ししましょう</div></div>
+  </div>
+  <div class="step goal fx slideR" style="top:1200px;--d:4.5s">
+    <div class="circle"><small>STEP</small><b>4</b></div>
+    <div><div class="st1">所属・配信スタート！</div></div>
+  </div>
+  <div class="note jp fx fadeIn" style="--d:5.6s">※未成年の方は保護者の同意が必要です</div>
+</section>
+
+<!-- S7 応募の呼びかけ（50〜60秒） -->
+<section class="scene s-cta" data-s="50" data-len="10">
+  <div class="confetti" data-confetti="30"></div>
+  <div class="center">
+    <div class="c1 jp nowrap fx maskUp" style="--d:.2s">あなたの「好き」を、</div>
+    <div class="c2 jp nowrap fx pop" style="--d:.8s">配信で届けよう。</div>
+    <div class="line fx growX" style="--d:1.4s"></div>
+    <div class="brand fx fadeUp" style="--d:1.6s">ETERNAL d.c.t</div>
+    <div class="sub fx fadeUp" style="--d:1.8s">LIVER AUDITION</div>
+    <svg class="chev fx fadeIn" style="--d:2.6s" width="90" height="70" viewBox="0 0 90 70"><g class="fx floaty" style="--d:2.6s;--dur:.9s;--it:infinite;--ease:ease-in-out" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 34 L45 8 L76 34"/><path d="M14 62 L45 36 L76 62" opacity=".55"/></g></svg>
+    <div class="btn fx pop" style="--d:2.3s"><span class="fx pulse" style="--d:2.9s;--dur:.8s;--it:infinite;--ease:ease-in-out">応募はプロフィールのリンクから</span></div>
+    <div class="tags jp fx fadeIn" style="--d:3.2s">#ライバー募集　#ライバー事務所</div>
+  </div>
+</section>
+
+<div id="bug" class="timed" style="--s:6s;--len:44s">ETERNAL d.c.t</div>
+<div id="wipeWrap"><div id="wipe"></div></div>
+<div id="flash"></div>
+</div>
+
+<script src="motion.js"></script>
+<script>
+// 所属ライバー数のドット（人のアイコン）。最後の空き枠は「あなたの席」
+// カウントアップ（motion.js の easeOut）と同じペースで1つずつ現れるようにする
+const PERSON = '<svg width="52" height="52" viewBox="0 0 52 52"><circle cx="26" cy="20" r="11" fill="#fff"/><path d="M4 54 C6 38 16 33 26 33 C36 33 46 38 48 54 Z" fill="#fff"/></svg>';
+document.querySelectorAll("[data-dots]").forEach(el => {
+  const n = +el.dataset.dots, total = +el.dataset.total, at = +el.dataset.at, dur = +el.dataset.dur;
+  const when = i => at + dur * (1 - Math.cbrt(1 - (i + 1) / n));
+  const colors = ["#7c3aed", "#a855f7", "#d946ef", "#ec4899", "#f472b6"];
+  for (let i = 0; i < total; i++) {
+    const d = document.createElement("div");
+    d.style.setProperty("--dur", ".45s");
+    if (i < n) {
+      d.className = "dot fx pop";
+      d.style.background = colors[i % colors.length];
+      d.style.setProperty("--d", (when(i) - .2).toFixed(3) + "s");
+      d.innerHTML = PERSON;
+    } else {
+      d.className = "dot empty fx pop";
+      d.style.setProperty("--d", (at + dur + .3).toFixed(3) + "s");
+      d.textContent = "YOU";
+    }
+    el.appendChild(d);
+  }
+});
+</script>
+</body>
+</html>

@@ -8,79 +8,10 @@
   - ブラウザで開くとプレビュー再生、?t=秒 でその時刻の静止画、?render=1 は render.js からの書き出し用
   - フォントは media/fonts/ に置く（README.md 参照）
 -->
-<script>
-  const PARAMS = new URLSearchParams(location.search);
-</script>
+<link rel="stylesheet" href="motion.css">
 <style>
-@font-face { font-family: "NotoJP"; src: url("../fonts/NotoSansCJKjp-Medium.otf") format("opentype"); font-weight: 500; }
-@font-face { font-family: "NotoJP"; src: url("../fonts/NotoSansCJKjp-Bold.otf") format("opentype"); font-weight: 700; }
-@font-face { font-family: "NotoJP"; src: url("../fonts/NotoSansCJKjp-Black.otf") format("opentype"); font-weight: 900; }
-@font-face { font-family: "Mont"; src: url("../fonts/Montserrat.ttf") format("truetype"); font-weight: 100 900; }
+#stage { width: 1920px; height: 1080px; }
 
-:root { --grad: linear-gradient(135deg, #7c3aed, #d946ef, #ec4899); --ink: #0d0b14; }
-* { box-sizing: border-box; margin: 0; padding: 0; }
-/* すべてのアニメーションは JS の seek() で時刻を指定して動かす */
-*, *::before, *::after { animation-play-state: paused !important; }
-html, body { background: #000; }
-#stage {
-  position: relative; width: 1920px; height: 1080px; overflow: hidden;
-  background: var(--ink); color: #fff; font-family: "Mont", "NotoJP", sans-serif;
-}
-.jp { font-family: "NotoJP", sans-serif; }
-.abs { position: absolute; }
-.center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-.split span { display: inline-block; white-space: pre; }
-
-/* ── シーンの表示区間とアニメーションの共通設定 ───────────────── */
-.scene { position: absolute; inset: 0; overflow: hidden; visibility: hidden; animation: vis var(--len) linear var(--s); }
-.timed { visibility: hidden; animation: vis var(--len) linear var(--s); }
-@keyframes vis { from { visibility: visible; } to { visibility: visible; } }
-.fx {
-  animation-duration: var(--dur, .7s);
-  animation-delay: calc(var(--s) + var(--d, 0s));
-  animation-fill-mode: var(--fill, both);
-  animation-timing-function: var(--ease, cubic-bezier(.16, 1, .3, 1));
-  animation-iteration-count: var(--it, 1);
-  animation-direction: var(--dir, normal);
-}
-.svg-c { transform-box: fill-box; transform-origin: center; }
-
-.fadeIn { animation-name: fadeIn; }   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-.fadeOut { animation-name: fadeOut; } @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; transform: scale(.97); } }
-.fadeUp { animation-name: fadeUp; }   @keyframes fadeUp { from { opacity: 0; transform: translateY(60px); } to { opacity: 1; transform: none; } }
-.fadeDown { animation-name: fadeDown; } @keyframes fadeDown { from { opacity: 0; transform: translateY(-50px); } to { opacity: 1; transform: none; } }
-.slideL { animation-name: slideL; }   @keyframes slideL { from { opacity: 0; transform: translateX(-140px); } to { opacity: 1; transform: none; } }
-.slideR { animation-name: slideR; }   @keyframes slideR { from { opacity: 0; transform: translateX(140px); } to { opacity: 1; transform: none; } }
-.pop { animation-name: pop; }         @keyframes pop { 0% { opacity: 0; transform: scale(.3); } 60% { opacity: 1; transform: scale(1.1); } 100% { opacity: 1; transform: scale(1); } }
-.slam { animation-name: slam; }       @keyframes slam { 0% { opacity: 0; transform: scale(3); } 65% { opacity: 1; transform: scale(.94); } 100% { opacity: 1; transform: scale(1); } }
-.maskUp { animation-name: maskUp; }   @keyframes maskUp { from { clip-path: inset(100% -20% -20% -20%); transform: translateY(50px); } to { clip-path: inset(-20% -20% -20% -20%); transform: none; } }
-.wipeR { animation-name: wipeR; }     @keyframes wipeR { from { clip-path: inset(-10% 100% -10% -10%); } to { clip-path: inset(-10% -10% -10% -10%); } }
-.growX { animation-name: growX; transform-origin: left center; } @keyframes growX { from { transform: scaleX(0); } to { transform: scaleX(1); } }
-.growY { animation-name: growY; transform-origin: center bottom; } @keyframes growY { from { transform: scaleY(0); } to { transform: scaleY(1); } }
-.blurIn { animation-name: blurIn; }   @keyframes blurIn { from { opacity: 0; filter: blur(30px); transform: scale(1.25); } to { opacity: 1; filter: blur(0); transform: none; } }
-.flipIn { animation-name: flipIn; }   @keyframes flipIn { from { opacity: 0; transform: perspective(1400px) rotateY(80deg); } to { opacity: 1; transform: perspective(1400px) rotateY(0); } }
-.draw { stroke-dasharray: var(--pl); animation-name: draw; } @keyframes draw { from { stroke-dashoffset: var(--pl); } to { stroke-dashoffset: 0; } }
-.donut { stroke-dasharray: var(--pl); animation-name: donut; } @keyframes donut { from { stroke-dashoffset: var(--pl); } to { stroke-dashoffset: var(--to); } }
-.spin { animation-name: spin; }       @keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
-.pulse { animation-name: pulse; }     @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.07); } }
-.floaty { animation-name: floaty; }   @keyframes floaty { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-18px); } }
-.drift { animation-name: drift; }     @keyframes drift { from { transform: translate(0, 0) scale(1); } to { transform: translate(90px, 60px) scale(1.12); } }
-.zoomSlow { animation-name: zoomSlow; } @keyframes zoomSlow { from { transform: scale(1); } to { transform: scale(1.08); } }
-.shake { animation-name: shake; }     @keyframes shake { 0%, 100% { transform: none; } 20% { transform: translateX(-10px) rotate(-2deg); } 40% { transform: translateX(10px) rotate(2deg); } 60% { transform: translateX(-6px) rotate(-1deg); } 80% { transform: translateX(6px) rotate(1deg); } }
-.blink { animation-name: blink; }     @keyframes blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
-.flicker { animation-name: flicker; } @keyframes flicker { 0% { opacity: 0; } 8% { opacity: 1; } 12% { opacity: .15; } 18% { opacity: 1; } 34% { opacity: .5; } 40% { opacity: 1; } 100% { opacity: 1; } }
-.marquee { animation-name: marquee; } @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-.twinkle { animation-name: twinkle; } @keyframes twinkle { 0%, 100% { opacity: .15; transform: scale(.6); } 50% { opacity: 1; transform: scale(1); } }
-.burst { animation-name: burst; }     @keyframes burst { 0% { opacity: 0; transform: rotate(var(--a)) translateY(0) scale(.2); } 15% { opacity: 1; } 100% { opacity: 0; transform: rotate(var(--a)) translateY(calc(var(--dist) * -1)) scale(1.3); } }
-.fall { animation-name: fall; }       @keyframes fall { from { transform: translateY(-120px) rotate(0); } to { transform: translateY(1250px) rotate(720deg); } }
-.steam { animation-name: steam; }     @keyframes steam { 0% { opacity: 0; transform: translateY(30px) scaleY(.7); } 35% { opacity: .85; } 100% { opacity: 0; transform: translateY(-90px) scaleY(1.2); } }
-.swing { animation-name: swing; transform-origin: 50% -40px; } @keyframes swing { 0% { opacity: 0; transform: rotate(-50deg); } 45% { opacity: 1; transform: rotate(16deg); } 70% { transform: rotate(-7deg); } 100% { opacity: 1; transform: rotate(0); } }
-.panelUp { animation-name: panelUp; } @keyframes panelUp { from { transform: translateY(101%); } to { transform: none; } }
-.press { animation-name: press; }     @keyframes press { 0%, 100% { transform: scale(1); } 40% { transform: scale(.92); } }
-.ripple { animation-name: ripple; }   @keyframes ripple { from { opacity: .7; transform: scale(0); } to { opacity: 0; transform: scale(4); } }
-.cdNum { animation-name: cdNum; }     @keyframes cdNum { 0% { opacity: 0; transform: scale(1.9); } 18% { opacity: 1; transform: scale(1); } 82% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(.6); } }
-.gridMove { animation-name: gridMove; } @keyframes gridMove { from { background-position: 0 0; } to { background-position: 0 100px; } }
-.prog { animation-name: prog; }       @keyframes prog { from { width: 30%; } to { width: 32%; } }
 
 /* ── 共通パーツ ──────────────────────────────────────── */
 .label {
@@ -96,10 +27,6 @@ html, body { background: #000; }
   background: rgba(13, 11, 20, .6); font-family: "Mont"; font-weight: 700; font-size: 20px; letter-spacing: .22em; color: #fff;
 }
 #bug span { color: #f0abfc; }
-#wipeWrap { position: absolute; inset: 0; z-index: 90; pointer-events: none; }
-#wipe { position: absolute; top: -200px; left: 0; width: 3200px; height: 1480px; background: linear-gradient(90deg, #7c3aed, #d946ef 45%, #ec4899); transform: translateX(-4000px) skewX(-16deg); }
-#flash { position: absolute; inset: 0; z-index: 91; background: #fff; opacity: 0; pointer-events: none; }
-.orb { position: absolute; border-radius: 50%; opacity: .55; }
 .phone {
   position: absolute; width: 478px; height: 828px; border-radius: 58px; border: 14px solid #16141c; background: #16141c;
   box-shadow: 0 40px 90px rgba(0, 0, 0, .35); overflow: hidden;
@@ -379,7 +306,7 @@ html, body { background: #000; }
 </style>
 </head>
 <body>
-<div id="stage">
+<div id="stage" data-duration="62">
 
 <!-- S0 イントロ -->
 <section class="scene s-intro" data-s="0" data-len="4">
@@ -742,19 +669,10 @@ html, body { background: #000; }
 <div id="flash"></div>
 </div>
 
+<script src="motion.js"></script>
 <script>
-const DURATION = 62;
-
-// 乱数は毎回同じ結果になるよう固定シード
-function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
-const rand = rng(20261010);
-const lerpColor = (a, b, k) => { const pa = a.match(/\w\w/g).map(h => parseInt(h, 16)), pb = b.match(/\w\w/g).map(h => parseInt(h, 16)); return "rgb(" + pa.map((v, i) => Math.round(v + (pb[i] - v) * k)).join(",") + ")"; };
-
-const scenes = [...document.querySelectorAll(".scene")];
-scenes.forEach(sc => { sc.style.setProperty("--s", sc.dataset.s + "s"); sc.style.setProperty("--len", sc.dataset.len + "s"); });
-const sceneStart = el => parseFloat(el.closest(".scene").dataset.s);
-
 // シーン名ラベル
+const scenes = Motion.scenes;
 scenes.filter(sc => sc.dataset.no).forEach(sc => {
   const label = document.createElement("div");
   label.className = "label fx slideL";
@@ -764,71 +682,6 @@ scenes.filter(sc => sc.dataset.no).forEach(sc => {
   label.querySelector("span").textContent = sc.dataset.name;
   label.querySelector("i").textContent = sc.dataset.ar;
   sc.appendChild(label);
-});
-
-// 1文字ずつ動くテキスト
-document.querySelectorAll("[data-split]").forEach(el => {
-  const chars = [...el.textContent];
-  const at = parseFloat(el.dataset.at), step = parseFloat(el.dataset.step);
-  const gradFrom = el.dataset.gradFrom ? parseInt(el.dataset.gradFrom, 10) : -1;
-  el.textContent = "";
-  chars.forEach((ch, i) => {
-    const span = document.createElement("span");
-    span.className = "fx " + el.dataset.split;
-    span.style.setProperty("--d", (at + i * step).toFixed(3) + "s");
-    span.textContent = ch;
-    if (gradFrom >= 0 && i >= gradFrom) span.style.color = lerpColor("c084fc", "f472b6", (i - gradFrom) / Math.max(1, chars.length - 1 - gradFrom));
-    el.appendChild(span);
-  });
-});
-
-// ギフトの弾けるパーティクル
-document.querySelectorAll("[data-burst]").forEach(el => {
-  const n = parseInt(el.dataset.burst, 10), at = parseFloat(el.dataset.at);
-  const glyphs = ["♥", "★", "♥", "✦"], colors = ["#ec4899", "#f59e0b", "#a855f7", "#f472b6"];
-  for (let i = 0; i < n; i++) {
-    const p = document.createElement("span");
-    p.className = "fx burst";
-    p.textContent = glyphs[i % glyphs.length];
-    p.style.color = colors[i % colors.length];
-    p.style.setProperty("--a", (i * 360 / n + rand() * 12) + "deg");
-    p.style.setProperty("--dist", (250 + rand() * 120) + "px");
-    p.style.setProperty("--d", (at + rand() * .15) + "s");
-    p.style.setProperty("--dur", "1.3s");
-    p.style.setProperty("--ease", "cubic-bezier(.2,.7,.3,1)");
-    el.appendChild(p);
-  }
-});
-
-// 星空
-document.querySelectorAll("[data-stars]").forEach(el => {
-  for (let i = 0; i < parseInt(el.dataset.stars, 10); i++) {
-    const s = document.createElement("div");
-    s.className = "star fx twinkle";
-    s.style.left = (rand() * 1920) + "px";
-    s.style.top = (rand() * 900) + "px";
-    s.style.setProperty("--dur", (1.2 + rand() * 1.6) + "s");
-    s.style.setProperty("--d", (-rand() * 2) + "s");
-    s.style.setProperty("--it", "infinite");
-    s.style.setProperty("--ease", "ease-in-out");
-    el.appendChild(s);
-  }
-});
-
-// 紙吹雪
-document.querySelectorAll("[data-confetti]").forEach(el => {
-  const colors = ["#111", "#ec4899", "#7c3aed", "#fff", "#22d3ee"];
-  for (let i = 0; i < parseInt(el.dataset.confetti, 10); i++) {
-    const c = document.createElement("i");
-    c.className = "fx fall";
-    c.style.left = (rand() * 1920) + "px";
-    c.style.background = colors[i % colors.length];
-    c.style.setProperty("--dur", (2.4 + rand() * 1.6) + "s");
-    c.style.setProperty("--d", (-rand() * 3) + "s");
-    c.style.setProperty("--it", "infinite");
-    c.style.setProperty("--ease", "linear");
-    el.appendChild(c);
-  }
 });
 
 // アウトロのタイル（各シーンの名前と色）
@@ -843,57 +696,6 @@ document.querySelectorAll("[data-tiles]").forEach(el => {
     t.querySelector("span").textContent = sc.dataset.short || sc.dataset.name;
     el.appendChild(t);
   });
-});
-
-// カウントアップ・タイピング・シーン切り替えのワイプ（CSSで表せない部分）
-const counters = [...document.querySelectorAll("[data-count]")].map(el => ({ el, to: parseFloat(el.dataset.count), t0: sceneStart(el) + parseFloat(el.dataset.at), dur: parseFloat(el.dataset.dur) }));
-const typers = [...document.querySelectorAll("[data-type]")].map(el => ({ el, text: [...el.dataset.type], t0: sceneStart(el) + parseFloat(el.dataset.at), dur: parseFloat(el.dataset.dur) }));
-const CUTS = scenes.slice(1).map(sc => parseFloat(sc.dataset.s));
-const CUT_TYPES = ["wipe", "flash", "wipeRev"];
-const easeOut = k => 1 - Math.pow(1 - k, 3);
-const clamp01 = k => Math.min(1, Math.max(0, k));
-
-function renderJS(t) {
-  counters.forEach(c => { c.el.textContent = Math.round(c.to * easeOut(clamp01((t - c.t0) / c.dur))).toLocaleString("ja-JP"); });
-  typers.forEach(ty => { ty.el.textContent = ty.text.slice(0, Math.floor(ty.text.length * clamp01((t - ty.t0) / ty.dur))).join(""); });
-  const wipe = document.getElementById("wipe"), wrap = document.getElementById("wipeWrap"), flash = document.getElementById("flash");
-  let x = -4000, rev = false, flashOp = 0;
-  CUTS.forEach((c, i) => {
-    const type = CUT_TYPES[i % CUT_TYPES.length];
-    if (type === "flash") {
-      const dt = t - c;
-      if (dt >= -.1 && dt < 0) flashOp = Math.max(flashOp, (dt + .1) / .1);
-      else if (dt >= 0 && dt < .35) flashOp = Math.max(flashOp, 1 - dt / .35);
-    } else {
-      const p = (t - (c - .22)) / .44;
-      if (p >= 0 && p <= 1) { x = -3600 + 6000 * p; rev = type === "wipeRev"; }
-    }
-  });
-  wipe.style.transform = "translateX(" + x + "px) skewX(-16deg)";
-  wrap.style.transform = rev ? "scaleX(-1)" : "none";
-  flash.style.opacity = flashOp;
-}
-
-let ANIMS = null;
-window.seek = ms => {
-  if (!ANIMS) ANIMS = document.getAnimations();
-  ANIMS.forEach(a => { a.currentTime = ms; });
-  renderJS(ms / 1000);
-};
-window.PV_DURATION = DURATION;
-window.pvReady = (async () => {
-  await Promise.all(["500 40px NotoJP", "700 40px NotoJP", "900 40px NotoJP", "600 40px Mont", "900 40px Mont"].map(f => document.fonts.load(f, "あA")));
-  await document.fonts.ready;
-  window.seek(0);
-})();
-
-// プレビュー: ?render=1 以外はブラウザ上でそのまま再生（?t=秒 でその時刻に固定）
-pvReady.then(() => {
-  if (PARAMS.has("render")) return;
-  if (PARAMS.has("t")) { window.seek(parseFloat(PARAMS.get("t")) * 1000); return; }
-  const start = performance.now();
-  const loop = now => { window.seek(((now - start) % (DURATION * 1000))); requestAnimationFrame(loop); };
-  requestAnimationFrame(loop);
 });
 </script>
 </body>
