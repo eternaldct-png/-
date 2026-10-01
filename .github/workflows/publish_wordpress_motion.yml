@@ -1,0 +1,85 @@
+# ホームページ（eternaldct.net・WordPress）に「動画制作（モーション作例集）」の固定ページを反映する。
+#
+# 初回: Actions タブ →「ホームページに動画作例ページを反映」→ Run workflow（トップに入口も追加）
+# 以降: main の persona/motion_config.yaml や src/static/motion/ が変わると、ページだけ自動で更新する
+#
+# 必要な Secrets（Settings → Secrets and variables → Actions）:
+#   WP_USER          WordPress の管理者ユーザー名
+#   WP_APP_PASSWORD  そのユーザーのアプリケーションパスワード（ユーザー → プロフィール で発行）
+#   WP_URL           （任意）サイトのURL。省略時 https://eternaldct.net
+# 手順: docs/wordpress_motion/README.md
+name: ホームページに動画作例ページを反映
+
+on:
+  workflow_dispatch:
+    inputs:
+      status:
+        description: 'ページの状態（keep: 新規なら公開・更新なら今のまま）'
+        required: false
+        default: 'keep'
+        type: choice
+        options:
+          - 'keep'
+          - 'publish'
+          - 'draft'
+      add_to_top:
+        description: 'トップページに入口のカードを追加/更新する'
+        required: false
+        default: true
+        type: boolean
+      prune:
+        description: '以前アップロードした、今は使っていない動画・画像を削除する'
+        required: false
+        default: false
+        type: boolean
+  push:
+    branches: [main]
+    paths:
+      - 'persona/motion_config.yaml'
+      - 'src/static/motion/**'
+      - 'src/wordpress_motion.py'
+      - 'docs/wordpress_motion/eyecatch.jpg'
+
+concurrency:
+  group: wordpress-motion
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install flask pyyaml requests
+
+      - name: Publish to WordPress
+        env:
+          WP_URL: ${{ secrets.WP_URL }}
+          WP_USER: ${{ secrets.WP_USER }}
+          WP_APP_PASSWORD: ${{ secrets.WP_APP_PASSWORD }}
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_STATUS: ${{ inputs.status }}
+          INPUT_ADD_TO_TOP: ${{ inputs.add_to_top }}
+          INPUT_PRUNE: ${{ inputs.prune }}
+        run: |
+          if [ -z "$WP_USER" ] || [ -z "$WP_APP_PASSWORD" ]; then
+            echo "::warning::Secrets の WP_USER / WP_APP_PASSWORD が未設定のため、ホームページへの反映をスキップしました"
+            exit 0
+          fi
+          args=""
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            if [ "$INPUT_STATUS" = "publish" ] || [ "$INPUT_STATUS" = "draft" ]; then args="$args --status $INPUT_STATUS"; fi
+            if [ "$INPUT_ADD_TO_TOP" = "true" ]; then args="$args --add-to-top"; fi
+            if [ "$INPUT_PRUNE" = "true" ]; then args="$args --prune"; fi
+          else
+            # 自動実行はページの中身の更新だけ（初回作成・トップへの追加は手動実行で行う）
+            args="--update-only"
+          fi
+          python src/wordpress_motion.py publish $args

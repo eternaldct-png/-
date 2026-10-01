@@ -142,9 +142,13 @@ git push -u origin claude/homepage-payment-spreadsheet-DD1ly
 - `tests/test_motion_page.py` が、YAML に書いた動画・ポスターの実在と 3MB 以下であることをチェックする。
 
 ### ホームページ（eternaldct.net）への掲載
-- WordPress の固定ページ `https://eternaldct.net/motion/`（「動画制作」）に iframe で埋め込み、トップページにカード型の入口を置く。
-- 貼り付け用のHTML・アイキャッチ画像・手順は `docs/wordpress_motion/`（WordPress 側の作業は管理画面で手動）。
-- 埋め込みURLは `?preview=1` なしの `/motion`（`?preview=1` だと管理用の「プレビュー表示中」の帯がお客さんにも見えるため）。
+- WordPress の固定ページ `https://eternaldct.net/motion/`（「動画制作」）に、作例集を **HTML/CSS で直接** 載せる（iframe埋め込みではない）。
+  動画・ポスターは WordPress のメディアライブラリにアップロードして使うので、Render が止まっていても表示される。
+- 作成・更新は `src/wordpress_motion.py`（WordPress REST API）。GitHub Actions「ホームページに動画作例ページを反映」
+  （`.github/workflows/publish_wordpress_motion.yml`）から実行する。Secrets `WP_USER` / `WP_APP_PASSWORD`（アプリケーションパスワード）が必要。
+- 初回は手動実行（`add_to_top` でトップページに入口カードも追加）。以降は main の `persona/motion_config.yaml` や
+  `src/static/motion/` が変わると、固定ページだけ自動で更新される。
+- 手順・トラブル対応は `docs/wordpress_motion/README.md`。ページの文言を WordPress 側で手で直しても次の自動更新で上書きされる。
 
 ---
 
