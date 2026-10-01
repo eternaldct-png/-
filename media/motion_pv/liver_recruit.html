@@ -7,6 +7,7 @@
   ライバー募集動画（1080×1920 / 60秒 / 120BPMのグリッドでカット）
   SNS（リール・TikTok・ショート）向け。文字は上下・右端のUIに隠れにくい中央寄りに配置。
   所属ライバー数は data-count="61" と「2026年10月時点」の2か所を更新する。
+  音声（ナレーション・BGM）は audio/liver_recruit_audio.py で作る。文字の出るタイミングはナレーションに合わせてある。
 -->
 <link rel="stylesheet" href="motion.css">
 <style>
@@ -125,7 +126,7 @@
     </div>
   </div>
   <div class="q jp">
-    <div class="q1 nowrap fx maskUp" style="--d:3.4s">その「好き」を、</div>
+    <div class="q1 nowrap fx maskUp" style="--d:3.1s">その「好き」を、</div>
     <div class="q2 nowrap fx maskUp" style="--d:4s">配信してみませんか？</div>
   </div>
   <div class="particles" data-burst="18" data-at="4.4"></div>
@@ -163,33 +164,33 @@
     <div class="h jp"><div class="fx maskUp" style="--d:.1s">こんな人を</div><div class="fx maskUp" style="--d:.4s">待っています！</div></div>
     <div class="uline fx growX" style="--d:.8s"></div>
     <div class="cards">
-      <div class="card fx slideR" style="--d:1s">
+      <div class="card fx slideR" style="--d:1.95s">
         <div class="ic"><svg width="56" height="56" viewBox="0 0 64 64" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round"><rect x="22" y="4" width="20" height="36" rx="10" fill="#fff"/><path d="M12 30 C12 56 52 56 52 30"/><path d="M32 48 V60 M22 60 H42"/></svg></div>
         <div class="tx">歌うことが好き</div>
-        <svg width="64" height="64" viewBox="0 0 46 46"><circle cx="23" cy="23" r="23" fill="#f3e8ff"/><path class="fx draw" d="M12 24 L20 32 L35 15" fill="none" stroke="#a855f7" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" style="--pl:36;--d:1.35s;--dur:.4s"/></svg>
+        <svg width="64" height="64" viewBox="0 0 46 46"><circle cx="23" cy="23" r="23" fill="#f3e8ff"/><path class="fx draw" d="M12 24 L20 32 L35 15" fill="none" stroke="#a855f7" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" style="--pl:36;--d:2.3s;--dur:.4s"/></svg>
       </div>
-      <div class="card fx slideR" style="--d:2.7s">
+      <div class="card fx slideR" style="--d:3.8s">
         <div class="ic"><svg width="58" height="58" viewBox="0 0 64 64"><path d="M8 10 H56 Q60 10 60 14 V42 Q60 46 56 46 H26 L14 56 V46 H8 Q4 46 4 42 V14 Q4 10 8 10 Z" fill="#fff"/><g fill="#d946ef"><circle cx="20" cy="28" r="4"/><circle cx="32" cy="28" r="4"/><circle cx="44" cy="28" r="4"/></g></svg></div>
         <div class="tx">人と話すのが好き</div>
-        <svg width="64" height="64" viewBox="0 0 46 46"><circle cx="23" cy="23" r="23" fill="#f3e8ff"/><path class="fx draw" d="M12 24 L20 32 L35 15" fill="none" stroke="#a855f7" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" style="--pl:36;--d:3.05s;--dur:.4s"/></svg>
+        <svg width="64" height="64" viewBox="0 0 46 46"><circle cx="23" cy="23" r="23" fill="#f3e8ff"/><path class="fx draw" d="M12 24 L20 32 L35 15" fill="none" stroke="#a855f7" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" style="--pl:36;--d:4.15s;--dur:.4s"/></svg>
       </div>
-      <div class="card fx slideR" style="--d:4.4s">
+      <div class="card fx slideR" style="--d:5.75s">
         <div class="ic"><svg width="58" height="58" viewBox="0 0 64 64"><path d="M22 16 V10 Q22 6 26 6 H38 Q42 6 42 10 V16" fill="none" stroke="#fff" stroke-width="5"/><rect x="4" y="16" width="56" height="40" rx="7" fill="#fff"/><rect x="4" y="30" width="56" height="5" fill="#d946ef"/></svg></div>
         <div class="tx">副業ではじめたい</div>
-        <svg width="64" height="64" viewBox="0 0 46 46"><circle cx="23" cy="23" r="23" fill="#f3e8ff"/><path class="fx draw" d="M12 24 L20 32 L35 15" fill="none" stroke="#a855f7" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" style="--pl:36;--d:4.75s;--dur:.4s"/></svg>
+        <svg width="64" height="64" viewBox="0 0 46 46"><circle cx="23" cy="23" r="23" fill="#f3e8ff"/><path class="fx draw" d="M12 24 L20 32 L35 15" fill="none" stroke="#a855f7" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" style="--pl:36;--d:6.1s;--dur:.4s"/></svg>
       </div>
-      <div class="card fx slideR" style="--d:6.1s">
+      <div class="card fx slideR" style="--d:7.6s">
         <div class="ic"><svg width="58" height="58" viewBox="0 0 64 64"><path d="M32 6 L60 30 H52 V58 H38 V40 H26 V58 H12 V30 H4 Z" fill="#fff"/></svg></div>
         <div class="tx">主婦・主夫の方も歓迎</div>
-        <svg width="64" height="64" viewBox="0 0 46 46"><circle cx="23" cy="23" r="23" fill="#f3e8ff"/><path class="fx draw" d="M12 24 L20 32 L35 15" fill="none" stroke="#a855f7" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" style="--pl:36;--d:6.45s;--dur:.4s"/></svg>
+        <svg width="64" height="64" viewBox="0 0 46 46"><circle cx="23" cy="23" r="23" fill="#f3e8ff"/><path class="fx draw" d="M12 24 L20 32 L35 15" fill="none" stroke="#a855f7" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" style="--pl:36;--d:7.95s;--dur:.4s"/></svg>
       </div>
-      <div class="card fx slideR" style="--d:7.8s">
+      <div class="card fx slideR" style="--d:9.45s">
         <div class="ic"><svg width="58" height="58" viewBox="0 0 64 64"><path d="M32 60 V30" stroke="#fff" stroke-width="6" stroke-linecap="round"/><path d="M32 34 C32 18 20 10 6 12 C6 28 18 36 32 34 Z" fill="#fff"/><path d="M32 28 C32 12 44 4 58 6 C58 22 46 30 32 28 Z" fill="#fff"/></svg></div>
         <div class="tx">配信は未経験でもOK</div>
-        <svg width="64" height="64" viewBox="0 0 46 46"><circle cx="23" cy="23" r="23" fill="#f3e8ff"/><path class="fx draw" d="M12 24 L20 32 L35 15" fill="none" stroke="#a855f7" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" style="--pl:36;--d:8.15s;--dur:.4s"/></svg>
+        <svg width="64" height="64" viewBox="0 0 46 46"><circle cx="23" cy="23" r="23" fill="#f3e8ff"/><path class="fx draw" d="M12 24 L20 32 L35 15" fill="none" stroke="#a855f7" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" style="--pl:36;--d:9.8s;--dur:.4s"/></svg>
       </div>
     </div>
-    <div class="last jp nowrap fx pop" style="--d:9.6s"><span class="grad-text">ひとつでも当てはまれば、ぜひ！</span></div>
+    <div class="last jp nowrap fx pop" style="--d:10.9s"><span class="grad-text">ひとつでも当てはまれば、ぜひ！</span></div>
   </div>
 </section>
 
@@ -199,20 +200,20 @@
   <div class="center">
     <div class="h fx maskUp" style="--d:.1s">ETERNAL d.c.t <span class="jp">って？</span></div>
     <div class="tiles">
-      <div class="tile fx slideL" style="--d:.8s">
+      <div class="tile fx slideL" style="--d:1s">
         <div class="ic"><svg width="74" height="74" viewBox="0 0 64 64"><circle cx="32" cy="32" r="9" fill="#fff"/><g fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round"><path d="M18 18 C10 26 10 38 18 46"/><path d="M46 18 C54 26 54 38 46 46"/><path d="M10 10 C-2 22 -2 42 10 54"/><path d="M54 10 C66 22 66 42 54 54"/></g></svg></div>
         <div><div class="t1">ライバー事務所</div><div class="t2">所属ライバー61名</div></div>
       </div>
-      <div class="tile fx slideL" style="--d:1.6s">
+      <div class="tile fx slideL" style="--d:2.3s">
         <div class="ic"><svg width="70" height="70" viewBox="0 0 64 64"><path d="M24 48 V12 L56 6 V42" fill="none" stroke="#fff" stroke-width="5" stroke-linejoin="round"/><ellipse cx="17" cy="48" rx="9" ry="7" fill="#fff"/><ellipse cx="49" cy="42" rx="9" ry="7" fill="#fff"/></svg></div>
         <div><div class="t1">音楽制作</div><div class="t2">楽曲づくりも手がけています</div></div>
       </div>
-      <div class="tile fx slideL" style="--d:2.4s">
+      <div class="tile fx slideL" style="--d:3.4s">
         <div class="ic"><svg width="74" height="74" viewBox="0 0 64 64"><path d="M20 8 L26 6 Q32 12 38 6 L44 8 L60 20 L52 30 L46 26 V58 H18 V26 L12 30 L4 20 Z" fill="#fff"/></svg></div>
         <div><div class="t1">グッズ制作・販売</div><div class="t2">オリジナルグッズを展開中</div></div>
       </div>
     </div>
-    <div class="rep jp fx pop" style="--d:4s">
+    <div class="rep jp fx pop" style="--d:5.45s">
       <svg width="64" height="64" viewBox="0 0 64 64" fill="none" stroke="#f0abfc" stroke-width="5" stroke-linecap="round"><rect x="22" y="4" width="20" height="36" rx="10" fill="#f0abfc"/><path d="M12 30 C12 56 52 56 52 30"/><path d="M32 48 V60 M22 60 H42"/></svg>
       <span>代表も、現役の配信者です。</span>
     </div>
@@ -222,24 +223,24 @@
 <!-- S6 応募の流れ（40〜50秒） -->
 <section class="scene s-flow" data-s="40" data-len="10">
   <div class="head"><b class="fx fadeDown" style="--d:.1s">FLOW</b><div class="jp fx maskUp" style="--d:.25s">応募の流れ</div></div>
-  <div class="rail fx growY" style="--d:.6s;--dur:4s;--ease:linear;transform-origin:top center"></div>
-  <div class="step fx slideR" style="top:600px;--d:.6s">
+  <div class="rail fx growY" style="--d:1.45s;--dur:4.95s;--ease:linear;transform-origin:top center"></div>
+  <div class="step fx slideR" style="top:600px;--d:1.45s">
     <div class="circle"><small>STEP</small><b>1</b></div>
     <div><div class="st1">応募フォームから応募</div><div class="st2">プロフィールのリンクから</div></div>
   </div>
-  <div class="step fx slideR" style="top:800px;--d:1.9s">
+  <div class="step fx slideR" style="top:800px;--d:3s">
     <div class="circle"><small>STEP</small><b>2</b></div>
     <div><div class="st1">審査結果をメールでご連絡</div><div class="st2">応募時のメールアドレスにお送りします</div></div>
   </div>
-  <div class="step fx slideR" style="top:1000px;--d:3.2s">
+  <div class="step fx slideR" style="top:1000px;--d:5.4s">
     <div class="circle"><small>STEP</small><b>3</b></div>
     <div><div class="st1">面談</div><div class="st2">活動について、お話ししましょう</div></div>
   </div>
-  <div class="step goal fx slideR" style="top:1200px;--d:4.5s">
+  <div class="step goal fx slideR" style="top:1200px;--d:6.4s">
     <div class="circle"><small>STEP</small><b>4</b></div>
     <div><div class="st1">所属・配信スタート！</div></div>
   </div>
-  <div class="note jp fx fadeIn" style="--d:5.6s">※未成年の方は保護者の同意が必要です</div>
+  <div class="note jp fx fadeIn" style="--d:7.9s">※未成年の方は保護者の同意が必要です</div>
 </section>
 
 <!-- S7 応募の呼びかけ（50〜60秒） -->
@@ -247,13 +248,13 @@
   <div class="confetti" data-confetti="30"></div>
   <div class="center">
     <div class="c1 jp nowrap fx maskUp" style="--d:.2s">あなたの「好き」を、</div>
-    <div class="c2 jp nowrap fx pop" style="--d:.8s">配信で届けよう。</div>
-    <div class="line fx growX" style="--d:1.4s"></div>
-    <div class="brand fx fadeUp" style="--d:1.6s">ETERNAL d.c.t</div>
-    <div class="sub fx fadeUp" style="--d:1.8s">LIVER AUDITION</div>
-    <svg class="chev fx fadeIn" style="--d:2.6s" width="90" height="70" viewBox="0 0 90 70"><g class="fx floaty" style="--d:2.6s;--dur:.9s;--it:infinite;--ease:ease-in-out" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 34 L45 8 L76 34"/><path d="M14 62 L45 36 L76 62" opacity=".55"/></g></svg>
-    <div class="btn fx pop" style="--d:2.3s"><span class="fx pulse" style="--d:2.9s;--dur:.8s;--it:infinite;--ease:ease-in-out">応募はプロフィールのリンクから</span></div>
-    <div class="tags jp fx fadeIn" style="--d:3.2s">#ライバー募集　#ライバー事務所</div>
+    <div class="c2 jp nowrap fx pop" style="--d:1.4s">配信で届けよう。</div>
+    <div class="line fx growX" style="--d:2.9s"></div>
+    <div class="brand fx fadeUp" style="--d:3.5s">ETERNAL d.c.t</div>
+    <div class="sub fx fadeUp" style="--d:3.7s">LIVER AUDITION</div>
+    <svg class="chev fx fadeIn" style="--d:6.5s" width="90" height="70" viewBox="0 0 90 70"><g class="fx floaty" style="--d:6.5s;--dur:.9s;--it:infinite;--ease:ease-in-out" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 34 L45 8 L76 34"/><path d="M14 62 L45 36 L76 62" opacity=".55"/></g></svg>
+    <div class="btn fx pop" style="--d:6.2s"><span class="fx pulse" style="--d:6.8s;--dur:.8s;--it:infinite;--ease:ease-in-out">応募はプロフィールのリンクから</span></div>
+    <div class="tags jp fx fadeIn" style="--d:6.9s">#ライバー募集　#ライバー事務所</div>
   </div>
 </section>
 

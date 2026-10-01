@@ -30,3 +30,4 @@ posts/media/*.jpg
 # モーションPVの書き出し結果（YouTube等にアップして使う）
 media/motion_pv/*.mp4
 media/motion_pv/*.png
+media/motion_pv/**/*.wav

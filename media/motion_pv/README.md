@@ -9,7 +9,7 @@ HTML/CSS のアニメーションを1フレームずつ撮影して MP4 に書�
 | `motion.css` `motion.js` | 共通部品（シーンの表示区間・動きの種類・切り替えのワイプ・書き出し用の時刻制御） |
 | `render.js` | 書き出しスクリプト（`--page` で対象を選ぶ） |
 
-出力はどちらも 30fps・H.264・音声なし。
+映像の出力は 30fps・H.264。ライバー募集動画は `audio/liver_recruit_audio.py` で作ったナレーションと BGM を後から合わせる（下記）。
 
 ## ライバー募集動画（liver_recruit.html）
 
@@ -29,6 +29,25 @@ HTML/CSS のアニメーションを1フレームずつ撮影して MP4 に書�
   「所属ライバー61名」・「2026年10月時点」を書き換える。
 - 文字は TikTok・リールの上下と右端のボタンに隠れにくいよう、中央の 約 840px 幅・上下 260〜1500px に収めている。
 - 投稿前に Render の `AUDITION_STATUS` が `open` になっているか確認する（`closed` だと応募フォームが受付終了画面になる）。
+
+### 音声（ナレーション＋BGM）
+
+- ナレーション: Open JTalk（`pyopenjtalk-plus` に同梱の HTS Voice "Mei"）。読み上げる文と開始時刻は
+  `audio/liver_recruit_audio.py` の `NARRATION`。読み間違える語はひらがなで書く（例: 「はじめたいひと」「主夫」）。
+  文言や時刻を変えたら、`liver_recruit.html` の文字の出るタイミング（`--d`）もそろえる。
+- BGM: 同じスクリプト内で numpy / scipy から合成したオリジナル曲（120BPM・IV–V–iii–vi の王道進行）。
+  外部の音源は使っていないので権利表記は不要。ナレーション中は自動で音量を下げる。
+- **クレジット表記が必要（CC BY 3.0）**: 投稿の説明文などに
+  `ナレーション音声: HTS Voice "Mei" (c) 2009-2013 Nagoya Institute of Technology (CC BY 3.0)` を入れる。
+
+```bash
+pip install pyopenjtalk-plus numpy scipy
+python media/motion_pv/audio/liver_recruit_audio.py audio.wav
+node media/motion_pv/render.js video.mp4 --page liver_recruit.html
+# 合成して SNS 向けの音量（-14 LUFS）にそろえる
+ffmpeg -i video.mp4 -i audio.wav -map 0:v -map 1:a -c:v copy \
+  -af "loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000" -c:a aac -b:a 192k -movflags +faststart -shortest liver_recruit.mp4
+```
 
 ## 作例PV（pv.html）
 
