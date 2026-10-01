@@ -24,13 +24,19 @@ from pathlib import Path
 
 REF = "refs/heads/claude/nifty-galileo-9f3t1l"
 RAW = f"https://raw.githubusercontent.com/eternaldct-png/-/{REF}/"
-# このファイルがリポジトリ内にあるとき（python3 tools/homepage/apply_motion.py）は、手元のファイルを使う
-try:
-    LOCAL_ROOT = Path(__file__).resolve().parents[2]
-    if not (LOCAL_ROOT / "tools/homepage/site/motion-main.html").is_file():
-        LOCAL_ROOT = None
-except NameError:  # curl ... | python3 - のとき
-    LOCAL_ROOT = None
+def _local_root():
+    """このファイルがリポジトリ内にあるとき（python3 tools/homepage/apply_motion.py）は、手元のファイルを使う。
+    curl ... | python3 - のとき（__file__ が無い／"<stdin>"）は None を返し、GitHub からダウンロードする"""
+    name = globals().get("__file__")
+    if not name or name.startswith("<"):
+        return None
+    for parent in Path(name).resolve().parents:
+        if (parent / "tools/homepage/site/motion-main.html").is_file():
+            return parent
+    return None
+
+
+LOCAL_ROOT = _local_root()
 
 SITE_FRAGMENTS = "tools/homepage/site/"
 MEDIA_SRC = "src/static/motion/"
