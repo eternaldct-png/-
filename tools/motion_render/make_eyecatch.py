@@ -1,11 +1,13 @@
-"""eternaldct.net の固定ページ「動画制作」用のアイキャッチ画像（1200×630・OGP兼用）を作る。
+"""ホームページ eternaldct.net の motion.html（動画制作・作例集）用の SNS 共有画像（1200×630）を作る。
 
 使い方:
-    python3 fetch_fonts.py      # 初回のみ（fonts/ にフォントを用意）
-    python3 make_eyecatch.py    # → docs/wordpress_motion/eyecatch.jpg
+    python3 fetch_fonts.py                 # 初回のみ（fonts/ にフォントを用意）
+    python3 make_eyecatch.py               # → review/eyecatch.jpg
+    python3 make_eyecatch.py <出力先.jpg>   # 例: <サイト>/assets/motion/ogp.jpg
 
 作例のポスター画像（src/static/motion/*.jpg）を3枚並べ、見出しを重ねる。
 """
+import sys
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
@@ -13,7 +15,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 ROOT = Path(__file__).resolve().parents[2]
 FONT_DIR = Path(__file__).resolve().parent / "fonts"
 POSTER_DIR = ROOT / "src/static/motion"
-OUT = ROOT / "docs/wordpress_motion/eyecatch.jpg"
+OUT = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(__file__).resolve().parent / "review" / "eyecatch.jpg"
 
 W, H = 1200, 630
 BG = (13, 11, 20)
@@ -121,7 +123,7 @@ def main():
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     canvas.convert("RGB").save(OUT, "JPEG", quality=88, optimize=True, progressive=True)
-    print(f"saved {OUT.relative_to(ROOT)} ({OUT.stat().st_size // 1024}KB)")
+    print(f"saved {OUT} ({OUT.stat().st_size // 1024}KB)")
 
 
 if __name__ == "__main__":

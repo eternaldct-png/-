@@ -4,7 +4,8 @@
 eternaldct-png/- は ETERNAL d.c.t の投稿自動化 & グッズ販売サイト。
 - Flask アプリ（`src/web_app.py`）を Render でホスト
 - 本番URL: `https://kazuto-post-generator.onrender.com`
-- ホームページ: `https://eternaldct.net`（WordPress、別管理）
+- ホームページ: `https://eternaldct.net`（静的サイト。`eternaldct-png/ETERNAL-` リポジトリの `eternaldct-new-site/`。
+  Mac の `ETERNALライバー事務所/` フォルダで管理し、管理ツールから FTPS で Xserver に反映する）
 
 ---
 
@@ -142,13 +143,11 @@ git push -u origin claude/homepage-payment-spreadsheet-DD1ly
 - `tests/test_motion_page.py` が、YAML に書いた動画・ポスターの実在と 3MB 以下であることをチェックする。
 
 ### ホームページ（eternaldct.net）への掲載
-- WordPress の固定ページ `https://eternaldct.net/motion/`（「動画制作」）に、作例集を **HTML/CSS で直接** 載せる（iframe埋め込みではない）。
-  動画・ポスターは WordPress のメディアライブラリにアップロードして使うので、Render が止まっていても表示される。
-- 作成・更新は `src/wordpress_motion.py`（WordPress REST API）。GitHub Actions「ホームページに動画作例ページを反映」
-  （`.github/workflows/publish_wordpress_motion.yml`）から実行する。Secrets `WP_USER` / `WP_APP_PASSWORD`（アプリケーションパスワード）が必要。
-- 初回は手動実行（`add_to_top` でトップページに入口カードも追加）。以降は main の `persona/motion_config.yaml` や
-  `src/static/motion/` が変わると、固定ページだけ自動で更新される。
-- 手順・トラブル対応は `docs/wordpress_motion/README.md`。ページの文言を WordPress 側で手で直しても次の自動更新で上書きされる。
+- ホームページの `motion.html`（動画制作・作例集）とトップの紹介枠に、同じ作例を載せている
+  （`eternaldct-png/ETERNAL-` の `eternaldct-new-site/`。動画・ポスターは `assets/motion/` にコピーして使う。Render には依存しない）。
+- 作例を追加・変更したら、このリポジトリで `python tools/motion_render/export_homepage.py <eternaldct-new-site のパス>` を実行し、
+  サイト側で管理ツールからサーバーに反映する（`motion.html` の `MOTION:FILTERS` / `MOTION:CARDS` の目印の間だけ書き換わる）。
+- トップの紹介枠（`index.html` の「MOTION WORKS preview」）に並べる4本は手で選んでいる。
 
 ---
 
