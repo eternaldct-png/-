@@ -1,22 +1,43 @@
 """
 ライバー募集動画（liver_recruit.html）の音声を作る
 
-- ナレーション: Open JTalk（pyopenjtalk-plus 同梱の HTS Voice "Mei"）で読み上げ
+- ナレーション: Gemini の音声合成（TTS）で読み上げる（--engine openjtalk で Open JTalk にも切り替え可）
+  * 台本全体を「1回のリクエスト」で読ませ、文と文の間の無音で23文に切り分ける
+    （無料枠は1モデル1日10リクエストまでなので、1文ずつ頼むとすぐ上限に達する。声のトーンもそろう）
+  * 切り分けた各文を Gemini でまとめて書き起こし、台本どおりに切れているか確認する
+  * 枠に収まらない文は、声の高さを変えずに少しだけ速める（最大 1.3 倍）
+  * 生成した音声は audio/cache/ に保存し、同じ台本・同じ声なら API を呼ばずに再利用する
 - BGM: numpy / scipy でゼロから合成したオリジナル曲（120BPM・王道進行。素材の権利問題なし）
 - ナレーションが入る区間は BGM を自動で下げる（ダッキング）
 
 使い方:
-    pip install pyopenjtalk-plus numpy scipy
-    python media/motion_pv/audio/liver_recruit_audio.py 出力.wav
+    pip install numpy scipy            # Open JTalk を使うときは pyopenjtalk-plus も
+    export GEMINI_API_KEY=...          # Google AI Studio で発行した API キー
+    python media/motion_pv/audio/liver_recruit_audio.py 出力.wav [--voice Zephyr] [--model gemini-3.8-flash-tts]
     → render.js で書き出した映像と ffmpeg で合わせる（README 参照）
 
-クレジット表記（CC BY 3.0）: HTS Voice "Mei" (c) 2009-2013 Nagoya Institute of Technology
+Open JTalk（--engine openjtalk）で作った場合のクレジット表記（CC BY 3.0）:
+    HTS Voice "Mei" (c) 2009-2013 Nagoya Institute of Technology
 """
+import argparse
+import base64
+import difflib
+import hashlib
+import io
 import json
+import os
+import shutil
+import subprocess
 import sys
+import tempfile
+import time
+import unicodedata
+import urllib.error
+import urllib.request
+import warnings
+from pathlib import Path
 
 import numpy as np
-import pyopenjtalk
 import scipy.io.wavfile as wavfile
 import scipy.signal as ss
 
@@ -28,7 +49,9 @@ N = int(SR * DURATION)
 rng = np.random.default_rng(61)
 
 # ── ナレーション（開始秒, 読み上げる文, この時刻までに言い終える） ──────────────
-# 読み間違いを避けるため、一部はひらがなで書いている（例: はじめたいひと / 主夫のかた）
+# Gemini では全文を1回で読ませて文ごとに切り分けるため、1行は「。」「！」「？」で終わる文にする
+# （「、」で終わる行は前後の間（ま）が短く、切れ目を見分けにくい）
+# 読み間違いを避けるため、一部はひらがなで書いている（例: はじめたいひと）
 NARRATION = [
     (0.35, "歌うのが、好き。", 1.75),
     (1.8, "話すのが、好き。", 3.0),
@@ -46,16 +69,12 @@ NARRATION = [
     (34.6, "音楽制作や、グッズも手がけています。", 37.25),
     (37.45, "代表も、現役の配信者です。", 39.7),
     (40.25, "応募の流れです。", 41.3),
-    (41.45, "応募フォームから応募して、", 42.85),
-    (43.0, "審査結果は、メールでお知らせ。", 45.2),
-    (45.4, "面談をへて、", 46.25),
-    (46.4, "所属、配信スタート！", 48.2),
+    (41.45, "応募フォームから応募して、審査結果はメールでお知らせ。", 45.2),
+    (45.4, "面談をへて、所属、配信スタート！", 48.2),
     (50.35, "あなたの「好き」を、配信で届けよう。", 53.6),
-    (53.8, "エターナルディクト、ライバー募集中。", 56.2),
+    (53.8, "エターナルディクト、ライバー募集中！", 56.2),
     (56.4, "応募は、プロフィールのリンクから！", 58.4),
 ]
-BASE_SPEED = 1.15
-MAX_SPEED = 1.45
 
 
 def t_of(n):
@@ -104,37 +123,267 @@ def saw(freq, n, phase=0.0):
     return y
 
 
-# ── ナレーション ─────────────────────────────────────────────
-def synth_line(text, max_len):
+# ── ナレーション（共通の後処理） ─────────────────────────────────
+def trim(x, sr, pre=.01, post=.05):
+    a = np.abs(x)
+    idx = np.where(a > a.max() * 0.02)[0]
+    return x[max(0, idx[0] - int(pre * sr)): idx[-1] + int(post * sr)]
+
+
+def polish(x, drive=1.2, presence=.2):
+    """声の聞きやすさ: 低域カット・明瞭感を少し足す・軽く圧縮"""
+    x = highpass(x, 85)
+    x = x + presence * bandpass(x, 2800, 6500)
+    x = np.tanh(drive * x / np.max(np.abs(x))) / np.tanh(drive)
+    fade = int(.008 * SR)
+    x[:fade] *= np.linspace(0, 1, fade)
+    x[-fade:] *= np.linspace(1, 0, fade)
+    return x
+
+
+def ffmpeg_path():
+    if os.environ.get("FFMPEG"):
+        return os.environ["FFMPEG"]
+    if shutil.which("ffmpeg"):
+        return shutil.which("ffmpeg")
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except ImportError:
+        return None
+
+
+def stretch(x, factor):
+    """声の高さを変えずに factor 倍の速さにする（ffmpeg の atempo）"""
+    ff = ffmpeg_path()
+    if ff is None or abs(factor - 1) < .01:
+        return x
+    with tempfile.TemporaryDirectory() as d:
+        src, dst = os.path.join(d, "in.wav"), os.path.join(d, "out.wav")
+        wavfile.write(src, SR, (x * 32767).astype(np.int16))
+        subprocess.run([ff, "-hide_banner", "-loglevel", "error", "-y", "-i", src, "-filter:a", f"atempo={factor:.4f}", dst], check=True)
+        _, y = wavfile.read(dst)
+    return y.astype(np.float64) / 32768.0
+
+
+# ── Open JTalk ──────────────────────────────────────────────
+BASE_SPEED = 1.15
+MAX_SPEED = 1.45
+
+
+def synth_line_openjtalk(text, max_len):
+    import pyopenjtalk
     speed = BASE_SPEED
     for _ in range(4):
         x, sr = pyopenjtalk.tts(text, speed=speed)
-        x = x.astype(np.float64) / 32768.0
-        a = np.abs(x)
-        idx = np.where(a > a.max() * 0.02)[0]
-        x = x[max(0, idx[0] - int(.01 * sr)): idx[-1] + int(.04 * sr)]
+        x = trim(x.astype(np.float64) / 32768.0, sr, post=.04)
         if len(x) / sr <= max_len or speed >= MAX_SPEED:
             break
         speed = min(MAX_SPEED, speed * (len(x) / sr) / max_len * 1.02)
     x = ss.resample_poly(x, SR, sr)
-    # 声の聞きやすさ: 低域カット・明瞭感を少し足す・軽く圧縮
-    x = highpass(x, 90)
-    x = x + 0.35 * bandpass(x, 2500, 6000)
-    x = np.tanh(1.5 * x / np.max(np.abs(x))) / np.tanh(1.5)
-    fade = int(.008 * SR)
-    x[:fade] *= np.linspace(0, 1, fade)
-    x[-fade:] *= np.linspace(1, 0, fade)
-    return x, speed
+    return polish(x, drive=1.5, presence=.35), {"speed": round(speed, 2)}
 
 
-def build_narration():
-    voice = np.zeros(N)
+# ── Gemini TTS ──────────────────────────────────────────────
+GEMINI_API = "https://generativelanguage.googleapis.com/v1beta/models/"
+TTS_MODELS = ("gemini-3.8-flash-tts", "gemini-3.1-flash-tts-preview", "gemini-3.8-flash-lite-tts")   # 上限に達したら次へ
+CHECK_MODELS = ("gemini-3.7-flash", "gemini-3.8-flash", "gemini-2.5-flash")   # 書き起こし確認用
+CACHE_DIR = Path(__file__).with_name("cache")
+MAX_STRETCH = 1.3
+
+
+class DailyQuotaExceeded(RuntimeError):
+    pass
+
+
+def gemini_call(model, body, tries=6):
+    key = os.environ.get("GEMINI_API_KEY")
+    if not key:
+        raise SystemExit("GEMINI_API_KEY が設定されていません")
+    for i in range(tries):
+        req = urllib.request.Request(GEMINI_API + model + ":generateContent", data=json.dumps(body).encode(),
+                                     headers={"Content-Type": "application/json", "x-goog-api-key": key})
+        try:
+            with urllib.request.urlopen(req, timeout=300) as r:
+                return json.load(r)
+        except urllib.error.HTTPError as e:
+            msg = e.read().decode(errors="replace")
+            if e.code == 429 and "PerDay" in msg:
+                raise DailyQuotaExceeded(model)   # 1日の上限。待っても回復しない
+            if e.code in (429, 500, 503) and i < tries - 1:
+                time.sleep(5 * 2 ** i)   # 混雑・1分あたりの上限は待ってやり直す
+                continue
+            raise RuntimeError(f"Gemini API {e.code}: {msg[:300]}")
+
+
+def gemini_tts(prompt, voice, model, attempt):
+    CACHE_DIR.mkdir(exist_ok=True)
+    key = hashlib.sha1(f"{model}|{voice}|{prompt}|{attempt}".encode()).hexdigest()[:16]
+    path = CACHE_DIR / f"{key}.wav"
+    if path.exists():
+        return path.read_bytes()
+    body = {"contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"responseModalities": ["AUDIO"],
+                                 "speechConfig": {"voiceConfig": {"prebuiltVoiceConfig": {"voiceName": voice}}}}}
+    d = gemini_call(model, body)
+    part = d["candidates"][0]["content"]["parts"][0]["inlineData"]
+    raw = base64.b64decode(part["data"])
+    if not raw[:4] == b"RIFF":   # 生の PCM（16bit・24kHz）で返るモデル向けに WAV にする
+        buf = io.BytesIO()
+        wavfile.write(buf, 24000, np.frombuffer(raw, dtype="<i2"))
+        raw = buf.getvalue()
+    path.write_bytes(raw)
+    return raw
+
+
+def reading(text):
+    """表記ゆれ（人/ひと、手がける/手掛ける など）を無視して比べるため、読み（カタカナ）にそろえる"""
+    norm = "".join(ch for ch in unicodedata.normalize("NFKC", text) if unicodedata.category(ch)[0] in "LN")
+    try:
+        import pyopenjtalk
+        return pyopenjtalk.g2p(norm, kana=True)
+    except ImportError:
+        return norm.lower()
+
+
+def similarity(heard, text):
+    return difflib.SequenceMatcher(None, reading(heard), reading(text)).ratio()
+
+
+def mora_count(text):
+    small = set("ァィゥェォャュョヮ")
+    kana = reading(text)
+    n = sum(1 for ch in kana if ("ァ" <= ch <= "ヴ" or ch == "ー") and ch not in small)
+    return max(n, len(kana) // 2, 1)
+
+
+def split_take(x, sr, texts, silence_weight=.35):
+    """1本の読み上げを文ごとに切り分ける。
+    無音の箇所を切れ目の候補にして、各文の長さがモーラ数（読みの拍の数）に比例するような組み合わせを選ぶ"""
+    hop = int(.01 * sr)
+    frames = len(x) // hop
+    rms = np.sqrt(np.mean(x[: frames * hop].reshape(frames, hop) ** 2, axis=1))
+    silent = rms < rms.max() * 10 ** (-36 / 20)
+    runs, i = [], 0
+    while i < frames:
+        if silent[i]:
+            j = i
+            while j < frames and silent[j]:
+                j += 1
+            runs.append((i, j))
+            i = j
+        else:
+            i += 1
+    lead = runs[0][1] if runs and runs[0][0] == 0 else 0
+    tail = runs[-1][0] if runs and runs[-1][1] == frames else frames
+    cands = [(a, b) for a, b in runs if a > lead and b < tail and b - a >= 4]
+    cuts = [lead] + [(a + b) // 2 for a, b in cands] + [tail]
+    gaps = [1] + [b - a for a, b in cands] + [1]
+    mora = np.array([mora_count(t) for t in texts], float)
+    rate = (tail - lead) / mora.sum()
+    L, M = len(texts), len(cuts)
+    cost = np.full((L + 1, M), np.inf)
+    back = np.zeros((L + 1, M), int)
+    cost[0][0] = 0
+    for i in range(1, L + 1):
+        for b in range(1, M):
+            if i == L and b != M - 1:
+                continue
+            for a in range(b):
+                if not np.isfinite(cost[i - 1][a]):
+                    continue
+                c = cost[i - 1][a] + np.log((cuts[b] - cuts[a]) / (rate * mora[i - 1])) ** 2
+                if b < M - 1:
+                    c -= silence_weight * np.log(gaps[b])   # 長い無音ほど切れ目らしい
+                if c < cost[i][b]:
+                    cost[i][b], back[i][b] = c, a
+    idx, b = [], M - 1
+    for i in range(L, 0, -1):
+        idx.append(b)
+        b = back[i][b]
+    idx = [0] + idx[::-1]
+    return [trim(x[cuts[a] * hop: cuts[b] * hop], sr) for a, b in zip(idx[:-1], idx[1:])]
+
+
+def transcribe_segments(segments, sr):
+    """切り分けた音声を1回のリクエストでまとめて書き起こす（音声ごとに番号を付けて取り違えを防ぐ）"""
+    parts = []
+    for i, sg in enumerate(segments, 1):
+        buf = io.BytesIO()
+        wavfile.write(buf, sr, (sg * 32767).astype(np.int16))
+        parts += [{"text": f"音声{i:02d}:"}, {"inlineData": {"mimeType": "audio/wav", "data": base64.b64encode(buf.getvalue()).decode()}}]
+    parts.append({"text": f"音声01〜音声{len(segments):02d}をそれぞれ書き起こし、{{\"01\": \"...\", ...}} の形のJSONだけを出力してください。音声どうしを結合しないこと。"})
+    body = {"contents": [{"parts": parts}], "generationConfig": {"responseMimeType": "application/json"}}
+    for model in CHECK_MODELS:
+        try:
+            d = gemini_call(model, body, tries=3)
+            heard = json.loads(d["candidates"][0]["content"]["parts"][0]["text"])
+            return [heard.get(f"{i:02d}", "") for i in range(1, len(segments) + 1)]
+        except (RuntimeError, KeyError, IndexError, ValueError):
+            continue
+    return None
+
+
+def gemini_take(voice, models):
+    """台本全体を1回で読ませ、文ごとに切り分けて、書き起こしで台本どおりか確かめる"""
+    texts = [t for _, t, _ in NARRATION]
+    prompt = "\n".join(texts)
+    for model in models:
+        try:
+            raw = gemini_tts(prompt, voice, model, 0)
+            break
+        except DailyQuotaExceeded:
+            print(f"[info] {model} は今日の無料枠（1日10回）を使い切ったため次のモデルを試します", file=sys.stderr)
+    else:
+        raise SystemExit("どの Gemini TTS モデルも今日の上限に達しました（太平洋時間の0時にリセット）。"
+                         "時間をおくか、Google AI Studio で課金を有効にしてください。")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        sr, x = wavfile.read(io.BytesIO(raw))
+    x = x.astype(np.float64) / 32768.0
+    best = None
+    for weight in (.35, .8, .15, 1.5):
+        segments = split_take(x, sr, texts, weight)
+        heard = transcribe_segments(segments, sr)
+        if heard is None:
+            print("[warn] 書き起こしで確認できなかったため、切り分け結果をそのまま使います", file=sys.stderr)
+            return segments, sr, {"model": model, "checked": False}, [None] * len(texts)
+        scores = [similarity(h, t) for h, t in zip(heard, texts)]
+        bad = sum(sc < .75 for sc in scores)
+        print(f"[info] model={model} weight={weight} 台本と違う文: {bad}/{len(texts)}", file=sys.stderr)
+        if best is None or bad < best[0]:
+            best = (bad, segments, heard, scores)
+        if bad == 0:
+            break
+    bad, segments, heard, scores = best
+    lines = [{"heard": h, "match": round(sc, 2)} for h, sc in zip(heard, scores)]
+    return segments, sr, {"model": model, "checked": True, "mismatched": bad}, lines
+
+
+def fit_segment(x, sr, max_len):
+    x = ss.resample_poly(x, SR, sr)
+    factor = len(x) / SR / max_len
+    applied = 1.0
+    if factor > 1:
+        applied = min(factor, MAX_STRETCH)
+        x = stretch(x, applied)
+    return polish(x), {"stretch": round(applied, 2), "fits": factor <= MAX_STRETCH}
+
+
+def build_narration(engine="gemini", voice="Zephyr", model=None):
+    voice_track = np.zeros(N)
     timeline = []
-    for start, text, end in NARRATION:
-        x, speed = synth_line(text, end - start)
-        place(voice, x, start)
-        timeline.append({"start": start, "end": round(start + len(x) / SR, 2), "speed": round(speed, 2), "text": text})
-    return voice, timeline
+    take, checks = None, [None] * len(NARRATION)
+    if engine == "gemini":
+        segments, sr, take, checks = gemini_take(voice, (model,) if model else TTS_MODELS)
+    for i, (start, text, end) in enumerate(NARRATION):
+        if engine == "openjtalk":
+            x, info = synth_line_openjtalk(text, end - start)
+        else:
+            x, info = fit_segment(segments[i], sr, end - start)
+        place(voice_track, x, start)
+        timeline.append({"start": start, "end": round(start + len(x) / SR, 2), "text": text, **info, **(checks[i] or {})})
+    return voice_track, timeline, take
 
 
 # ── BGM の楽器 ───────────────────────────────────────────────
@@ -436,8 +685,15 @@ def duck_curve(timeline, depth=0.38):
     return out
 
 
-def main(out_path):
-    voice, timeline = build_narration()
+def main():
+    ap = argparse.ArgumentParser(description="ライバー募集動画のナレーションとBGMを作る")
+    ap.add_argument("out", nargs="?", default="liver_recruit_audio.wav")
+    ap.add_argument("--engine", choices=["gemini", "openjtalk"], default="gemini")
+    ap.add_argument("--voice", default="Zephyr", help="Gemini の声（Zephyr / Leda / Aoede / Laomedeia など）")
+    ap.add_argument("--model", default=None, help="TTS モデル（省略時は上限に達したら順に切り替え）")
+    args = ap.parse_args()
+
+    voice, timeline, take = build_narration(args.engine, args.voice, args.model)
     music = build_music()
     music /= np.max(np.abs(music)) + 1e-9
     duck = duck_curve(timeline)
@@ -447,9 +703,9 @@ def main(out_path):
     mix[-fade:] *= np.linspace(1, 0, fade)[:, None] ** 2
     mix = np.tanh(1.2 * mix) / np.tanh(1.2)
     mix *= .89 / np.max(np.abs(mix))
-    wavfile.write(out_path, SR, (mix * 32767).astype(np.int16))
-    print(json.dumps(timeline, ensure_ascii=False, indent=1))
+    wavfile.write(args.out, SR, (mix * 32767).astype(np.int16))
+    print(json.dumps({"take": take, "timeline": timeline}, ensure_ascii=False, indent=1))
 
 
 if __name__ == "__main__":
-    main(sys.argv[1] if len(sys.argv) > 1 else "liver_recruit_audio.wav")
+    main()

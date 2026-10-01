@@ -32,17 +32,23 @@ HTML/CSS のアニメーションを1フレームずつ撮影して MP4 に書�
 
 ### 音声（ナレーション＋BGM）
 
-- ナレーション: Open JTalk（`pyopenjtalk-plus` に同梱の HTS Voice "Mei"）。読み上げる文と開始時刻は
-  `audio/liver_recruit_audio.py` の `NARRATION`。読み間違える語はひらがなで書く（例: 「はじめたいひと」「主夫」）。
+- ナレーション: **Gemini の音声合成（TTS）**。既定は `gemini-3.8-flash-tts`・声は `Zephyr`（`--voice` で変更可）。
+  読み上げる文と開始時刻は `audio/liver_recruit_audio.py` の `NARRATION`。
   文言や時刻を変えたら、`liver_recruit.html` の文字の出るタイミング（`--d`）もそろえる。
+  - 台本全体を **1回のリクエスト** で読ませ、各文のモーラ数（読みの拍の数）に合うように無音の位置で文ごとに切り分ける。
+    切り分けた文は Gemini でまとめて書き起こし、台本どおりか確認する（ずれていれば別の切り方を試す）。
+  - 1行は「。」「！」「？」で終わる文にする（「、」で終わる行は切れ目を見分けにくい）。
+  - 無料枠は **1モデルあたり1日10リクエスト**（太平洋時間0時にリセット）。上限に達すると次の TTS モデルに自動で切り替える。
+    生成した音声は `audio/cache/`（コミットしない）に保存され、台本と声が同じなら再実行しても API を呼ばない。
+  - 無料枠で送った台本と生成音声は、Google の製品改善に使われる（Gemini API 追加利用規約）。
+  - `--engine openjtalk` で Open JTalk（HTS Voice "Mei"、CC BY 3.0 のクレジット表記が必要）にも切り替えられる。
 - BGM: 同じスクリプト内で numpy / scipy から合成したオリジナル曲（120BPM・IV–V–iii–vi の王道進行）。
   外部の音源は使っていないので権利表記は不要。ナレーション中は自動で音量を下げる。
-- **クレジット表記が必要（CC BY 3.0）**: 投稿の説明文などに
-  `ナレーション音声: HTS Voice "Mei" (c) 2009-2013 Nagoya Institute of Technology (CC BY 3.0)` を入れる。
 
 ```bash
-pip install pyopenjtalk-plus numpy scipy
-python media/motion_pv/audio/liver_recruit_audio.py audio.wav
+pip install numpy scipy pyopenjtalk-plus   # pyopenjtalk-plus は読み（モーラ数）の計算に使う
+export GEMINI_API_KEY=...                  # Google AI Studio で発行したキー
+python media/motion_pv/audio/liver_recruit_audio.py audio.wav [--voice Zephyr]
 node media/motion_pv/render.js video.mp4 --page liver_recruit.html
 # 合成して SNS 向けの音量（-14 LUFS）にそろえる
 ffmpeg -i video.mp4 -i audio.wav -map 0:v -map 1:a -c:v copy \
