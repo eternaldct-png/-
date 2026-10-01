@@ -1,0 +1,75 @@
+<!--
+  eternaldct.net トップページ用「動画制作」の項目（カード型リンク）
+  使い方: トップページの「カスタムHTML」ブロック（またはカスタムHTMLウィジェット）に、このファイルの中身をまるごと貼り付ける。
+  リンク先は WordPress 側に作る固定ページ https://eternaldct.net/motion/ （スラッグを変えた場合は href も変える）
+  画像を使わない（CSSだけの）デザインなので、Render のスリープ中でもトップページの表示は遅くならない。
+-->
+<style>
+.edct-mcard {
+  position: relative; display: flex !important; align-items: center; gap: 28px;
+  overflow: hidden; margin: 2em 0; padding: 36px 40px; border-radius: 18px;
+  background: #0d0b14; color: #f4f2f8 !important; text-decoration: none !important;
+  box-shadow: 0 12px 32px rgba(124, 58, 237, 0.22);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.edct-mcard:hover { transform: translateY(-2px); box-shadow: 0 16px 40px rgba(217, 70, 239, 0.32); }
+.edct-mcard::before {
+  content: ""; position: absolute; inset: -40%; z-index: 0; opacity: 0.4; pointer-events: none;
+  background: radial-gradient(circle at 25% 35%, #7c3aed 0, transparent 36%),
+              radial-gradient(circle at 75% 65%, #ec4899 0, transparent 32%);
+  animation: edct-drift 14s ease-in-out infinite alternate;
+}
+@keyframes edct-drift { from { transform: translate(-4%, -3%) rotate(0deg); } to { transform: translate(4%, 3%) rotate(8deg); } }
+.edct-mcard > * { position: relative; z-index: 1; }
+.edct-mcard .edct-mcard__text { flex: 1 1 auto; min-width: 0; }
+.edct-mcard .edct-mcard__badge {
+  display: inline-block; margin-bottom: 12px; padding: 4px 14px; border-radius: 999px;
+  background: linear-gradient(135deg, #7c3aed, #d946ef, #ec4899);
+  color: #fff; font-size: 11px; font-weight: 800; letter-spacing: 0.2em;
+}
+.edct-mcard .edct-mcard__title { font-size: clamp(22px, 3.4vw, 30px); font-weight: 900; line-height: 1.4; color: #fff; }
+.edct-mcard .edct-mcard__lead { margin-top: 10px; font-size: 14px; line-height: 1.85; color: #c9c4d6; }
+.edct-mcard .edct-mcard__btn {
+  display: inline-block; margin-top: 18px; padding: 11px 24px; border-radius: 999px;
+  background: linear-gradient(135deg, #7c3aed, #d946ef, #ec4899);
+  color: #fff; font-size: 14px; font-weight: 800;
+  box-shadow: 0 6px 20px rgba(217, 70, 239, 0.35);
+}
+.edct-mcard .edct-mcard__visual { position: relative; flex: 0 0 220px; height: 170px; }
+.edct-mcard .edct-mcard__screen {
+  position: absolute; display: flex; align-items: center; justify-content: center;
+  border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+  animation: edct-float 5s ease-in-out infinite alternate;
+}
+.edct-mcard .edct-mcard__screen::after {
+  content: ""; width: 0; height: 0; margin-left: 4px;
+  border-style: solid; border-width: 9px 0 9px 15px;
+  border-color: transparent transparent transparent rgba(255, 255, 255, 0.9);
+}
+.edct-mcard .edct-mcard__screen--wide { left: 0; top: 40px; width: 150px; height: 84px; background: linear-gradient(135deg, #312e81, #7c3aed); }
+.edct-mcard .edct-mcard__screen--tall { right: 8px; top: 0; width: 76px; height: 136px; background: linear-gradient(160deg, #be185d, #d946ef); animation-delay: -1.6s; }
+.edct-mcard .edct-mcard__screen--square { left: 66px; top: 104px; width: 64px; height: 64px; background: linear-gradient(135deg, #7c3aed, #ec4899); animation-delay: -3.2s; }
+@keyframes edct-float { from { transform: translateY(-4px); } to { transform: translateY(5px); } }
+@media (max-width: 599px) {
+  .edct-mcard { flex-direction: column-reverse; align-items: stretch; gap: 18px; padding: 26px 20px; }
+  .edct-mcard .edct-mcard__visual { flex-basis: auto; width: 220px; height: 170px; margin: 0 auto; }
+  .edct-mcard .edct-mcard__btn { display: block; text-align: center; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .edct-mcard::before, .edct-mcard .edct-mcard__screen { animation: none; }
+}
+</style>
+<a class="edct-mcard" href="https://eternaldct.net/motion/">
+  <div class="edct-mcard__text">
+    <span class="edct-mcard__badge">MOTION WORKS</span>
+    <div class="edct-mcard__title">こんな動画、つくれます。</div>
+    <div class="edct-mcard__lead">配信・音楽・SNS広告・店舗や企業のPRまで。<br>ETERNALd.c.t が制作するモーション動画の作例集を公開中です。</div>
+    <span class="edct-mcard__btn">作例を見る →</span>
+  </div>
+  <div class="edct-mcard__visual" aria-hidden="true">
+    <span class="edct-mcard__screen edct-mcard__screen--wide"></span>
+    <span class="edct-mcard__screen edct-mcard__screen--tall"></span>
+    <span class="edct-mcard__screen edct-mcard__screen--square"></span>
+  </div>
+</a>

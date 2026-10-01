@@ -141,6 +141,11 @@ git push -u origin claude/homepage-payment-spreadsheet-DD1ly
 - 店名・価格・日付・名前（「LIVER NAME」「20XX」「〇〇ライブホール」など）はサンプル表記。インフォグラフィックの数値には「※数値はイメージです」を表示している。
 - `tests/test_motion_page.py` が、YAML に書いた動画・ポスターの実在と 3MB 以下であることをチェックする。
 
+### ホームページ（eternaldct.net）への掲載
+- WordPress の固定ページ `https://eternaldct.net/motion/`（「動画制作」）に iframe で埋め込み、トップページにカード型の入口を置く。
+- 貼り付け用のHTML・アイキャッチ画像・手順は `docs/wordpress_motion/`（WordPress 側の作業は管理画面で手動）。
+- 埋め込みURLは `?preview=1` なしの `/motion`（`?preview=1` だと管理用の「プレビュー表示中」の帯がお客さんにも見えるため）。
+
 ---
 
 ## /stickers ページ（LINEスタンプメーカー）

@@ -35,3 +35,8 @@ node render.mjs all video                    # 全作例を書き出し
 - 1本 3MB を超えたら警告が出ます。`CRF=28 node render.mjs ...` のように CRF を上げると軽くなります。
 - 店名・価格・日付・名前（「LIVER NAME」「20XX」「〇〇ライブホール」など）はサンプル表記です。
   実案件用に変えるときは各 `scenes/*.js` の文字列を書き換えてください。
+
+## ホームページ用アイキャッチ
+```bash
+python3 make_eyecatch.py   # → docs/wordpress_motion/eyecatch.jpg（1200×630・作例ポスター3枚を合成）
+```
