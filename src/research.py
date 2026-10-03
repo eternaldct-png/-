@@ -1,16 +1,116 @@
 """
 トレンドリサーチモジュール
-DuckDuckGo検索を使って最新の話題を収集する
+XAI_API_KEY があれば Grok の X検索で「いまXで話題のこと」を集め、
+なければ（または失敗したら）DuckDuckGo検索で最新の話題を収集する
+
+環境変数:
+  RESEARCH_PROVIDER … auto（既定: Grokが使えればGrok）/ grok / ddg（DuckDuckGoのみ）
 """
+import json
+import os
 import random
-from datetime import datetime
+import re
+import time
+from datetime import datetime, timedelta
 from typing import Optional
 from ddgs import DDGS
+
+# Grok の検索結果を使い回す時間（同じプロセス内。Webアプリの連続生成・再生成でAPI代を節約）
+_GROK_CACHE_TTL = 30 * 60
+_grok_cache: dict = {}
+
+
+def get_x_trending_topics(interests: list[str], max_topics: int = 5, days: int = 3) -> list[dict]:
+    """
+    Grok の X検索で、興味分野について直近のXで話題になっていることを集める
+
+    Returns:
+        トピックのリスト（topic, title, snippet, url）。get_trending_topics と同じ形
+    """
+    import grok_client
+
+    key = tuple(interests)
+    cached = _grok_cache.get(key)
+    if cached and time.monotonic() - cached[0] < _GROK_CACHE_TTL:
+        return cached[1]
+
+    selected = random.sample(interests, min(2, len(interests)))
+    today = datetime.now().date()
+    themes = "\n".join(f"- {t}" for t in selected)
+    system = (
+        "あなたは日本のSNSトレンドリサーチャーです。x_search ツールで日本語のX（旧Twitter）の投稿を検索し、"
+        "実際に話題になっていることだけを報告します。検索で確認できなかったことは書きません。"
+    )
+    user = f"""次のテーマについて、直近{days}日間に日本のXで話題になっている具体的なトピックを最大{max_topics}件挙げてください。
+
+【テーマ】
+{themes}
+
+【除外】
+- 特定の個人への誹謗中傷・炎上中の個人の話題
+- 政治・宗教・事件事故など、配信者の日常投稿で触れるには重い話題
+
+【出力】JSON配列のみ（説明文・コードブロック不要）:
+[{{"topic": "上のテーマのどれか（そのまま）", "title": "話題の見出し（30字以内）", "snippet": "何が話題か・どんな反応が多いか（120字以内）", "url": "代表的なポストのURL"}}]
+"""
+    text, citations = grok_client.chat(
+        system,
+        user,
+        model=os.environ.get("GROK_RESEARCH_MODEL", "").strip() or None,
+        tools=[grok_client.x_search_tool(
+            from_date=(today - timedelta(days=days)).isoformat(),
+            to_date=today.isoformat(),
+        )],
+        max_turns=3,
+        include=["no_inline_citations"],
+        timeout=45,
+    )
+    topics = _parse_grok_topics(text, selected, citations)[:max_topics]
+    if not topics:
+        raise ValueError(f"Grok の検索結果を読み取れませんでした: {text[:200]}")
+    _grok_cache[key] = (time.monotonic(), topics)
+    return topics
+
+
+def _find_json_list(text: str) -> list:
+    """文中の最初の JSON 配列（[{...}, ...]）を取り出す。[1] のような引用番号は読み飛ばす"""
+    decoder = json.JSONDecoder()
+    for m in re.finditer(r"\[", text):
+        try:
+            items, _ = decoder.raw_decode(text, m.start())
+        except json.JSONDecodeError:
+            continue
+        if isinstance(items, list) and any(isinstance(x, dict) for x in items):
+            return items
+    return []
+
+
+def _parse_grok_topics(text: str, selected: list[str], citations: list[str]) -> list[dict]:
+    topics = []
+    for i, item in enumerate(_find_json_list(text)):
+        if not isinstance(item, dict):
+            continue
+        title = str(item.get("title", "")).strip()
+        snippet = str(item.get("snippet", "")).strip()
+        if not (title or snippet):
+            continue
+        url = str(item.get("url", "")).strip()
+        if not url.startswith("https://") and i < len(citations):
+            url = citations[i]
+        topics.append({
+            "topic": str(item.get("topic", "")).strip() or selected[0],
+            "title": title,
+            "snippet": snippet or title,
+            "url": url,
+            "source": "x",
+        })
+    return topics
 
 
 def get_trending_topics(interests: list[str], max_results: int = 3) -> list[dict]:
     """
     ペルソナの興味分野からトレンドトピックを取得する
+    Grok（X検索）が使えればそれを優先し、失敗したら DuckDuckGo に切り替える
 
     Args:
         interests: ペルソナの興味リスト
@@ -19,6 +119,22 @@ def get_trending_topics(interests: list[str], max_results: int = 3) -> list[dict
     Returns:
         トピックのリスト（title, snippet, url）
     """
+    import grok_client
+
+    provider = os.environ.get("RESEARCH_PROVIDER", "auto").strip().lower()
+    if interests and provider != "ddg" and grok_client.is_configured():
+        try:
+            topics = get_x_trending_topics(interests)
+            print(f"[research] Grok の X検索で {len(topics)} 件の話題を取得")
+            return topics
+        except Exception as e:
+            print(f"[research] Grok の X検索に失敗。DuckDuckGo に切り替えます: {e}")
+
+    return _get_ddg_topics(interests, max_results)
+
+
+def _get_ddg_topics(interests: list[str], max_results: int = 3) -> list[dict]:
+    """DuckDuckGo 検索で興味分野の最新情報を集める"""
     results = []
 
     # 興味リストからランダムに1〜2つ選んで検索

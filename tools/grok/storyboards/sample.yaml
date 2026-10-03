@@ -1,0 +1,47 @@
+# 絵コンテのサンプル（ライバー募集の約1分・縦型）
+#   見積もりだけ:  python tools/grok/video.py render tools/grok/storyboards/sample.yaml --dry-run
+#   生成して結合:  python tools/grok/video.py render tools/grok/storyboards/sample.yaml
+# 書き方の説明: tools/grok/README.md
+
+title: "ライバー募集PR（サンプル）"
+aspect_ratio: "9:16"        # 必ず "" で囲む。16:9 / 9:16 / 1:1 / 4:3 / 3:4 / 3:2 / 2:3
+resolution: "720p"          # 480p（安い・速い）/ 720p / 1080p（grok-imagine-video-1.5 のみ）
+style: "Anime-inspired cinematic look, neon purple and pink palette, soft bloom lighting, smooth camera motion, no text on screen"
+transition: "fade"          # fade（0.5秒で重ねる）/ none（カットでつなぐ）
+transition_seconds: 0.5
+audio: "keep"               # keep（クリップの音を使う）/ mute（消す。BGMだけにしたいとき）
+bgm:                        # 例: "bgm/recruit.mp3"（この YAML からの相対パス）。空なら BGM なし
+bgm_volume: 0.3
+
+# 所属キャラを全シーンに出したいときは、参考画像を指定する（プロンプトで <IMAGE_1> と書いて参照）
+# references:
+#   - "../../motion_render/chars/c1.webp"
+
+scenes:
+  - note: "夜の街を見下ろす部屋。スマホの配信画面が光る"
+    prompt: "A cozy bedroom at night overlooking a glowing city, a smartphone on a tripod lights up with a live streaming screen, slow push-in"
+    duration: 8
+  - note: "マイクの前で歌い出す若い配信者"
+    prompt: "A young streamer with headphones starts singing into a condenser microphone, warm smile, ring light reflections, medium close-up"
+    duration: 8
+    continue: true           # 前のシーンの最後のコマから続ける
+  - note: "画面にハートやコメントが舞う"
+    prompt: "Floating hearts and abstract comment bubbles rise around the singer like particles, joyful mood, camera slowly orbits"
+    duration: 7
+    continue: true
+  - note: "いろいろな場所で配信する人たち（主婦・会社員・学生）"
+    prompt: "Quick montage feeling: a homemaker streaming from a bright kitchen, an office worker streaming after work, a student streaming at a desk, each smiling at their phone"
+    duration: 8
+  - note: "チームで集まって笑い合う"
+    prompt: "A small team of diverse creators gathers in a stylish studio, laughing and giving high fives, golden hour light"
+    duration: 7
+  - note: "ステージのスポットライトに立つ"
+    prompt: "A performer steps into a spotlight on a small stage, confetti falls slowly, the crowd silhouette cheers, dramatic backlight"
+    duration: 8
+  - note: "スマホをこちらに差し出す手（「次はあなた」）"
+    prompt: "A hand holds out a smartphone toward the camera, the screen glows with a warm welcoming light, shallow depth of field"
+    duration: 8
+  - note: "夜明けの空へカメラが上がる（締め）"
+    prompt: "Camera tilts up from the glowing phone to a dawn sky full of soft light, hopeful and calm ending"
+    duration: 7
+    continue: true

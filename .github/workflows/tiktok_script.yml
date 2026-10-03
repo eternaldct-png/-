@@ -36,6 +36,8 @@ jobs:
         id: generate
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}          # Grok（X検索・投稿文）。未設定なら従来どおり
+          POST_LLM_PROVIDER: ${{ vars.POST_LLM_PROVIDER }}  # claude（既定）/ grok
         run: |
           if [ "${{ inputs.dry_run }}" = "true" ]; then
             python src/main.py --platform tiktok --dry-run

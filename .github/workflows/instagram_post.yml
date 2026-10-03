@@ -40,6 +40,8 @@ jobs:
         id: generate
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}          # Grok（X検索・投稿文）。未設定なら従来どおり
+          POST_LLM_PROVIDER: ${{ vars.POST_LLM_PROVIDER }}  # claude（既定）/ grok
         run: |
           python src/main.py --platform instagram --generate
 
@@ -92,6 +94,8 @@ jobs:
       - name: Refresh and post to Instagram
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}          # Grok（X検索・投稿文）。未設定なら従来どおり
+          POST_LLM_PROVIDER: ${{ vars.POST_LLM_PROVIDER }}  # claude（既定）/ grok
           INSTAGRAM_USER_ID: ${{ secrets.INSTAGRAM_USER_ID }}
           FACEBOOK_APP_ID: ${{ secrets.FACEBOOK_APP_ID }}
           FACEBOOK_APP_SECRET: ${{ secrets.FACEBOOK_APP_SECRET }}

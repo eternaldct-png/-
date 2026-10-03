@@ -92,6 +92,8 @@ git push -u origin claude/homepage-payment-spreadsheet-DD1ly
 | `WEB_PASSWORD` | `/goods/admin` ログインパスワード |
 | `FLASK_SECRET_KEY` | セッション用秘密鍵 |
 | `ANTHROPIC_API_KEY` | 投稿文生成 |
+| `XAI_API_KEY` | Grok（X検索でのネタ探し・投稿文の「Grok」「比較」）。未設定なら従来どおり |
+| `POST_LLM_PROVIDER` | 投稿文を書くAI（`claude` 既定 / `grok`）。失敗時はもう片方に切り替え |
 
 ---
 
@@ -148,6 +150,25 @@ git push -u origin claude/homepage-payment-spreadsheet-DD1ly
 - 作例を追加・変更したら、このリポジトリで `python tools/motion_render/export_homepage.py <eternaldct-new-site のパス>` を実行し、
   サイト側で管理ツールからサーバーに反映する（`motion.html` の `MOTION:FILTERS` / `MOTION:CARDS` の目印の間だけ書き換わる）。
 - トップの紹介枠（`index.html` の「MOTION WORKS preview」）に並べる4本は手で選んでいる。
+
+---
+
+## Grok（xAI）連携
+
+詳しい使い方・絵コンテの書き方・費用の目安は `tools/grok/README.md`。API呼び出しは `src/grok_client.py` に集約（requests のみ）。
+**`XAI_API_KEY` が未設定なら Grok は一切使われず、従来どおり Claude + DuckDuckGo で動く。**
+
+- **ネタ探し**（`src/research.py`）: Grok の X検索（`x_search` ツール）で直近3日の話題を集める。失敗時は DuckDuckGo。
+  同じプロセス内では30分キャッシュ。`RESEARCH_PROVIDER=ddg` で無効化
+- **投稿文**（`src/generate.py` の `call_llm`）: `POST_LLM_PROVIDER`（GitHub は Variables、Render は環境変数）で
+  Claude / Grok を切り替え。投稿ジェネレーターの「書くAI」で 自動 / Claude / Grok / 比較 を選べる（比較は最大3組）
+- **画像**: `python tools/grok/image.py "プロンプト" --aspect 4:5 [--ref キャラ画像]` または Actions「Grok Image」
+- **動画（1〜2分）**: 絵コンテ YAML（`tools/grok/storyboards/`）→ `python tools/grok/video.py plan / render / stitch`、
+  または Actions「Grok Video」（mode=plan で絵コンテをコミット → 修正 → mode=render。完成動画は Artifacts）。
+  生成物は `posts/videos/`・`posts/grok_images/`（.gitignore 済み。コミットしない）
+- GitHub Secrets に `XAI_API_KEY` を入れると、自動投稿系のワークフロー（auto_post / kazuto_post / instagram_post /
+  note_generate / tiktok_script / generate_preview）にも渡る
+- テスト: `tests/test_grok.py`（API はモック。動画の結合は実際に ffmpeg を動かして確認）
 
 ---
 

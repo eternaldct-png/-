@@ -1,0 +1,56 @@
+name: Grok Image
+
+# Grok で画像を作る（Codex / ChatGPT で作れないときの予備。手動実行のみ）
+# 完成画像は実行結果ページの「Artifacts」からダウンロード
+on:
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: 'どんな画像か（日本語OK）'
+        required: true
+        type: string
+      aspect:
+        description: '縦横比（Instagram縦長は 4:5）'
+        required: false
+        default: '1:1'
+        type: choice
+        options: ['1:1', '4:5', '3:4', '2:3', '9:16', '16:9', '4:3', '3:2']
+      count:
+        description: '枚数'
+        required: false
+        default: '1'
+        type: choice
+        options: ['1', '2', '3', '4']
+      pro:
+        description: '高品質モデルを使う（単価が上がる）'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+      - name: Generate image
+        env:
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+          PROMPT: ${{ inputs.prompt }}
+          ASPECT: ${{ inputs.aspect }}
+          COUNT: ${{ inputs.count }}
+          PRO: ${{ inputs.pro }}
+        run: |
+          ARGS=(--aspect "$ASPECT" -n "$COUNT")
+          if [ "$PRO" = "true" ]; then ARGS+=(--pro); fi
+          python tools/grok/image.py "$PROMPT" "${ARGS[@]}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: grok-image
+          path: posts/grok_images/
+          retention-days: 14

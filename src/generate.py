@@ -1,7 +1,10 @@
 """
 コンテンツ生成モジュール
-Claude API を使ってペルソナに合ったコンテンツを生成する
+Claude API または Grok（xAI API）を使ってペルソナに合ったコンテンツを生成する
 プラットフォームごとに生成形式を切り替える（X / Instagram / note / TikTok）
+
+環境変数:
+  POST_LLM_PROVIDER … claude（既定）/ grok。片方が失敗したらもう片方で生成する
 """
 import os
 import json
@@ -12,6 +15,9 @@ from zoneinfo import ZoneInfo
 from typing import Optional
 
 JST = ZoneInfo("Asia/Tokyo")
+
+PROVIDERS = ("claude", "grok")
+CLAUDE_MODEL = "claude-opus-4-6"
 
 
 def get_day_context(persona: dict, target_dt: Optional[datetime] = None) -> dict:
@@ -288,6 +294,80 @@ def _safe_parse_json(raw: str, content_format: str) -> dict | None:
     return None
 
 
+# ── AI の呼び出し（Claude / Grok） ─────────────────────────────
+
+def _available_providers() -> list[str]:
+    import grok_client
+    available = []
+    if os.environ.get("ANTHROPIC_API_KEY", "").strip():
+        available.append("claude")
+    if grok_client.is_configured():
+        available.append("grok")
+    return available
+
+
+def _call_claude(system_prompt: str, user_prompt: str, max_tokens: int) -> str:
+    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    message = client.messages.create(
+        model=CLAUDE_MODEL,
+        max_tokens=max_tokens,
+        system=system_prompt,
+        messages=[{"role": "user", "content": user_prompt}],
+    )
+    return message.content[0].text.strip()
+
+
+def _call_grok(system_prompt: str, user_prompt: str, max_tokens: int) -> str:
+    import grok_client
+    # Grok は思考（reasoning）にもトークンを使うため、上限に余裕を持たせる。
+    # X の文字数は生成後の後処理で切り詰める
+    text, _ = grok_client.chat(
+        system_prompt,
+        user_prompt,
+        max_output_tokens=max(max_tokens * 4, 4000),
+        timeout=90,
+    )
+    return text.strip()
+
+
+def call_llm(system_prompt: str, user_prompt: str, max_tokens: int, provider: Optional[str] = None) -> tuple[str, str]:
+    """
+    投稿文生成AIを呼び出す
+
+    Args:
+        provider: "claude" / "grok" を指定するとそのAIだけを使う（比較用。失敗してもう片方には切り替えない）。
+                  省略時は POST_LLM_PROVIDER（既定 claude）を優先し、失敗したらもう片方で生成する
+
+    Returns:
+        (生成テキスト, 実際に使ったAI)
+    """
+    if provider:
+        if provider not in PROVIDERS:
+            raise ValueError(f"provider は {PROVIDERS} のどれか: {provider}")
+        order = [provider]
+    else:
+        primary = os.environ.get("POST_LLM_PROVIDER", "claude").strip().lower()
+        if primary not in PROVIDERS:
+            primary = "claude"
+        order = [primary] + [p for p in PROVIDERS if p != primary]
+        available = _available_providers()
+        order = [p for p in order if p in available] or order[:1]
+
+    calls = {"claude": _call_claude, "grok": _call_grok}
+    last_error = None
+    for name in order:
+        try:
+            raw = calls[name](system_prompt, user_prompt, max_tokens)
+            if raw:
+                return raw, name
+            last_error = RuntimeError(f"{name} の応答が空でした")
+        except Exception as e:
+            last_error = e
+        if name != order[-1]:
+            print(f"[generate] {name} での生成に失敗。次のAIに切り替えます: {last_error}")
+    raise last_error
+
+
 # ── メイン生成関数 ─────────────────────────────────────────────
 
 def generate_post(
@@ -297,9 +377,11 @@ def generate_post(
     platform: str = "x",
     constraints: dict = None,
     recent_posts: list[str] = None,
+    provider: Optional[str] = None,
+    meta: Optional[dict] = None,
 ) -> str | dict:
     """
-    Claude API を使ってコンテンツを生成する
+    Claude / Grok を使ってコンテンツを生成する
 
     Args:
         persona: ペルソナ設定
@@ -308,6 +390,8 @@ def generate_post(
         platform: 投稿先プラットフォーム
         constraints: プラットフォーム制約（get_constraints()の戻り値）
         recent_posts: 直近の投稿テキスト（重複回避用）
+        provider: "claude" / "grok" で使うAIを固定（省略時は POST_LLM_PROVIDER + 自動切り替え）
+        meta: dict を渡すと meta["provider"] に実際に使ったAIを書き込む
 
     Returns:
         X: 投稿文字列
@@ -315,7 +399,6 @@ def generate_post(
         note: {"title": ..., "body": ..., "tags": [...]}
         TikTok: {"hook": ..., "body": ..., "cta": ..., "on_screen_text": [...], "hashtags": [...], ...}
     """
-    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     constraints = constraints or {}
     content_format = constraints.get("content_format", "text")
     max_tokens = constraints.get("max_tokens_hint", 300)
@@ -338,10 +421,12 @@ def generate_post(
     topic_text = ""
     if topics:
         topic = random.choice(topics)
+        source = "Xで話題" if topic.get("source") == "x" else "最新トピック"
+        title = topic.get("title", "")
         topic_text = f"""
-【参考にできる最新トピック（使っても使わなくてもOK）】
+【参考にできる{source}（使っても使わなくてもOK）】
 テーマ: {topic.get('topic', '')}
-内容: {topic.get('snippet', '')[:200]}
+内容: {title + '／' if title else ''}{topic.get('snippet', '')[:200]}
 """
 
     # 曜日ムード
@@ -401,14 +486,10 @@ kazutoペルソナとして、Instagram投稿のキャプションを書いて�
 
     system_prompt = build_system_prompt(persona, constraints, platform)
 
-    message = client.messages.create(
-        model="claude-opus-4-6",
-        max_tokens=max_tokens,
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_prompt}],
-    )
-
-    raw = message.content[0].text.strip()
+    raw, used = call_llm(system_prompt, user_prompt, max_tokens, provider=provider)
+    print(f"[generate] {used} で生成しました")
+    if meta is not None:
+        meta["provider"] = used
 
     # JSON形式が期待されるプラットフォームはパースして返す
     if content_format in ("markdown", "video_script", "visual_caption"):

@@ -30,3 +30,7 @@ posts/media/*.jpg
 # モーション動画レンダラーの作業ファイル（フォントは fetch_fonts.py で取得）
 tools/motion_render/fonts/
 tools/motion_render/review/
+
+# Grok で生成した動画・画像（容量が大きいのでコミットしない）
+posts/videos/
+posts/grok_images/

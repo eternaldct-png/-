@@ -31,6 +31,10 @@ def api_generate():
     count = max(1, min(5, int(data.get("count", 1))))
     theme = data.get("theme", "").strip()
     slot = data.get("slot", "")  # "朝" / "昼" / "夕方" / "夜" / "深夜"
+    # "" = 自動（POST_LLM_PROVIDER + 失敗時はもう片方）/ "claude" / "grok" / "both" = 両方で書いて比べる
+    provider_choice = str(data.get("provider", "") or "").strip().lower()
+    if provider_choice not in ("", "claude", "grok", "both"):
+        provider_choice = ""
 
     try:
         persona_path = Path("persona/kazuto_config.yaml")
@@ -69,22 +73,55 @@ def api_generate():
             "content_format": "text",
         }
 
-        posts = []
-        recent = []
-        for _ in range(count):
+        def generate_one(provider, recent_posts):
+            meta = {}
             text = generate_post(
                 persona, research,
                 platform="x",
                 constraints=constraints,
-                recent_posts=recent,
+                recent_posts=recent_posts,
+                provider=provider,
+                meta=meta,
             )
-            if isinstance(text, str) and text.strip():
-                posts.append(text.strip())
-                recent.append(text.strip())
+            text = text.strip() if isinstance(text, str) else ""
+            return text, meta.get("provider", provider or "")
+
+        posts = []
+        providers = []
+        errors = []
+        recent = []
+        if provider_choice == "both":
+            # Claude と Grok に同じ条件で同時に書かせる（Renderのタイムアウト対策で最大3組）
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                for _ in range(min(count, 3)):
+                    futures = [(name, pool.submit(generate_one, name, list(recent))) for name in ("claude", "grok")]
+                    for name, future in futures:
+                        try:
+                            text, used = future.result()
+                        except Exception as e:
+                            errors.append(f"{name}: {e}")
+                            continue
+                        if text:
+                            posts.append(text)
+                            providers.append(used)
+                            recent.append(text)
+        else:
+            for _ in range(count):
+                try:
+                    text, used = generate_one(provider_choice or None, recent)
+                except Exception as e:
+                    errors.append(str(e))
+                    break
+                if text:
+                    posts.append(text)
+                    providers.append(used)
+                    recent.append(text)
 
         if posts:
-            return jsonify({"ok": True, "posts": posts})
-        return jsonify({"error": "生成に失敗しました。もう一度お試しください。"}), 500
+            return jsonify({"ok": True, "posts": posts, "providers": providers, "errors": sorted(set(errors))})
+        detail = " / ".join(sorted(set(errors)))
+        return jsonify({"error": f"生成に失敗しました（{detail}）" if detail else "生成に失敗しました。もう一度お試しください。"}), 500
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -215,6 +252,30 @@ body {
 .count-btn.active {
   background: var(--accent-glow);
   border-color: var(--accent);
+  color: var(--accent-light);
+}
+
+/* ── AIセレクタ ── */
+.ai-row { display: flex; gap: 8px; }
+.ai-btn {
+  flex: 1; padding: 10px 4px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  color: var(--muted); font-size: 13px; font-weight: 700;
+  cursor: pointer; transition: all 0.15s;
+}
+.ai-btn.active {
+  background: var(--accent-glow);
+  border-color: var(--accent);
+  color: var(--accent-light);
+}
+.ai-badge {
+  margin-left: 6px;
+  font-size: 10px; font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--surface2);
   color: var(--accent-light);
 }
 
@@ -446,6 +507,15 @@ body {
     <button class="count-btn" data-count="5" onclick="selectCount(this)">5件</button>
   </div>
 
+  <!-- AI -->
+  <div class="section-label">書くAI</div>
+  <div class="ai-row" style="margin-bottom:20px;">
+    <button class="ai-btn active" data-provider="" onclick="selectProvider(this)">自動</button>
+    <button class="ai-btn" data-provider="claude" onclick="selectProvider(this)">Claude</button>
+    <button class="ai-btn" data-provider="grok" onclick="selectProvider(this)">Grok</button>
+    <button class="ai-btn" data-provider="both" onclick="selectProvider(this)">比較</button>
+  </div>
+
   <!-- 生成ボタン -->
   <button class="gen-btn" id="genBtn" onclick="generate()">
     <span class="spinner"></span>
@@ -470,6 +540,8 @@ let selectedSlot = '';
 let selectedCount = 1;
 let selectedTheme = '';
 let selectedMaxLength = 140;
+let selectedProvider = '';
+const AI_LABELS = { claude: 'Claude', grok: 'Grok' };
 
 // 時間帯選択
 function selectSlot(btn) {
@@ -507,6 +579,13 @@ function selectCount(btn) {
   selectedCount = parseInt(btn.dataset.count);
 }
 
+// AI選択（比較 = Claude と Grok で1件ずつ書いて並べる。最大3組）
+function selectProvider(btn) {
+  document.querySelectorAll('.ai-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  selectedProvider = btn.dataset.provider;
+}
+
 // 生成
 async function generate() {
   const btn = document.getElementById('genBtn');
@@ -520,12 +599,13 @@ async function generate() {
     const res = await fetch('/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ count: selectedCount, slot: selectedSlot, theme, max_length: selectedMaxLength }),
+      body: JSON.stringify({ count: selectedCount, slot: selectedSlot, theme, max_length: selectedMaxLength, provider: selectedProvider }),
     });
     const data = await res.json();
 
     if (data.ok && data.posts && data.posts.length) {
-      renderPosts(data.posts, selectedMaxLength);
+      renderPosts(data.posts, selectedMaxLength, data.providers);
+      if (data.errors && data.errors.length) toast('一部失敗: ' + data.errors.join(' / '), 'err');
     } else {
       toast(data.error || '生成に失敗しました', 'err');
     }
@@ -546,17 +626,20 @@ async function regenerateOne(idx) {
   const regenBtn = card.querySelector('.regen-btn');
   regenBtn.textContent = '⌛';
   regenBtn.disabled = true;
+  // 比較モードのカードは、そのカードを書いたAIで書き直す
+  const provider = selectedProvider === 'both' ? (card.dataset.provider || '') : selectedProvider;
 
   try {
     const res = await fetch('/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ count: 1, slot: selectedSlot, theme, max_length: selectedMaxLength }),
+      body: JSON.stringify({ count: 1, slot: selectedSlot, theme, max_length: selectedMaxLength, provider }),
     });
     const data = await res.json();
     if (data.ok && data.posts && data.posts[0]) {
       const ta = card.querySelector('.post-text');
       ta.value = data.posts[0];
+      setAiBadge(card, data.providers && data.providers[0]);
       updateCharBadge(card);
       toast('再生成しました ✓', 'ok');
     } else {
@@ -570,9 +653,18 @@ async function regenerateOne(idx) {
   }
 }
 
+function setAiBadge(card, provider) {
+  const badge = card.querySelector('.ai-badge');
+  if (!badge || !AI_LABELS[provider]) return;
+  card.dataset.provider = provider;
+  badge.textContent = AI_LABELS[provider];
+  badge.style.display = '';
+}
+
 // 結果表示
-function renderPosts(posts, maxLen) {
+function renderPosts(posts, maxLen, providers) {
   maxLen = maxLen || selectedMaxLength;
+  providers = providers || [];
   const el = document.getElementById('results');
   el.innerHTML = '';
   posts.forEach((text, i) => {
@@ -581,7 +673,7 @@ function renderPosts(posts, maxLen) {
     card.dataset.maxlen = maxLen;
     card.innerHTML = `
       <div class="post-card-header">
-        <span class="post-num">投稿 ${i + 1}</span>
+        <span class="post-num">投稿 ${i + 1}<span class="ai-badge" style="display:none"></span></span>
         <span class="char-badge" id="badge-${i}">${text.length} / ${maxLen}文字</span>
       </div>
       <textarea class="post-text" id="text-${i}" oninput="onTextInput(this, ${i})">${escHtml(text)}</textarea>
@@ -591,6 +683,7 @@ function renderPosts(posts, maxLen) {
       </div>
     `;
     el.appendChild(card);
+    setAiBadge(card, providers[i]);
     updateCharBadge(card);
     autoResize(card.querySelector('.post-text'));
   });

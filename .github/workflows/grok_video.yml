@@ -1,0 +1,119 @@
+name: Grok Video
+
+# Grok で動画クリップを作ってつなぎ、1〜2分の動画にする（手動実行のみ）
+#   1. mode=plan   … テーマから絵コンテを作って tools/grok/storyboards/<名前>.yaml にコミット（数円程度）
+#   2. 絵コンテを GitHub 上で確認・修正
+#   3. mode=render … 絵コンテから動画を生成（1分で数百〜千円程度。上限は max_seconds）
+#      → 完成動画は実行結果ページの「Artifacts」からダウンロード
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'plan = 絵コンテを作る / render = 絵コンテから動画を作る（API代がかかる）'
+        required: true
+        default: 'plan'
+        type: choice
+        options: [plan, render]
+      theme:
+        description: '[plan] 動画のテーマ（例: ライバー募集の1分PR動画）'
+        required: false
+        type: string
+      name:
+        description: '[plan] 絵コンテの名前（半角英数字と - _）'
+        required: false
+        default: 'draft'
+        type: string
+      seconds:
+        description: '[plan] 動画の長さ（秒）'
+        required: false
+        default: '60'
+        type: string
+      aspect:
+        description: '[plan] 縦横比'
+        required: false
+        default: '9:16'
+        type: choice
+        options: ['9:16', '16:9', '1:1', '4:3', '3:4']
+      storyboard:
+        description: '[render] 絵コンテのパス（例: tools/grok/storyboards/sample.yaml）'
+        required: false
+        type: string
+      max_seconds:
+        description: '[render] 新しく生成する秒数の上限（超えたら中止）'
+        required: false
+        default: '150'
+        type: string
+
+jobs:
+  plan:
+    if: ${{ inputs.mode == 'plan' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+      - name: Make storyboard
+        env:
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          THEME: ${{ inputs.theme }}
+          NAME: ${{ inputs.name }}
+          SECONDS_INPUT: ${{ inputs.seconds }}
+          ASPECT: ${{ inputs.aspect }}
+        run: |
+          if [ -z "$THEME" ]; then echo "theme を入力してください"; exit 1; fi
+          if ! [[ "$NAME" =~ ^[A-Za-z0-9_-]+$ ]]; then echo "name は半角英数字と - _ のみ"; exit 1; fi
+          if ! [[ "$SECONDS_INPUT" =~ ^[0-9]+$ ]]; then echo "seconds は数字で"; exit 1; fi
+          OUT="tools/grok/storyboards/$NAME.yaml"
+          if [ -e "$OUT" ]; then OUT="tools/grok/storyboards/${NAME}-$(date +%Y%m%d%H%M).yaml"; fi
+          python tools/grok/video.py plan "$THEME" --seconds "$SECONDS_INPUT" --aspect "$ASPECT" -o "$OUT"
+          echo "STORYBOARD=$OUT" >> "$GITHUB_ENV"
+      - name: Commit storyboard
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add "$STORYBOARD"
+          git commit -m "chore: Grok動画の絵コンテを作成 ($STORYBOARD) [skip ci]"
+          git push
+          echo "### 絵コンテを作成しました: \`$STORYBOARD\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "確認・修正したら mode=render、storyboard=\`$STORYBOARD\` で実行してください" >> "$GITHUB_STEP_SUMMARY"
+
+  render:
+    if: ${{ inputs.mode == 'render' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - run: pip install -r requirements.txt
+      - name: Install ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - name: Generate and stitch clips
+        env:
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+          STORYBOARD: ${{ inputs.storyboard }}
+          MAX_SECONDS: ${{ inputs.max_seconds }}
+        run: |
+          if [ -z "$STORYBOARD" ]; then echo "storyboard を入力してください"; exit 1; fi
+          if ! [[ "$MAX_SECONDS" =~ ^[0-9]+$ ]]; then echo "max_seconds は数字で"; exit 1; fi
+          python tools/grok/video.py render "$STORYBOARD" --yes --max-seconds "$MAX_SECONDS"
+      - name: Upload video
+        # 途中で失敗しても、できたクリップはダウンロードできるようにする
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: grok-video
+          path: |
+            posts/videos/**/*.mp4
+            !posts/videos/**/normalized/**
+          if-no-files-found: ignore
+          retention-days: 14
