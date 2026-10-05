@@ -47,6 +47,14 @@ class WakuConfigTest(unittest.TestCase):
         self.assertIn(100, self.config["coin_presets"])
         self.assertIn(self.config["default_target"], self.tiers)
 
+    def test_uta_oshi_starts_at_1k_but_lower_tiers_stay_for_each_jun(self):
+        # 歌推しは月間1Kから。旬ごとの推しPt（0.3K など）の計算には下の段階も使う
+        self.assertEqual(self.config["default_target"], "1K")
+        self.assertEqual(self.config["targets"][0], "1K")
+        self.assertEqual(len(self.config["targets"]), 49 - 1 + 1 + 51)
+        self.assertIn("0.3K", self.tiers)
+        self.assertNotIn("0.7K", self.config["targets"])
+
 
 class WakuPageTest(unittest.TestCase):
     def setUp(self):

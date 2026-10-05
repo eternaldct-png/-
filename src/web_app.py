@@ -4606,7 +4606,7 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
 .badge { display: inline-block; font-size: .72rem; font-weight: 800; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
 .badge.ok { background: var(--ok-bg); color: var(--ok); }
 .badge.ng { background: var(--ng-bg); color: var(--ng); }
-.badge.none { background: var(--surface2); color: var(--muted); }
+.badge.none { background: var(--line); color: var(--accent-3); }
 .badge.warn { background: #2a1f05; color: var(--warn); }
 .patterns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 @media (max-width: 640px) { .patterns { grid-template-columns: 1fr; } }
@@ -4617,21 +4617,30 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
 .prow { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
 .prow span { color: var(--muted); }
 .c0 { color: var(--pa); } .c1 { color: var(--pb); } .c2 { color: var(--pc); }
+.target-card summary { list-style: none; cursor: pointer; margin-bottom: 0; }
+.target-card summary::-webkit-details-marker { display: none; }
+.target-card[open] summary { margin-bottom: 10px; }
 .partner-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
 .partner { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 12px; }
 .partner-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
 .partner-name { font-size: 1.05rem; font-weight: 800; }
-.counts { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--muted); font-size: .78rem; margin: 4px 0 8px; }
+.counts { display: flex; flex-wrap: wrap; gap: 2px 12px; color: var(--muted); font-size: .76rem; margin: 4px 0 4px; }
 .counts b { color: var(--text); }
 .dir { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 10px; margin-top: 8px; }
 .dir.done { border-color: rgba(52,211,153,.5); }
 .dir-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-weight: 800; font-size: .86rem; }
 .dir-head .went { color: var(--went); }
 .dir-head .came { color: var(--came); }
-.dir-meta { color: var(--muted); font-size: .76rem; margin: 4px 0 6px; }
-.bar { height: 6px; background: var(--line); border-radius: 999px; overflow: hidden; }
+.dir-meta { color: var(--muted); font-size: .76rem; margin: 4px 0; }
+.dir-meta b { color: var(--text); }
+.monthly { font-size: .82rem; margin: 6px 0 4px; }
+.monthly b { font-size: 1.05rem; }
+.bar { height: 6px; background: var(--line); border-radius: 999px; overflow: hidden; margin-bottom: 4px; }
 .bar span { display: block; height: 100%; background: linear-gradient(90deg, #7c3aed, #34d399); }
-.bar-label { color: var(--muted); font-size: .7rem; text-align: right; margin: 2px 0 4px; }
+.need { font-size: .8rem; margin: 6px 0 2px; color: var(--accent-3); }
+.need b { color: var(--text); }
+.need.ok { color: var(--ok); font-weight: 700; }
+.over { color: var(--warn); font-size: .72rem; margin-left: 6px; }
 .prog-row { display: flex; justify-content: space-between; gap: 10px; font-size: .8rem; padding: 4px 0; border-top: 1px solid var(--line); }
 .prog-row .pl { font-weight: 800; white-space: nowrap; }
 .prog-row .pv { text-align: right; }
@@ -4653,9 +4662,6 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
 .del:hover { background: var(--ng-bg); color: var(--ng); }
 .backup-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .btn { display: inline-flex; align-items: center; gap: 4px; margin: 0; padding: 9px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface2); color: var(--accent-3); font-size: .82rem; font-weight: 700; cursor: pointer; }
-.target-card summary { list-style: none; cursor: pointer; margin-bottom: 0; }
-.target-card summary::-webkit-details-marker { display: none; }
-.target-card[open] summary { margin-bottom: 10px; }
 .footer { color: var(--faint); font-size: .72rem; text-align: center; margin: 20px 0 8px; }
 .footer a { color: var(--accent-2); }
 </style>
@@ -4715,7 +4721,7 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
 
   <div id="period-bar" class="card filters" hidden>
     <label>月<select id="p-month"></select></label>
-    <label>旬
+    <label id="p-jun-wrap">旬
       <select id="p-jun">
         <option value="">月全体</option>
         <option value="上旬">上旬（1〜10日）</option>
@@ -4723,12 +4729,19 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
         <option value="下旬">下旬（21日〜末日）</option>
       </select>
     </label>
-    <label>日にち<select id="p-day"></select></label>
+    <label id="p-day-wrap">日にち<select id="p-day"></select></label>
+    <label id="o-jun-wrap">今見る旬
+      <select id="o-jun">
+        <option value="上旬">上旬</option>
+        <option value="中旬">中旬</option>
+        <option value="下旬">下旬</option>
+      </select>
+    </label>
   </div>
 
   <section id="tab-oshi" class="section">
     <div class="card filters">
-      <label>目標の推しPt<select id="o-target"></select></label>
+      <label>目標の月間推しPt<select id="o-target"></select></label>
       <label>どっちの歌推し？
         <select id="o-dir">
           <option value="both">両方</option>
@@ -4740,8 +4753,8 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
         <select id="o-show">
           <option value="">すべて</option>
           <option value="todo">歌推し未達だけ</option>
-          <option value="done">条件クリアだけ</option>
-          <option value="notyet">行けていない相手（この期間0回）</option>
+          <option value="done">歌推し達成だけ</option>
+          <option value="notyet">この旬に行けていない相手</option>
           <option value="return">来てくれたのに行けていない相手</option>
         </select>
       </label>
@@ -4790,7 +4803,7 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
   <datalist id="name-list"></datalist>
   <p class="footer">
     歌推しの条件は<a href="https://thunderous-rugelach-1c3cc5.netlify.app/coloring_calculator" target="_blank" rel="noopener">歌推し計算ツール</a>と同じ数値です。
-    進み具合は、ここに記録した視聴時間・コイン・スーパーいいねを、選んだ期間で合計した目安です。
+    旬ごとの推しPtと月間推しPtは、ここに記録した視聴時間・コイン・スーパーいいねから出した目安です。
   </p>
 </div>
 
@@ -4808,6 +4821,8 @@ const JUNS = Object.keys(JUN_RANGE);
 const LETTERS = ['A', 'B', 'C'];
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
 const TIERS = new Map(CONFIG.tiers.map(t => [t.label, t]));
+const TIERS_ASC = [...CONFIG.tiers].sort((a, b) => a.pt - b.pt);
+const TIERS_DESC = [...TIERS_ASC].reverse();
 
 const $ = id => document.getElementById(id);
 const uniq = list => [...new Set(list)];
@@ -4832,6 +4847,10 @@ function fmtCoins(c) {
   if (c >= 10000) return (c / 10000).toLocaleString('ja-JP', { maximumFractionDigits: 2 }) + '万';
   return Number(c).toLocaleString('ja-JP');
 }
+function fmtPt(pt) {
+  if (pt < 100) return `${pt}pt`;
+  return (pt / 1000).toLocaleString('ja-JP', { maximumFractionDigits: 2 }) + 'K';
+}
 function fmtMonth(m) { const [y, mo] = m.split('-'); return `${y}年${Number(mo)}月`; }
 function fmtDate(d) {
   const dt = new Date(d + 'T00:00:00');
@@ -4839,6 +4858,17 @@ function fmtDate(d) {
 }
 function junOf(d) { const day = Number(d.slice(8, 10)); return day <= 10 ? '上旬' : day <= 20 ? '中旬' : '下旬'; }
 function daysInMonth(m) { const [y, mo] = m.split('-').map(Number); return new Date(y, mo, 0).getDate(); }
+// その月を開いたときに最初に見る旬（今月なら今日の旬、過ぎた月なら下旬）
+function defaultJun(month) {
+  const t = todayStr();
+  if (month === t.slice(0, 7)) return junOf(t);
+  return month < t.slice(0, 7) ? '下旬' : '上旬';
+}
+function junIsOver(month, jun) {
+  const t = todayStr(), cur = t.slice(0, 7);
+  if (month !== cur) return month < cur;
+  return JUNS.indexOf(jun) < JUNS.indexOf(junOf(t));
+}
 
 // ── 保存（このブラウザの localStorage） ─────────────────
 function validRecord(r) {
@@ -4893,48 +4923,45 @@ const state = {
   month: todayStr().slice(0, 7),
   jun: '',
   day: '',
-  target: TIERS.has(settings.target) ? settings.target : CONFIG.default_target,
+  activeJun: junOf(todayStr()),
+  target: CONFIG.targets.includes(settings.target) ? settings.target : CONFIG.default_target,
   dir: ['both', 'went', 'came'].includes(settings.dir) ? settings.dir : 'both',
   sort: ['close', 'count', 'name'].includes(settings.sort) ? settings.sort : 'close',
   lastName: '',
   targetOpen: false,
 };
-function currentTier() { return TIERS.get(state.target) || CONFIG.tiers[0]; }
+function currentTarget() { return TIERS.get(state.target) || TIERS.get(CONFIG.default_target) || TIERS_ASC[0]; }
 function allNames() { return uniq(state.records.map(r => r.name)).sort(byName); }
 
-// ── 集計 ─────────────────────────────────────
-function periodRecords() {
-  return state.records.filter(r => r.date.startsWith(state.month + '-')
-    && (!state.jun || junOf(r.date) === state.jun)
-    && (!state.day || Number(r.date.slice(8, 10)) === Number(state.day)));
+// ── 集計（旬ごと → 月間） ─────────────────────────
+// 視聴時間・コイン・スーパーいいねは旬ごとにゼロから数え直す。
+// 各旬の推しPt = その旬の記録でクリアしたいちばん上の段階。月間推しPt = 3つの旬の合計。
+function emptySide() { return { count: 0, minutes: 0, coins: 0, slDates: new Set() }; }
+function emptyPartner(name) {
+  const jun = {};
+  for (const j of JUNS) jun[j] = { went: emptySide(), came: emptySide(), missed: 0 };
+  return { name, jun };
 }
-function periodLabel() {
-  let s = fmtMonth(state.month);
-  if (state.jun) s += ' ' + state.jun;
-  if (state.day) s += ` ${state.day}日`;
-  return s;
-}
-function emptySide() {
-  return { count: 0, minutes: 0, coins: 0, slDates: new Set(), byJun: { '上旬': 0, '中旬': 0, '下旬': 0 } };
-}
-function aggregate(recs) {
+function aggregateMonth(month) {
   const map = new Map();
-  for (const r of recs) {
-    if (!map.has(r.name)) map.set(r.name, { name: r.name, went: emptySide(), came: emptySide(), missed: 0 });
-    const a = map.get(r.name);
-    if (r.type === 'missed') { a.missed++; continue; }
-    const side = a[r.type];
+  for (const r of state.records) {
+    if (!r.date.startsWith(month + '-')) continue;
+    if (!map.has(r.name)) map.set(r.name, emptyPartner(r.name));
+    const bucket = map.get(r.name).jun[junOf(r.date)];
+    if (r.type === 'missed') { bucket.missed++; continue; }
+    const side = bucket[r.type];
     side.count++;
     side.minutes += r.minutes;
     side.coins += r.coins;
     if (r.sl) side.slDates.add(r.date);
-    side.byJun[junOf(r.date)]++;
   }
   return map;
 }
-function emptyPartner(name) { return { name, went: emptySide(), came: emptySide(), missed: 0 }; }
+function countOf(p, kind, jun) {
+  return (jun ? [jun] : JUNS).reduce((n, j) => n + (kind === 'missed' ? p.jun[j].missed : p.jun[j][kind].count), 0);
+}
 
-// パターンA/B/Cそれぞれ「あと何が足りないか」と、どこまで進んだか（0〜1）
+// ある段階のパターンA/B/Cそれぞれ「あと何が足りないか」と、どこまで進んだか（0〜1）
 function progress(side, tier) {
   return tier.patterns.map(pt => {
     const needMin = Math.round(pt.viewing_hours * 60);
@@ -4952,9 +4979,26 @@ function progress(side, tier) {
     return lack;
   });
 }
-function sideStatus(side, tier) {
-  const prog = progress(side, tier);
-  return { prog, done: prog.some(p => p.done), rate: Math.max(...prog.map(p => p.rate)) };
+function earnedPt(side) {
+  if (!side.count) return 0;
+  for (const t of TIERS_DESC) if (progress(side, t).some(x => x.done)) return t.pt;
+  return 0;
+}
+// kind: 'went'（自分→相手）/ 'came'（相手→自分）
+function oshiStatus(p, kind, jun, target) {
+  const earned = {};
+  for (const j of JUNS) earned[j] = earnedPt(p.jun[j][kind]);
+  const monthly = JUNS.reduce((n, j) => n + earned[j], 0);
+  const others = monthly - earned[jun];
+  const st = { earned, monthly, done: monthly >= target.pt, rate: 1, need: null, prog: null };
+  if (!st.done) {
+    // この旬で何Kに届けば、月間が目標に届くか
+    st.need = TIERS_ASC.find(t => t.pt >= target.pt - others) || target;
+    st.prog = progress(p.jun[jun][kind], st.need);
+    const best = Math.max(...st.prog.map(x => x.rate));
+    st.rate = Math.min(1, (others + Math.max(earned[jun], best * st.need.pt)) / target.pt);
+  }
+  return st;
 }
 function lackText(l) {
   if (l.done) return '✅ クリア';
@@ -4966,46 +5010,55 @@ function lackText(l) {
 }
 
 // ── 表示パーツ ────────────────────────────────
-function dirBlock(kind, p, tier, showJun) {
-  const side = p[kind];
+function dirBlock(kind, p, ctx) {
   const title = kind === 'went'
     ? `<span class="went">🎤 自分 → ${esc(p.name)}</span>`
     : `<span class="came">🎧 ${esc(p.name)} → 自分</span>`;
-  if (kind === 'came' && !side.count) {
-    return `<div class="dir"><div class="dir-head">${title}<span class="badge none">来てくれた記録なし</span></div></div>`;
+  const monthCount = countOf(p, kind);
+  if (kind === 'came' && !monthCount) {
+    return `<div class="dir"><div class="dir-head">${title}<span class="badge none">今月は来てくれた記録なし</span></div></div>`;
   }
-  const st = sideStatus(side, tier);
-  const badge = st.done ? '<span class="badge ok">✅ 条件クリア</span>'
-    : side.count ? '<span class="badge none">未達</span>' : '<span class="badge ng">まだ行けていない</span>';
-  const jun = showJun ? `（${JUNS.map(j => `${j}${side.byJun[j]}`).join('・')}）` : '';
-  const pct = Math.round(st.rate * 100);
-  return `<div class="dir${st.done ? ' done' : ''}">
-    <div class="dir-head">${title}${badge}</div>
-    <div class="dir-meta">${kind === 'went' ? '行った' : '来てくれた'} <b>${side.count}回</b>${jun} ・ 👀${fmtMinutes(side.minutes)} ・ 🪙${fmtCoins(side.coins)} ・ 💙${side.slDates.size}日</div>
-    <div class="bar"><span style="width:${pct}%"></span></div>
-    <div class="bar-label">いちばん近いパターンで ${pct}%</div>
-    ${st.prog.map((x, i) => `<div class="prog-row"><span class="pl c${i}">${LETTERS[i]} ${esc(CONFIG.pattern_names[i])}</span><span class="pv${x.done ? ' done' : ''}">${lackText(x)}</span></div>`).join('')}
-  </div>`;
+  const st = oshiStatus(p, kind, ctx.jun, ctx.target);
+  const side = p.jun[ctx.jun][kind];
+  const badge = st.done ? '<span class="badge ok">✅ 歌推し達成</span>'
+    : `<span class="badge ${monthCount ? 'none' : 'ng'}">あと ${fmtPt(ctx.target.pt - st.monthly)}</span>`;
+  const juns = JUNS.map(j => `${j} ${fmtPt(st.earned[j])}`).join('・');
+  let html = `<div class="monthly">月間 <b>${fmtPt(st.monthly)}</b> ／ 目標 ${esc(ctx.target.label)}</div>
+    <div class="bar"><span style="width:${Math.round(st.rate * 100)}%"></span></div>
+    <div class="dir-meta">${juns}</div>
+    <div class="dir-meta">${ctx.jun}: ${kind === 'went' ? '行った' : '来てくれた'} <b>${side.count}回</b> ・ 👀${fmtMinutes(side.minutes)} ・ 🪙${fmtCoins(side.coins)} ・ 💙${side.slDates.size}日</div>`;
+  if (st.done) {
+    html += `<div class="need ok">月間 ${fmtPt(st.monthly)} で歌推しの条件をクリアしています</div>`;
+  } else {
+    const over = junIsOver(ctx.month, ctx.jun) ? '<span class="over">※この旬は終わっています</span>' : '';
+    html += `<div class="need">${ctx.jun}で <b>${esc(st.need.label)}</b> に届けば歌推し（月間 ${esc(ctx.target.label)}）${over}</div>`
+      + st.prog.map((x, i) => `<div class="prog-row"><span class="pl c${i}">${LETTERS[i]} ${esc(CONFIG.pattern_names[i])}</span><span class="pv${x.done ? ' done' : ''}">${lackText(x)}</span></div>`).join('');
+  }
+  return `<div class="dir${st.done ? ' done' : ''}"><div class="dir-head">${title}${badge}</div>${html}</div>`;
 }
 
-function partnerCard(p, tier, dir, showJun) {
+function partnerCard(p, ctx, dir) {
   const flags = [];
-  if (p.came.count && !p.went.count) flags.push('<span class="badge warn">お返しまだ</span>');
+  if (countOf(p, 'came', ctx.jun) && !countOf(p, 'went', ctx.jun)) flags.push('<span class="badge warn">お返しまだ</span>');
+  const byJun = kind => JUNS.map(j => j[0] + countOf(p, kind, j)).join('・');
+  const missed = countOf(p, 'missed');
   return `<article class="partner">
     <div class="partner-head"><span class="partner-name">${esc(p.name)}</span>${flags.join('')}</div>
     <div class="counts">
-      <span>🎤 行った <b>${p.went.count}</b>回</span>
-      <span>🎧 来てくれた <b>${p.came.count}</b>回</span>
-      ${p.missed ? `<span>❌ 行けなかった <b>${p.missed}</b>回</span>` : ''}
+      <span>今月 🎤行った <b>${countOf(p, 'went')}</b>回（${byJun('went')}）</span>
+      <span>🎧来てくれた <b>${countOf(p, 'came')}</b>回（${byJun('came')}）</span>
+      ${missed ? `<span>❌行けなかった <b>${missed}</b>回</span>` : ''}
     </div>
-    ${dir !== 'came' ? dirBlock('went', p, tier, showJun) : ''}
-    ${dir !== 'went' ? dirBlock('came', p, tier, showJun) : ''}
+    ${dir !== 'came' ? dirBlock('went', p, ctx) : ''}
+    ${dir !== 'went' ? dirBlock('came', p, ctx) : ''}
   </article>`;
 }
 
 function targetCard(tier) {
   return `<details class="card target-card"${state.targetOpen ? ' open' : ''}>
-    <summary class="side-title">🎯 目標 ${esc(tier.label)} の条件（タップで開く）</summary>
+    <summary class="side-title">🎯 歌推しの決まり（目標 月間${esc(tier.label)}）— タップで開く</summary>
+    <p class="sec-note">視聴時間・コイン・スーパーいいねは上旬・中旬・下旬ごとにゼロに戻ります。各旬の推しPtは、その旬でクリアしたいちばん上の段階です。月間推しPt（上旬＋中旬＋下旬）が ${esc(tier.label)} 以上で歌推し。月が変わると月間もリセットされます。</p>
+    <p class="sec-note">1つの旬で ${esc(tier.label)} を取る場合の条件（どれか1つのパターンをすべて満たせばOK）:</p>
     <div class="patterns">${tier.patterns.map((p, i) => `
       <div class="pattern p${i}">
         <div class="pattern-name c${i}">パターン${LETTERS[i]} — ${esc(CONFIG.pattern_names[i])}</div>
@@ -5014,7 +5067,6 @@ function targetCard(tier) {
         <div class="prow"><span>💙 スーパーいいね</span><b>${p.super_like_days ? p.super_like_days + '日分' : '不要'}</b></div>
       </div>`).join('')}
     </div>
-    <p class="sec-note" style="margin:10px 0 0">どれか1つのパターンの条件をすべて満たすと「条件クリア」。${esc(periodLabel())} の記録を合計した目安です。</p>
   </details>`;
 }
 
@@ -5035,6 +5087,10 @@ function fillSelect(sel, values, allLabel) {
   sel.innerHTML = `<option value="">${allLabel}</option>` + list.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
   sel.value = cur;
 }
+function fillTargetSelect(sel) {
+  sel.innerHTML = CONFIG.targets.map(l => `<option value="${esc(l)}">月間 ${esc(l)}</option>`).join('');
+  sel.value = currentTarget().label;
+}
 
 // ── 記録タブ ──────────────────────────────────
 function syncEntryFields() {
@@ -5049,20 +5105,21 @@ function syncEntryFields() {
 
 function renderEntry() {
   syncEntryFields();
-  const date = $('f-date').value;
-  $('f-jun').textContent = date ? `${fmtDate(date)} ・ ${fmtMonth(date.slice(0, 7))}の${junOf(date)}` : '';
+  const date = $('f-date').value || todayStr();
+  $('f-jun').textContent = `${fmtDate(date)} ・ ${fmtMonth(date.slice(0, 7))}の${junOf(date)}`;
   const name = normName($('f-name').value) || state.lastName;
-  const month = (date || todayStr()).slice(0, 7);
+  const month = date.slice(0, 7);
   if (name) {
-    const p = aggregate(state.records.filter(r => r.date.startsWith(month + '-'))).get(name) || emptyPartner(name);
+    const p = aggregateMonth(month).get(name) || emptyPartner(name);
+    const ctx = { target: currentTarget(), jun: junOf(date), month };
     $('partner-card').innerHTML = `<div class="side-title"><span>📈 ${fmtMonth(month)}の ${esc(name)}</span>`
-      + `<label>目標<select id="e-target"></select></label></div>` + partnerCard(p, currentTier(), 'both', true);
+      + `<label>目標<select id="e-target"></select></label></div>` + partnerCard(p, ctx, 'both');
     fillTargetSelect($('e-target'));
   } else {
-    $('partner-card').innerHTML = '<div class="hint">相手の名前を入れると、その月に何回来てくれたか・行ったかと、歌推しまでにあと何が必要かがここに出ます。</div>';
+    $('partner-card').innerHTML = '<div class="hint">相手の名前を入れると、その月に何回来てくれたか・行ったか、月間推しPt、歌推しまでにこの旬であと何が必要かがここに出ます。</div>';
   }
   const dayRecs = state.records.filter(r => r.date === date);
-  $('day-card').innerHTML = `<div class="side-title">🗓 ${date ? fmtDate(date) : ''}の記録</div>`
+  $('day-card').innerHTML = `<div class="side-title">🗓 ${fmtDate(date)}の記録</div>`
     + (dayRecs.length ? dayRecs.map(recRow).join('') : '<div class="hint">まだ記録はありません</div>');
 }
 
@@ -5105,73 +5162,79 @@ function submitEntry(e) {
 }
 
 // ── 歌推しタブ ────────────────────────────────
-function fillTargetSelect(sel) {
-  sel.innerHTML = CONFIG.tiers.map(t => `<option value="${esc(t.label)}">${esc(t.label)}</option>`).join('');
-  sel.value = currentTier().label;
-}
-
 function renderOshi() {
-  const recs = periodRecords();
-  const tier = currentTier();
+  const target = currentTarget();
+  const jun = state.activeJun;
+  const ctx = { target, jun, month: state.month };
   const show = $('o-show').value;
   fillTargetSelect($('o-target'));
   $('o-dir').value = state.dir;
   $('o-sort').value = state.sort;
-  fillSelect($('o-partner'), show === 'notyet' ? allNames() : uniq(recs.map(r => r.name)), 'すべての相手');
-  const partnerFilter = $('o-partner').value;
-  $('o-target-card').innerHTML = targetCard(tier);
+  $('o-target-card').innerHTML = targetCard(target);
 
-  const agg = aggregate(recs);
-  // 「行けていない相手」は、これまでに記録したことがある全員が対象
+  const agg = aggregateMonth(state.month);
+  fillSelect($('o-partner'), show === 'notyet' ? allNames() : [...agg.keys()], 'すべての相手');
+  const partnerFilter = $('o-partner').value;
+  // 「この旬に行けていない相手」は、これまでに記録したことがある全員が対象
   let partners = show === 'notyet'
-    ? allNames().map(n => agg.get(n) || emptyPartner(n)).filter(p => !p.went.count)
+    ? allNames().map(n => agg.get(n) || emptyPartner(n)).filter(p => !countOf(p, 'went', jun))
     : [...agg.values()];
   if (partnerFilter) partners = partners.filter(p => p.name === partnerFilter);
 
-  const sides = p => state.dir === 'went' ? ['went'] : state.dir === 'came' ? ['came']
-    : ['went', ...(p.came.count ? ['came'] : [])];
+  const kinds = p => state.dir === 'went' ? ['went'] : state.dir === 'came' ? ['came']
+    : ['went', ...(countOf(p, 'came') ? ['came'] : [])];
   for (const p of partners) {
-    p.st = {};
-    for (const k of sides(p)) p.st[k] = sideStatus(p[k], tier);
-    const open = Object.values(p.st).filter(s => !s.done);
-    p.anyDone = Object.values(p.st).some(s => s.done);
+    const sts = kinds(p).map(k => oshiStatus(p, k, jun, target));
+    const open = sts.filter(s => !s.done);
+    p.anyDone = sts.some(s => s.done);
     p.anyTodo = open.length > 0;
     p.closeness = open.length ? Math.max(...open.map(s => s.rate)) : 2;
   }
   if (show === 'todo') partners = partners.filter(p => p.anyTodo);
   if (show === 'done') partners = partners.filter(p => p.anyDone);
-  if (show === 'return') partners = partners.filter(p => p.came.count && !p.went.count);
+  if (show === 'return') partners = partners.filter(p => countOf(p, 'came', jun) && !countOf(p, 'went', jun));
 
-  const total = p => p.went.count + p.came.count + p.missed;
+  const total = p => countOf(p, 'went') + countOf(p, 'came') + countOf(p, 'missed');
   partners.sort(state.sort === 'name' ? (a, b) => byName(a.name, b.name)
     : state.sort === 'count' ? (a, b) => total(b) - total(a) || byName(a.name, b.name)
     : (a, b) => (a.closeness > 1) - (b.closeness > 1) || b.closeness - a.closeness || byName(a.name, b.name));
 
   const all = [...agg.values()];
-  const sum = k => all.reduce((n, p) => n + (k === 'missed' ? p.missed : p[k].count), 0);
-  const cleared = k => all.filter(p => p[k].count && sideStatus(p[k], tier).done).length;
-  $('o-stats').innerHTML = `<span class="stat">${esc(periodLabel())}</span>`
+  const sum = kind => all.reduce((n, p) => n + countOf(p, kind), 0);
+  const achieved = kind => all.filter(p => countOf(p, kind) && oshiStatus(p, kind, jun, target).done).length;
+  $('o-stats').innerHTML = `<span class="stat">${esc(fmtMonth(state.month))}・今見る旬は${jun}</span>`
     + `<span class="stat">🎤 行った<b>${sum('went')}</b>回</span>`
     + `<span class="stat">🎧 来てくれた<b>${sum('came')}</b>回</span>`
     + `<span class="stat">❌<b>${sum('missed')}</b>回</span>`
-    + `<span class="stat">自分→相手 クリア<b>${cleared('went')}</b>人</span>`
-    + `<span class="stat">相手→自分 クリア<b>${cleared('came')}</b>人</span>`;
+    + `<span class="stat">自分→相手 歌推し達成<b>${achieved('went')}</b>人</span>`
+    + `<span class="stat">相手→自分 歌推し達成<b>${achieved('came')}</b>人</span>`;
 
   $('o-hint').textContent = {
-    todo: '選んだ方向で、まだ歌推しの条件をクリアしていない相手です。',
-    done: '選んだ方向で、歌推しの条件をクリアしている相手です。',
-    notyet: 'これまでに記録したことがある相手のうち、この期間に一度も「行った」がない人です（来てくれた人・行けなかった人も含みます）。',
-    return: 'この期間に来てくれたのに、まだ自分が行けていない相手です。',
+    todo: '月間推しPtがまだ目標に届いていない相手です。',
+    done: '月間推しPtが目標以上になっている相手です。',
+    notyet: `これまでに記録したことがある相手のうち、${jun}にまだ一度も「行った」がない人です。`,
+    return: `${jun}に来てくれたのに、まだ自分が行けていない相手です。`,
   }[show] || '';
 
   if (!partners.length) {
     $('o-list').innerHTML = `<div class="empty">${state.records.length ? '条件に合う相手はいません' : 'まだ記録がありません。「✏️ 記録」タブから追加できます。'}</div>`;
     return;
   }
-  $('o-list').innerHTML = `<div class="partner-grid">${partners.map(p => partnerCard(p, tier, state.dir, !state.jun && !state.day)).join('')}</div>`;
+  $('o-list').innerHTML = `<div class="partner-grid">${partners.map(p => partnerCard(p, ctx, state.dir)).join('')}</div>`;
 }
 
 // ── 履歴タブ ──────────────────────────────────
+function periodRecords() {
+  return state.records.filter(r => r.date.startsWith(state.month + '-')
+    && (!state.jun || junOf(r.date) === state.jun)
+    && (!state.day || Number(r.date.slice(8, 10)) === Number(state.day)));
+}
+function periodLabel() {
+  let s = fmtMonth(state.month);
+  if (state.jun) s += ' ' + state.jun;
+  if (state.day) s += ` ${state.day}日`;
+  return s;
+}
 function renderHistory() {
   const recs = periodRecords();
   fillSelect($('h-partner'), uniq(recs.map(r => r.name)), 'すべての相手');
@@ -5207,11 +5270,15 @@ function renderPeriodBar() {
   $('p-month').innerHTML = months.map(m => `<option value="${esc(m)}">${esc(fmtMonth(m))}</option>`).join('');
   $('p-month').value = state.month;
   $('p-jun').value = state.jun;
+  $('o-jun').value = state.activeJun;
   const [lo, hi] = state.jun ? JUN_RANGE[state.jun] : [1, 31];
   let opts = '<option value="">すべての日</option>';
   for (let d = lo; d <= Math.min(hi, daysInMonth(state.month)); d++) opts += `<option value="${d}">${d}日</option>`;
   $('p-day').innerHTML = opts;
   $('p-day').value = state.day;
+  // 歌推しは「月＋今見る旬」、履歴は「月＋旬＋日にち」で絞る
+  $('p-jun-wrap').hidden = $('p-day-wrap').hidden = state.tab !== 'history';
+  $('o-jun-wrap').hidden = state.tab !== 'oshi';
 }
 
 function renderNameList() {
@@ -5296,9 +5363,15 @@ document.querySelectorAll('.tab-btn').forEach(b => b.addEventListener('click', (
 $('entry-form').addEventListener('submit', submitEntry);
 ['f-date', 'f-type', 'f-coins'].forEach(id => $(id).addEventListener('change', renderEntry));
 $('f-name').addEventListener('input', renderEntry);
-$('p-month').addEventListener('change', e => { state.month = e.target.value; state.day = ''; render(); });
+$('p-month').addEventListener('change', e => {
+  state.month = e.target.value;
+  state.day = '';
+  state.activeJun = defaultJun(state.month);
+  render();
+});
 $('p-jun').addEventListener('change', e => { state.jun = e.target.value; state.day = ''; render(); });
 $('p-day').addEventListener('change', e => { state.day = e.target.value; render(); });
+$('o-jun').addEventListener('change', e => { state.activeJun = e.target.value; render(); });
 $('o-dir').addEventListener('change', e => { state.dir = e.target.value; saveSettings(); renderOshi(); });
 $('o-sort').addEventListener('change', e => { state.sort = e.target.value; saveSettings(); renderOshi(); });
 ['o-show', 'o-partner'].forEach(id => $(id).addEventListener('change', renderOshi));
