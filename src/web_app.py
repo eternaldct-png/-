@@ -2175,6 +2175,11 @@ def _update_audition_application(application_id, updates):
         conn.close()
 
 
+def _audition_is_checked(application):
+    """管理画面で✓（確認済み）が付いている応募なら True。"""
+    return str(application.get("checked", "")).strip().lower() in ("1", "true", "yes", "on")
+
+
 def _set_audition_checked(application_id, checked):
     """「確認済み」フラグだけをDBと控えJSONの両方で更新する（他の項目には触れない）。"""
     application_id = str(application_id or "").strip()
@@ -2838,6 +2843,7 @@ tr:last-child td { border-bottom: none; }
       <span class="count">__COUNT__ 件</span>
     </div>
     <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <a class="logout" href="/audition/admin/slides">🖥 未確認をスライド表示</a>
       <a class="logout" href="/audition/admin/new">＋ 新規追加</a>
       <a class="logout" href="/audition/admin/logout">ログアウト</a>
     </div>
@@ -2942,6 +2948,233 @@ tr:last-child td { border-bottom: none; }
 </body>
 </html>"""
 
+
+
+AUDITION_SLIDES_HTML = r"""<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>応募者スライド | ETERNALd.c.t</title>
+<style>
+:root {
+  --grad: linear-gradient(135deg, #7c3aed, #d946ef, #ec4899);
+  --accent-text: #9333ea; --text: #1f2333; --muted: #6b7280; --border: #e7e3f0;
+  --paper: #ffffff; --soft: #faf8ff; --backdrop: #15121f;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  background: var(--backdrop); color: var(--text); overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+}
+.stage { position: relative; width: min(100vw - 24px, (100vh - 76px) * 16 / 9); aspect-ratio: 16 / 9; }
+body.is-fs .stage { width: min(100vw, 100vh * 16 / 9); }
+.slide {
+  position: absolute; inset: 0; container-type: size;
+  background: var(--paper); border-radius: 14px; overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0,0,0,.45);
+  opacity: 0; visibility: hidden; transition: opacity .25s ease, visibility .25s;
+}
+body.is-fs .slide { border-radius: 0; }
+.slide.active { opacity: 1; visibility: visible; }
+.slide-inner { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 6.5cqh 5cqw 4cqh; }
+.slide-inner::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 1.2cqh; background: var(--grad); }
+.s-head { display: flex; align-items: baseline; gap: 2cqw; margin-bottom: 3.6cqh; min-width: 0; }
+.s-no { font-size: 1.6cqw; font-weight: 850; color: var(--accent-text); letter-spacing: .08em; white-space: nowrap; }
+.s-name { font-size: 4.2cqw; font-weight: 900; letter-spacing: -.01em; line-height: 1.2; overflow-wrap: anywhere; }
+.s-name .missing { color: #9a5b00; font-size: .7em; }
+.s-title { font-size: 3.4cqw; font-weight: 900; }
+.s-sub { font-size: 1.4cqw; color: var(--muted); font-weight: 750; }
+.s-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 2.4cqw; }
+.col {
+  background: var(--soft); border: 1px solid var(--border); border-radius: 1.4cqw;
+  padding: 2.2cqw 2.4cqw; display: flex; flex-direction: column; min-height: 0;
+}
+.chip {
+  align-self: flex-start; font-size: 1.25cqw; font-weight: 850; color: #fff; background: var(--grad);
+  padding: .45cqw 1.3cqw; border-radius: 999px; margin-bottom: 1.4cqw; letter-spacing: .06em;
+}
+.col-text {
+  flex: 1; min-height: 0; overflow: hidden; font-size: var(--fs, 1.8cqw); line-height: 1.75;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.col-text.empty { color: var(--muted); }
+.overflowing .fit-check, .fit-check.overflowing { overflow-y: auto; }
+.index {
+  flex: 1; min-height: 0; overflow: hidden; list-style: none; font-size: var(--fs, 2cqw);
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(26cqw, 1fr)); align-content: start; gap: .5em 2.4cqw;
+}
+.index a {
+  display: flex; gap: .7em; align-items: baseline; color: var(--text); text-decoration: none; font-weight: 800;
+  padding: .35em .6em; border-radius: .5em; border: 1px solid var(--border); background: var(--soft);
+  overflow-wrap: anywhere;
+}
+.index a:hover { border-color: #b794f6; }
+.index .no { color: var(--accent-text); font-size: .75em; letter-spacing: .06em; }
+.index .missing { color: #9a5b00; }
+.s-foot {
+  display: flex; justify-content: space-between; margin-top: 2.6cqh;
+  font-size: 1.1cqw; color: var(--muted); font-weight: 750; letter-spacing: .08em;
+}
+.cover .slide-inner { background: var(--grad); color: #fff; justify-content: center; padding: 8cqh 8cqw; }
+.cover .slide-inner::before { display: none; }
+.cover-kicker { font-size: 1.6cqw; font-weight: 800; letter-spacing: .3em; opacity: .9; }
+.cover-title { font-size: 5.6cqw; font-weight: 900; line-height: 1.25; margin: 3cqh 0 4cqh; letter-spacing: -.01em; }
+.cover-meta { font-size: 1.8cqw; font-weight: 750; }
+.cover-meta strong { font-size: 1.4em; }
+.cover-note { font-size: 1.3cqw; opacity: .85; margin-top: 1.4cqh; }
+.controls { display: flex; align-items: center; gap: 8px; color: #e9e5f5; font-size: 13px; transition: opacity .2s; }
+body.is-fs .controls { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); opacity: 0; background: rgba(21,18,31,.85); padding: 6px 10px; border-radius: 12px; }
+body.is-fs .controls:hover { opacity: 1; }
+.ctrl {
+  border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.06); color: #e9e5f5;
+  border-radius: 9px; padding: 7px 12px; font-size: 13px; font-weight: 750; cursor: pointer; text-decoration: none;
+}
+.ctrl:hover { background: rgba(255,255,255,.14); }
+.ctrl:disabled { opacity: .35; cursor: default; }
+#counter { min-width: 64px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 750; }
+@media screen and (max-width: 820px) and (orientation: portrait) {
+  body { overflow: auto; justify-content: flex-start; gap: 0; }
+  .stage { width: 100%; aspect-ratio: auto; height: calc(100vh - 56px); height: calc(100dvh - 56px); }
+  .slide { border-radius: 0; }
+  .slide-inner { padding: 30px 18px 16px; overflow-y: auto; }
+  .s-head { flex-direction: column; gap: 4px; margin-bottom: 16px; }
+  .s-no { font-size: 12px; }
+  .s-name { font-size: 26px; }
+  .s-title { font-size: 24px; }
+  .s-sub { font-size: 13px; }
+  .s-body { flex: none; grid-template-columns: 1fr; gap: 14px; }
+  .col { padding: 16px; border-radius: 12px; }
+  .chip { font-size: 12px; padding: 4px 12px; margin-bottom: 10px; }
+  .col-text { font-size: 15px; overflow: visible; }
+  .index { flex: none; overflow: visible; font-size: 15px; grid-template-columns: 1fr; }
+  .s-foot { font-size: 11px; margin-top: 16px; }
+  .cover .slide-inner { padding: 28px 22px; }
+  .cover-kicker { font-size: 12px; }
+  .cover-title { font-size: 30px; margin: 14px 0 18px; }
+  .cover-meta { font-size: 15px; }
+  .cover-note { font-size: 12px; }
+  .controls { height: 56px; flex-wrap: wrap; justify-content: center; }
+  .hide-sm { display: none; }
+}
+@page { size: 13.333in 7.5in; margin: 0; }
+@media print {
+  html, body { height: auto; overflow: visible; background: #fff; display: block; }
+  .controls { display: none; }
+  .stage { width: 13.333in; aspect-ratio: auto; }
+  .slide {
+    position: relative; inset: auto; width: 13.333in; height: 7.5in; border-radius: 0; box-shadow: none;
+    opacity: 1; visibility: visible; transition: none; break-after: page;
+  }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+</style>
+</head>
+<body>
+<main class="stage" id="stage">
+__SLIDES__
+</main>
+<nav class="controls" aria-label="スライド操作">
+  <a class="ctrl" href="/audition/admin">← 管理画面</a>
+  <button class="ctrl" id="prev" type="button" aria-label="前のスライド">‹</button>
+  <span id="counter">1 / __TOTAL__</span>
+  <button class="ctrl" id="next" type="button" aria-label="次のスライド">›</button>
+  <button class="ctrl hide-sm" id="fullscreen" type="button">⛶ 全画面</button>
+  <button class="ctrl hide-sm" id="print" type="button">PDF保存</button>
+</nav>
+<script>
+(() => {
+  const slides = [...document.querySelectorAll('.slide')];
+  const counter = document.getElementById('counter');
+  const prevButton = document.getElementById('prev');
+  const nextButton = document.getElementById('next');
+  const portrait = window.matchMedia('screen and (max-width: 820px) and (orientation: portrait)');
+  let current = 0;
+
+  function show(index) {
+    current = Math.max(0, Math.min(slides.length - 1, index));
+    slides.forEach((slide, i) => slide.classList.toggle('active', i === current));
+    counter.textContent = `${current + 1} / ${slides.length}`;
+    prevButton.disabled = current === 0;
+    nextButton.disabled = current === slides.length - 1;
+    history.replaceState(null, '', `#${current + 1}`);
+    const inner = slides[current].querySelector('.slide-inner');
+    if (inner) inner.scrollTop = 0;
+  }
+
+  // 文字量に合わせて、枠からはみ出さない最大の文字サイズに自動調整する
+  function fit(el) {
+    const checks = el.classList.contains('fit-check') ? [el] : [...el.querySelectorAll('.fit-check')];
+    const over = () => checks.some(c => c.scrollHeight > c.clientHeight + 1);
+    let size = parseFloat(el.dataset.max);
+    const min = parseFloat(el.dataset.min);
+    el.classList.remove('overflowing');
+    el.style.setProperty('--fs', `${size}cqw`);
+    while (size > min && over()) {
+      size = Math.round((size - 0.05) * 100) / 100;
+      el.style.setProperty('--fs', `${size}cqw`);
+    }
+    el.classList.toggle('overflowing', over());
+  }
+
+  function fitAll() {
+    document.querySelectorAll('.fit').forEach(el => {
+      if (portrait.matches) {
+        el.classList.remove('overflowing');
+        el.style.removeProperty('--fs');
+      } else {
+        fit(el);
+      }
+    });
+  }
+
+  prevButton.addEventListener('click', () => show(current - 1));
+  nextButton.addEventListener('click', () => show(current + 1));
+  document.getElementById('print').addEventListener('click', () => window.print());
+  document.getElementById('fullscreen').addEventListener('click', () => {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();
+  });
+  document.addEventListener('fullscreenchange', () => {
+    document.body.classList.toggle('is-fs', !!document.fullscreenElement);
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+    if (['ArrowRight', 'ArrowDown', 'PageDown', ' ', 'Enter'].includes(e.key)) { e.preventDefault(); show(current + 1); }
+    else if (['ArrowLeft', 'ArrowUp', 'PageUp', 'Backspace'].includes(e.key)) { e.preventDefault(); show(current - 1); }
+    else if (e.key === 'Home') show(0);
+    else if (e.key === 'End') show(slides.length - 1);
+    else if (e.key === 'f' || e.key === 'F') document.getElementById('fullscreen').click();
+  });
+
+  document.querySelectorAll('[data-goto]').forEach(link => {
+    link.addEventListener('click', e => { e.preventDefault(); show(Number(link.dataset.goto) - 1); });
+  });
+
+  let touchX = null, touchY = null;
+  const stage = document.getElementById('stage');
+  stage.addEventListener('touchstart', e => { touchX = e.touches[0].clientX; touchY = e.touches[0].clientY; }, { passive: true });
+  stage.addEventListener('touchend', e => {
+    if (touchX === null) return;
+    const dx = e.changedTouches[0].clientX - touchX;
+    const dy = e.changedTouches[0].clientY - touchY;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) show(current + (dx < 0 ? 1 : -1));
+    touchX = touchY = null;
+  });
+
+  let resizeTimer;
+  window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(fitAll, 150); });
+  fitAll();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitAll);
+  show((parseInt(location.hash.slice(1), 10) || 1) - 1);
+})();
+</script>
+</body>
+</html>"""
 
 @app.route("/audition")
 def audition_index():
@@ -3052,12 +3285,9 @@ def audition_admin():
                 return str(escape(activity_name))
             return '<span class="missing-badge">⚠ 未記入</span>'
 
-        def is_checked(application):
-            return str(application.get("checked", "")).strip().lower() in ("1", "true", "yes", "on")
-
         cards = "".join(
             (
-                f'<article class="app-card{" checked" if is_checked(a) else ""}" '
+                f'<article class="app-card{" checked" if _audition_is_checked(a) else ""}" '
                 f'id="app-{escape(a.get("id", ""))}" data-id="{escape(a.get("id", ""))}" '
                 f'data-search="{escape(" ".join(str(a.get(key, "")) for key in AUDITION_COLUMNS))}">'
                 '<div class="card-head">'
@@ -3423,6 +3653,91 @@ def audition_admin_check(application_id):
         return jsonify({"error": "対象の応募データは見つかりませんでした"}), 404
     return jsonify({"ok": True})
 
+
+@app.route("/audition/admin/slides")
+def audition_admin_slides():
+    """未確認（✓なし）の応募者の活動名・自己PR・応募動機を、応募順のスライドで表示する。"""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    if not session.get("audition_admin_ok"):
+        return redirect("/audition/admin")
+
+    applicants = [a for a in _load_audition_applications() if not _audition_is_checked(a)]
+    total = 1 + (1 + len(applicants) if applicants else 0)
+    today = datetime.now(ZoneInfo("Asia/Tokyo"))
+    today_label = f"{today.year}年{today.month}月{today.day}日"
+
+    def footer(page):
+        return (
+            '<footer class="s-foot"><span>ETERNALd.c.t AUDITION</span>'
+            f"<span>{page} / {total}</span></footer>"
+        )
+
+    def activity_html(application):
+        activity_name = str(application.get("activity_name", "")).strip()
+        if activity_name:
+            return str(escape(activity_name))
+        return '<span class="missing">⚠ 活動名 未記入</span>'
+
+    def text_block(value):
+        value = str(value or "").replace("\r\n", "\n").strip()
+        if not value:
+            return '<div class="col-text fit-check empty">未記入</div>'
+        return f'<div class="col-text fit-check">{escape(value)}</div>'
+
+    if applicants:
+        cover_meta = (
+            f'<p class="cover-meta">未確認の応募 <strong>{len(applicants)}</strong> 名'
+            f" ・ {today_label} 時点</p>"
+            '<p class="cover-note">→ キー / スワイプで次へ　F で全画面</p>'
+        )
+    else:
+        cover_meta = (
+            f'<p class="cover-meta">未確認の応募はありません（{today_label} 時点）</p>'
+            '<p class="cover-note">管理画面で✓を外すと、その応募がスライドに入ります</p>'
+        )
+
+    slides = [
+        '<section class="slide cover"><div class="slide-inner">'
+        '<p class="cover-kicker">ETERNALd.c.t AUDITION</p>'
+        '<h1 class="cover-title">応募者紹介<br>自己PR・応募動機</h1>'
+        f"{cover_meta}</div></section>"
+    ]
+
+    if applicants:
+        index_items = "".join(
+            f'<li><a href="#{n + 3}" data-goto="{n + 3}">'
+            f'<span class="no">{n + 1:02d}</span><span>{activity_html(a)}</span></a></li>'
+            for n, a in enumerate(applicants)
+        )
+        slides.append(
+            '<section class="slide"><div class="slide-inner">'
+            '<header class="s-head"><h2 class="s-title">応募者一覧</h2>'
+            f'<span class="s-sub">未確認 {len(applicants)} 名・応募順</span></header>'
+            f'<ol class="index fit fit-check" data-max="2" data-min="0.9">{index_items}</ol>'
+            f"{footer(2)}</div></section>"
+        )
+        for n, a in enumerate(applicants):
+            slides.append(
+                '<section class="slide"><div class="slide-inner">'
+                f'<header class="s-head"><span class="s-no">No.{n + 1:02d}</span>'
+                f'<h2 class="s-name">{activity_html(a)}</h2></header>'
+                '<div class="s-body fit" data-max="1.8" data-min="0.85">'
+                f'<article class="col"><h3 class="chip">自己PR</h3>{text_block(a.get("self_pr"))}</article>'
+                f'<article class="col"><h3 class="chip">応募動機</h3>{text_block(a.get("motivation"))}</article>'
+                f"</div>{footer(n + 3)}</div></section>"
+            )
+
+    html = (
+        AUDITION_SLIDES_HTML
+        .replace("__TOTAL__", str(total))
+        .replace("__SLIDES__", "\n".join(slides))
+    )
+    return html, 200, {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store, max-age=0",
+    }
 
 @app.route("/audition/admin/logout")
 def audition_admin_logout():
