@@ -101,9 +101,14 @@ def load_config():
     if len(names) != 3:
         names = list(_DEFAULT_PATTERN_NAMES)
 
+    # 目標のプルダウンには min_target 以上だけを出す（下の段階は旬ごとの推しPtの計算に使う）
+    by_label = {t["label"]: t for t in tiers}
+    min_tier = by_label.get(str(uta.get("min_target") or ""))
+    targets = [t["label"] for t in tiers if not min_tier or t["pt"] >= min_tier["pt"]]
+
     default_target = str(uta.get("default_target") or "")
-    if tiers and default_target not in {t["label"] for t in tiers}:
-        default_target = tiers[0]["label"]
+    if targets and default_target not in targets:
+        default_target = targets[0]
 
     return {
         "title": str(page.get("title") or "枠周り記録"),
@@ -111,5 +116,6 @@ def load_config():
         "coin_presets": coins,
         "pattern_names": names,
         "tiers": tiers,
+        "targets": targets,
         "default_target": default_target,
     }
