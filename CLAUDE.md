@@ -190,6 +190,10 @@ Googleフォームの代わりに、サイト内に応募フォームを実装�
   活動名が空欄の応募は「⚠ 未記入」と強調表示され、編集画面から追記できる。
   カード左上の✓アイコンをクリックすると「確認済み」を切り替えられる（`checked` カラム。
   編集フォームの対象外なので、内容を編集しても確認済み状態は保持される）。
+- `/audition/admin/slides` — 管理画面の「🖥 未確認をスライド表示」から開く。✓が付いていない応募者だけを
+  応募順に、活動名・自己PR・応募動機の3項目でスライド表示する（表紙 → 応募者一覧 → 1人1枚）。
+  ←→キー／スワイプで移動、Fで全画面、「PDF保存」で16:9のPDFに書き出せる。文字量に合わせて文字サイズを自動調整。
+  氏名・メール等はスライドに出さない。ログイン必須（`WEB_PASSWORD`）。
 - 応募があると、面談予約アプリ（`eternal-interview-booking`）と共有の `DATABASE_URL`（Postgres/Supabase）から
   `booking_line_links` テーブルの `person='admin'` で連携済みのLINEユーザーへ通知を送る
   （`kazuto-post-generator` 側にも同じ `DATABASE_URL` と `LINE_CHANNEL_ACCESS_TOKEN` の設定が必要。

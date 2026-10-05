@@ -64,6 +64,84 @@ class AuditionAdminTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn('<span class="missing-badge">⚠ 未記入</span>', html)
 
+    def test_admin_links_to_slides(self):
+        with patch.object(
+            web_app, "_load_audition_applications", return_value=[SAMPLE_APPLICATION]
+        ):
+            with patch.object(web_app, "_audition_db_ready", return_value=True):
+                response = self.client.get("/audition/admin")
+
+        self.assertIn('href="/audition/admin/slides"', response.get_data(as_text=True))
+
+    def test_slides_require_login(self):
+        with self.client.session_transaction() as session:
+            session.pop("audition_admin_ok", None)
+
+        response = self.client.get("/audition/admin/slides")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["Location"], "/audition/admin")
+
+    def test_slides_show_only_unchecked_applicants(self):
+        unchecked = {
+            **SAMPLE_APPLICATION,
+            "self_pr": "毎日歌配信しています\n高音が得意です",
+            "motivation": "事務所のサポートを受けたい",
+        }
+        checked = {
+            **SAMPLE_APPLICATION,
+            "id": "checked-id",
+            "activity_name": "確認済みの人",
+            "self_pr": "確認済みの自己PR",
+            "motivation": "確認済みの応募動機",
+            "checked": "true",
+        }
+        with patch.object(
+            web_app, "_load_audition_applications", return_value=[unchecked, checked]
+        ):
+            response = self.client.get("/audition/admin/slides")
+
+        html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("no-store", response.headers["Cache-Control"])
+        self.assertIn("サンプル歌手", html)
+        self.assertIn("毎日歌配信しています\n高音が得意です", html)
+        self.assertIn("事務所のサポートを受けたい", html)
+        self.assertNotIn("確認済みの人", html)
+        self.assertNotIn("確認済みの自己PR", html)
+        # 表紙・一覧・応募者1名の3枚
+        self.assertEqual(html.count('<section class="slide'), 3)
+        self.assertIn("<span>3 / 3</span>", html)
+        # 氏名・メールなど依頼外の項目は出さない
+        self.assertNotIn("応募 太郎", html)
+        self.assertNotIn("sample@example.com", html)
+
+    def test_slides_escape_text_and_flag_missing_activity_name(self):
+        risky = {
+            **SAMPLE_APPLICATION,
+            "activity_name": "",
+            "self_pr": "<script>alert(1)</script>",
+            "motivation": "",
+        }
+        with patch.object(web_app, "_load_audition_applications", return_value=[risky]):
+            response = self.client.get("/audition/admin/slides")
+
+        html = response.get_data(as_text=True)
+        self.assertNotIn("<script>alert(1)</script>", html)
+        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", html)
+        self.assertIn("⚠ 活動名 未記入", html)
+        self.assertIn('<div class="col-text fit-check empty">未記入</div>', html)
+
+    def test_slides_without_unchecked_applicants_show_cover_only(self):
+        checked = {**SAMPLE_APPLICATION, "checked": "true"}
+        with patch.object(web_app, "_load_audition_applications", return_value=[checked]):
+            response = self.client.get("/audition/admin/slides")
+
+        html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(html.count('<section class="slide'), 1)
+        self.assertIn("未確認の応募はありません", html)
+
     def test_edit_page_shows_current_application_values(self):
         with self.client.session_transaction() as session:
             session["audition_admin_csrf"] = "valid-token"
