@@ -4536,6 +4536,1026 @@ def motion_index():
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
 
+# ── 枠周り記録 /waku（回数・行けていない枠・歌推しまでの条件） ───────────
+
+WAKU_LOGIN_HTML = r"""<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>枠周り記録ログイン | ETERNALd.c.t</title>
+<style>
+:root { --bg: #0d0d1a; --surface: #141428; --surface2: #1a1a2e; --border: #2a2a4e; --text: #e0e0ff; --muted: #9ca3af; --accent: #7c3aed; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg); color: var(--text); min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 32px 24px; max-width: 340px; width: 100%; }
+h1 { font-size: 17px; text-align: center; margin-bottom: 6px; color: #c4b5fd; }
+.lead { text-align: center; color: var(--muted); font-size: 12px; margin-bottom: 20px; }
+input {
+  width: 100%; padding: 13px 14px; margin-bottom: 14px; background: var(--surface2);
+  border: 2px solid var(--border); border-radius: 10px; color: var(--text); font-size: 16px; outline: none;
+}
+input:focus { border-color: var(--accent); }
+button {
+  width: 100%; padding: 14px; border: none; border-radius: 10px;
+  background: linear-gradient(135deg, #7c3aed, #a855f7); color: white;
+  font-size: 15px; font-weight: 700; cursor: pointer;
+}
+.error { color: #f87171; font-size: 13px; text-align: center; margin-top: 14px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🎤 枠周り記録</h1>
+  <p class="lead">パスワードを入れてください</p>
+  <form method="POST">
+    <input type="password" name="password" placeholder="パスワード" autofocus required>
+    <button type="submit">ログイン</button>
+  </form>
+  __ERROR__
+</div>
+</body>
+</html>"""
+
+
+WAKU_HTML = r"""<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__ | ETERNALd.c.t</title>
+<style>
+:root {
+  --bg: #0d0d1a; --surface: #141428; --surface2: #1a1a2e; --border: #2a2a4e; --line: #1e1e3a;
+  --text: #e0e0ff; --muted: #9ca3af; --faint: #6b7280;
+  --accent: #7c3aed; --accent-2: #a78bfa; --accent-3: #c4b5fd;
+  --ok: #34d399; --ok-bg: rgba(16,185,129,.14); --ng: #f87171; --ng-bg: rgba(239,68,68,.13);
+  --warn: #fbbf24; --pa: #f59e0b; --pb: #10b981; --pc: #3b82f6;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg); color: var(--text); min-height: 100vh; line-height: 1.5;
+  font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
+  padding: 16px;
+}
+.page { max-width: 1100px; margin: 0 auto; }
+.header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 6px; }
+h1 { font-size: 1.25rem; color: var(--accent-3); }
+.subtitle { color: var(--muted); font-size: .78rem; margin-top: 2px; }
+.logout { color: var(--accent-2); font-size: .8rem; text-decoration: none; border: 1px solid var(--border); border-radius: 999px; padding: 6px 12px; white-space: nowrap; }
+.tabs { display: flex; gap: 8px; position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 10px 0; margin-bottom: 6px; }
+.tab-btn {
+  flex: 1 1 auto; min-height: 44px; padding: 10px 8px; border: 2px solid var(--accent); border-radius: 10px;
+  background: transparent; color: var(--accent-2); font-size: .85rem; font-weight: 800; cursor: pointer; white-space: nowrap;
+}
+@media (max-width: 400px) { .tab-btn { font-size: .8rem; padding: 10px 6px; } }
+.tab-btn.active { background: var(--accent); color: #fff; }
+.section { display: none; }
+.section.active { display: block; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px; margin-bottom: 14px; }
+.notice { padding: 10px 14px; border-radius: 10px; font-size: .8rem; margin-bottom: 12px; }
+.notice.warn { background: #1c1000; border: 1px solid #92400e; color: var(--warn); }
+.notice.error { background: var(--ng-bg); border: 1px solid rgba(248,113,113,.4); color: #fecaca; }
+label { display: block; color: var(--muted); font-size: .8rem; font-weight: 700; margin-bottom: 12px; }
+input, select {
+  display: block; width: 100%; margin-top: 6px; padding: 11px 12px; border: 2px solid var(--border);
+  border-radius: 10px; background: var(--surface2); color: var(--text); font-size: 16px; color-scheme: dark;
+}
+input:focus, select:focus { outline: none; border-color: var(--accent); }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 10px; }
+@media (max-width: 560px) { .grid3 { grid-template-columns: 1fr 1fr; } }
+.jun-hint { margin: -4px 0 12px; font-size: .8rem; color: var(--accent-2); font-weight: 700; }
+.primary {
+  width: 100%; padding: 14px; border: none; border-radius: 12px; cursor: pointer;
+  background: linear-gradient(135deg, #7c3aed, #a855f7); color: #fff; font-size: 1rem; font-weight: 800;
+}
+.primary:disabled { opacity: .6; cursor: wait; }
+.form-msg { margin-top: 10px; font-size: .85rem; min-height: 1.3em; }
+.form-msg.ok { color: var(--ok); }
+.form-msg.error { color: var(--ng); }
+.entry-layout { display: grid; gap: 14px; }
+@media (min-width: 900px) { .entry-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }
+.side-title { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; font-size: .9rem; font-weight: 800; color: var(--accent-3); margin-bottom: 10px; }
+.side-title label { margin: 0; display: flex; align-items: center; gap: 6px; font-size: .75rem; }
+.side-title select { width: auto; margin: 0; padding: 4px 8px; font-size: 14px; }
+.side-hint { color: var(--muted); font-size: .82rem; }
+.filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0 10px; padding-bottom: 4px; }
+.refresh { align-self: center; margin-bottom: 12px; padding: 10px; border-radius: 10px; border: 1px dashed var(--border); background: transparent; color: var(--accent-2); font-weight: 700; cursor: pointer; }
+.stats { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.stat { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 6px 12px; font-size: .78rem; color: var(--muted); }
+.stat b { color: var(--text); font-size: 1.05rem; margin-right: 2px; }
+.sec-title { font-size: .98rem; color: var(--accent-3); margin: 20px 0 6px; }
+.sec-note { color: var(--muted); font-size: .76rem; margin-bottom: 10px; }
+.empty { text-align: center; color: var(--faint); padding: 26px 12px; border: 1px dashed var(--border); border-radius: 12px; font-size: .85rem; }
+.badge { display: inline-block; font-size: .72rem; font-weight: 800; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+.badge.ok { background: var(--ok-bg); color: var(--ok); }
+.badge.ng { background: var(--ng-bg); color: var(--ng); }
+.badge.none { background: var(--surface2); color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 4px 4px 10px; border-radius: 999px; font-size: .82rem; background: var(--surface2); border: 1px solid var(--border); }
+.chip.ok { border-color: rgba(52,211,153,.45); }
+.chip.ng { border-color: rgba(248,113,113,.45); color: #fecaca; }
+.chip.me { box-shadow: 0 0 0 2px var(--accent); }
+.chip small { color: var(--muted); font-size: .72rem; }
+.del { border: none; background: transparent; color: var(--faint); font-size: 1rem; line-height: 1; width: 26px; height: 26px; border-radius: 50%; cursor: pointer; }
+.del:hover { background: var(--ng-bg); color: var(--ng); }
+.jun-group { margin-bottom: 18px; }
+.jun-title { display: flex; justify-content: space-between; align-items: baseline; font-size: .98rem; color: var(--accent-3); border-bottom: 1px solid var(--border); padding: 6px 2px; margin-bottom: 10px; }
+.jun-title small { color: var(--muted); font-weight: 600; }
+.date-row { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 10px; }
+@media (max-width: 560px) { .date-row { grid-template-columns: 1fr; gap: 4px; } }
+.date-label { font-weight: 800; font-size: .9rem; padding-top: 10px; }
+.frame { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; }
+.frame.missing { border-left: 4px solid var(--ng); }
+.frame-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.slot { font-size: .72rem; color: var(--accent-2); border: 1px solid var(--accent); border-radius: 6px; padding: 0 6px; }
+.frame-host { font-weight: 800; }
+.frame-foot { margin-top: 8px; }
+.add-btn { background: transparent; border: 1px dashed var(--border); color: var(--accent-2); border-radius: 8px; padding: 5px 10px; font-size: .76rem; cursor: pointer; }
+.patterns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 640px) { .patterns { grid-template-columns: 1fr; } }
+.pattern { background: var(--surface2); border-radius: 10px; padding: 10px 12px; border-left: 4px solid var(--pa); font-size: .84rem; }
+.pattern.p1 { border-left-color: var(--pb); }
+.pattern.p2 { border-left-color: var(--pc); }
+.pattern-name { font-size: .75rem; font-weight: 800; margin-bottom: 4px; }
+.prow { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
+.prow span { color: var(--muted); }
+.c0 { color: var(--pa); } .c1 { color: var(--pb); } .c2 { color: var(--pc); }
+.pair-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.pair { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+.pair.done { border-color: rgba(52,211,153,.5); }
+.pair-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-weight: 800; }
+.pair-meta { color: var(--muted); font-size: .78rem; margin: 6px 0 6px; }
+.pair-meta b { color: var(--text); }
+.prog-row { display: flex; justify-content: space-between; gap: 10px; font-size: .8rem; padding: 4px 0; border-top: 1px solid var(--line); }
+.prog-row .pl { font-weight: 800; white-space: nowrap; }
+.prog-row .pv { text-align: right; }
+.prog-row .pv.done { color: var(--ok); font-weight: 800; }
+.person { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 8px; }
+.person summary { list-style: none; cursor: pointer; padding: 12px 14px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; }
+.person summary::-webkit-details-marker { display: none; }
+.person summary::before { content: '▸'; color: var(--accent-2); margin-right: -6px; }
+.person[open] summary::before { content: '▾'; }
+.pname { font-weight: 800; flex: 1 0 auto; }
+.pstats { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: .8rem; color: var(--muted); }
+.pstats b { color: var(--text); }
+.okt { color: var(--ok); }
+.ngt { color: var(--ng); }
+.person-body { padding: 0 12px 12px; }
+.table-wrap { overflow: auto; max-height: 75vh; border: 1px solid var(--border); border-radius: 12px; }
+table { border-collapse: separate; border-spacing: 0; width: 100%; font-size: .8rem; }
+th, td { padding: 7px 9px; border-bottom: 1px solid var(--line); text-align: center; white-space: nowrap; background: var(--surface); }
+th { background: var(--surface2); color: var(--muted); font-weight: 800; position: sticky; top: 0; z-index: 1; white-space: normal; min-width: 54px; }
+td:first-child, th:first-child { position: sticky; left: 0; text-align: left; z-index: 2; font-weight: 800; color: var(--text); }
+th:first-child { z-index: 3; background: var(--surface2); color: var(--muted); }
+td.zero { color: var(--ng); background: #2a1220; font-weight: 800; }
+td.hit { color: var(--ok); font-weight: 800; }
+td.self { color: var(--faint); }
+.zero-chip { color: var(--ng); background: #2a1220; border-radius: 4px; padding: 0 5px; font-weight: 800; }
+.footer { color: var(--faint); font-size: .72rem; text-align: center; margin: 28px 0 8px; }
+.footer a { color: var(--accent-2); }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="header">
+    <div>
+      <h1>🎤 __TITLE__</h1>
+      <p class="subtitle">誰が・誰の枠に・何回行ったか と 歌推しまでの条件をチェック</p>
+    </div>
+    <a class="logout" href="/waku/logout">ログアウト</a>
+  </header>
+
+  <nav class="tabs">
+    <button type="button" class="tab-btn active" data-tab="entry">✏️ 記録</button>
+    <button type="button" class="tab-btn" data-tab="list">📅 枠一覧</button>
+    <button type="button" class="tab-btn" data-tab="summary">📊 回数・歌推し</button>
+  </nav>
+
+  <div id="storage-warning" class="notice warn" hidden>⚠️ データベース未設定のため、記録はサーバーのファイルにだけ保存されています（Render の再デプロイ・スリープ復帰で消えます）。Render の環境変数 DATABASE_URL を確認してください。</div>
+  <div id="load-error" class="notice error" hidden></div>
+
+  <div id="period-bar" class="card filters" hidden>
+    <label>月<select id="p-month"></select></label>
+    <label>旬
+      <select id="p-jun">
+        <option value="">月全体</option>
+        <option value="上旬">上旬（1〜10日）</option>
+        <option value="中旬">中旬（11〜20日）</option>
+        <option value="下旬">下旬（21日〜末日）</option>
+      </select>
+    </label>
+    <label>日にち<select id="p-day"></select></label>
+    <button type="button" class="refresh" id="p-refresh">🔄 最新にする</button>
+  </div>
+
+  <section id="tab-entry" class="section active">
+    <div class="entry-layout">
+      <form id="entry-form" class="card" autocomplete="off">
+        <div class="grid2">
+          <label>日付<input type="date" id="f-date" required></label>
+          <label>枠<select id="f-slot"></select></label>
+        </div>
+        <div id="f-jun" class="jun-hint"></div>
+        <label>配信した人（枠主）
+          <input type="text" id="f-host" list="name-list" maxlength="40" placeholder="名前を入力" required>
+        </label>
+        <label>枠周りした人
+          <input type="text" id="f-visitor" list="name-list" maxlength="40" placeholder="空欄なら「枠だけ登録」">
+        </label>
+        <label id="status-wrap">行けた？
+          <select id="f-status">
+            <option value="went">✅ 行けた</option>
+            <option value="missed">❌ 行けなかった</option>
+          </select>
+        </label>
+        <div id="went-fields">
+          <div class="grid3">
+            <label>視聴時間<select id="f-viewing"></select></label>
+            <label>コイン<select id="f-coins"></select></label>
+            <label>スーパーいいね
+              <select id="f-superlike">
+                <option value="0">なし</option>
+                <option value="1">💙 した</option>
+              </select>
+            </label>
+          </div>
+          <label id="coins-other-wrap" hidden>コイン（直接入力）
+            <input type="number" id="f-coins-other" min="0" step="1" inputmode="numeric" placeholder="例: 1200">
+          </label>
+        </div>
+        <button type="submit" class="primary" id="submit-btn">記録する</button>
+        <p id="form-msg" class="form-msg" role="status"></p>
+      </form>
+      <div>
+        <div id="pair-card" class="card"></div>
+        <div id="frame-card" class="card" hidden></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="tab-list" class="section">
+    <div class="card filters">
+      <label>配信した人<select id="l-host"></select></label>
+      <label>枠周りした人<select id="l-visitor"></select></label>
+      <label>表示
+        <select id="l-view">
+          <option value="">すべての枠</option>
+          <option value="went">行けた枠だけ</option>
+          <option value="missed">行けていない枠だけ</option>
+        </select>
+      </label>
+    </div>
+    <p id="l-hint" class="sec-note"></p>
+    <div id="l-stats" class="stats"></div>
+    <div id="l-body"></div>
+  </section>
+
+  <section id="tab-summary" class="section">
+    <div class="card filters">
+      <label>枠周りした人<select id="s-visitor"></select></label>
+      <label>配信した人<select id="s-host"></select></label>
+      <label>目標の推しPt<select id="s-target"></select></label>
+      <label>表示
+        <select id="s-view">
+          <option value="">すべて</option>
+          <option value="todo">歌推し未達だけ</option>
+          <option value="done">条件クリアだけ</option>
+        </select>
+      </label>
+    </div>
+    <div id="s-target-card"></div>
+    <h2 class="sec-title">👥 人ごとの枠周り回数と歌推しの進み具合</h2>
+    <p class="sec-note">名前をタップすると、配信した人ごとの回数と「歌推しまであと何が必要か」が開きます（未達の組み合わせが上）。</p>
+    <div id="s-people"></div>
+    <h2 class="sec-title">🧮 回数表（縦: 枠周りした人 ／ 横: 配信した人）</h2>
+    <p class="sec-note"><span class="zero-chip">未</span> は選んだ期間に一度も行けていない組み合わせです。</p>
+    <div id="s-matrix"></div>
+  </section>
+
+  <datalist id="name-list"></datalist>
+  <p class="footer">
+    歌推しの条件は<a href="https://thunderous-rugelach-1c3cc5.netlify.app/coloring_calculator" target="_blank" rel="noopener">歌推し計算ツール</a>と同じ数値です。
+    進み具合は、ここに記録した視聴時間・コイン・スーパーいいねを合計して出した目安です。
+  </p>
+</div>
+
+<script>
+const CONFIG = __WAKU_JSON__;
+const JUN_RANGE = { '上旬': [1, 10], '中旬': [11, 20], '下旬': [21, 31] };
+const JUNS = Object.keys(JUN_RANGE);
+const LETTERS = ['A', 'B', 'C'];
+const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
+const SEP = '\u0000';
+const TIERS = new Map(CONFIG.tiers.map(t => [t.label, t]));
+
+const state = {
+  tab: 'entry',
+  month: CONFIG.today.slice(0, 7),
+  jun: '',
+  day: '',
+  target: CONFIG.default_target,
+  cache: {},
+  names: [],
+  months: [],
+  storage: CONFIG.storage,
+  lastPair: null,
+  openPeople: new Set(),
+  people: [],
+};
+const pending = {};
+
+const $ = id => document.getElementById(id);
+const uniq = list => [...new Set(list)];
+const byName = (a, b) => a.localeCompare(b, 'ja');
+const normName = s => String(s || '').replace(/\s+/g, ' ').trim();
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function fmtMinutes(m) {
+  m = Math.round(m);
+  if (m <= 0) return '0分';
+  const h = Math.floor(m / 60), r = m % 60;
+  if (!h) return `${r}分`;
+  return r ? `${h}時間${r}分` : `${h}時間`;
+}
+function fmtCoins(c) {
+  if (c >= 10000) return (c / 10000).toLocaleString('ja-JP', { maximumFractionDigits: 2 }) + '万';
+  return Number(c).toLocaleString('ja-JP');
+}
+function fmtMonth(m) { const [y, mo] = m.split('-'); return `${y}年${Number(mo)}月`; }
+function fmtDate(d) {
+  const dt = new Date(d + 'T00:00:00');
+  return `${dt.getMonth() + 1}/${dt.getDate()}（${WEEKDAYS[dt.getDay()]}）`;
+}
+function junOf(d) { const day = Number(d.slice(8, 10)); return day <= 10 ? '上旬' : day <= 20 ? '中旬' : '下旬'; }
+function daysInMonth(m) { const [y, mo] = m.split('-').map(Number); return new Date(y, mo, 0).getDate(); }
+function slotIndex(s) { const i = CONFIG.slots.indexOf(s); return i < 0 ? 99 : i; }
+function currentTier() { return TIERS.get(state.target) || CONFIG.tiers[0]; }
+
+// ── サーバーとのやりとり ─────────────────────────
+async function api(url, body) {
+  const opts = body
+    ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, csrf_token: CONFIG.csrf_token }) }
+    : {};
+  let res;
+  try {
+    res = await fetch(url, opts);
+  } catch (e) {
+    throw new Error('通信できませんでした。電波の良いところでもう一度お試しください。');
+  }
+  if (res.status === 401) throw new Error('ログインが切れました。ページを再読み込みしてください。');
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || '処理に失敗しました');
+  return data;
+}
+
+function loadMonth(month, force) {
+  if (!force && state.cache[month]) return Promise.resolve(state.cache[month]);
+  if (pending[month]) return pending[month];
+  pending[month] = api('/api/waku/records?month=' + encodeURIComponent(month)).then(data => {
+    state.cache[month] = data.records;
+    state.names = data.names;
+    state.months = data.months;
+    state.storage = data.storage;
+    $('load-error').hidden = true;
+    $('name-list').innerHTML = state.names.map(n => `<option value="${esc(n)}"></option>`).join('');
+    $('storage-warning').hidden = state.storage !== 'file';
+    return data.records;
+  }).finally(() => { delete pending[month]; });
+  return pending[month];
+}
+
+function showLoadError(err) {
+  $('load-error').textContent = '⚠️ ' + err.message;
+  $('load-error').hidden = false;
+}
+
+function findRecord(id) {
+  for (const recs of Object.values(state.cache)) {
+    const r = recs.find(x => x.id === id);
+    if (r) return r;
+  }
+  return null;
+}
+
+function removeRecord(id) {
+  for (const m of Object.keys(state.cache)) state.cache[m] = state.cache[m].filter(r => r.id !== id);
+}
+
+// ── 集計 ─────────────────────────────────────
+function periodRecords() {
+  return (state.cache[state.month] || []).filter(r =>
+    (!state.jun || r.jun === state.jun) && (!state.day || Number(r.date.slice(8, 10)) === Number(state.day)));
+}
+
+function periodLabel() {
+  let s = fmtMonth(state.month);
+  if (state.jun) s += ' ' + state.jun;
+  if (state.day) s += ` ${state.day}日`;
+  return s;
+}
+
+function emptyPair(visitor, host) {
+  return { visitor, host, went: 0, missed: 0, minutes: 0, coins: 0, slDates: new Set(), byJun: { '上旬': 0, '中旬': 0, '下旬': 0 } };
+}
+
+function aggregatePairs(recs) {
+  const pairs = new Map();
+  for (const r of recs) {
+    if (!r.visitor) continue;
+    const key = r.visitor + SEP + r.host;
+    if (!pairs.has(key)) pairs.set(key, emptyPair(r.visitor, r.host));
+    const p = pairs.get(key);
+    if (r.status === 'went') {
+      p.went++;
+      p.minutes += r.viewing_minutes;
+      p.coins += r.coins;
+      if (r.super_like) p.slDates.add(r.date);
+      p.byJun[r.jun]++;
+    } else if (r.status === 'missed') {
+      p.missed++;
+    }
+  }
+  return pairs;
+}
+
+// パターンA/B/Cそれぞれについて、あと何が足りないか
+function progress(p, tier) {
+  return tier.patterns.map(pt => {
+    const lack = {
+      coins: Math.max(0, pt.coins - p.coins),
+      minutes: Math.max(0, Math.round(pt.viewing_hours * 60) - p.minutes),
+      sl: Math.max(0, pt.super_like_days - p.slDates.size),
+    };
+    lack.done = !lack.coins && !lack.minutes && !lack.sl;
+    return lack;
+  });
+}
+
+function lackText(l) {
+  if (l.done) return '✅ クリア';
+  return 'あと ' + [
+    l.coins ? '🪙' + fmtCoins(l.coins) : '',
+    l.minutes ? '👀' + fmtMinutes(l.minutes) : '',
+    l.sl ? '💙' + l.sl + '日' : '',
+  ].filter(Boolean).join('・');
+}
+
+function pairCard(p, tier, showJun) {
+  const prog = progress(p, tier);
+  const done = prog.some(x => x.done);
+  const badge = done ? '<span class="badge ok">✅ 条件クリア</span>'
+    : p.went ? '<span class="badge none">未達</span>' : '<span class="badge ng">未訪問</span>';
+  const jun = showJun ? `（${JUNS.map(j => `${j}${p.byJun[j]}`).join('・')}）` : '';
+  return `<article class="pair${done ? ' done' : ''}">
+    <div class="pair-head"><span>${esc(p.visitor)} → ${esc(p.host)} の枠</span>${badge}</div>
+    <div class="pair-meta">行った <b>${p.went}回</b>${jun}${p.missed ? ` ・ ❌${p.missed}回` : ''} ・ 👀${fmtMinutes(p.minutes)} ・ 🪙${fmtCoins(p.coins)} ・ 💙${p.slDates.size}日</div>
+    ${prog.map((x, i) => `<div class="prog-row"><span class="pl c${i}">${LETTERS[i]} ${esc(CONFIG.pattern_names[i])}</span><span class="pv${x.done ? ' done' : ''}">${lackText(x)}</span></div>`).join('')}
+  </article>`;
+}
+
+function targetCard(tier) {
+  return `<div class="card">
+    <div class="side-title">🎯 歌推しの条件（目標 ${esc(tier.label)}）</div>
+    <div class="patterns">${tier.patterns.map((p, i) => `
+      <div class="pattern p${i}">
+        <div class="pattern-name c${i}">パターン${LETTERS[i]} — ${esc(CONFIG.pattern_names[i])}</div>
+        <div class="prow"><span>🪙 コイン</span><b>${fmtCoins(p.coins)}</b></div>
+        <div class="prow"><span>👀 視聴時間</span><b>${p.viewing_hours ? fmtMinutes(p.viewing_hours * 60) : '不要'}</b></div>
+        <div class="prow"><span>💙 スーパーいいね</span><b>${p.super_like_days ? p.super_like_days + '日分' : '不要'}</b></div>
+      </div>`).join('')}
+    </div>
+    <p class="sec-note" style="margin:10px 0 0">どれか1つのパターンの条件をすべて満たすと「条件クリア」。${esc(periodLabel())} の記録を合計した目安です。</p>
+  </div>`;
+}
+
+function fillNameSelect(sel, names, allLabel) {
+  const cur = sel.value;
+  const list = uniq([...names, ...(cur ? [cur] : [])]).sort(byName);
+  sel.innerHTML = `<option value="">${allLabel}</option>` + list.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+  sel.value = cur;
+}
+
+function fillTargetSelect(sel) {
+  sel.innerHTML = CONFIG.tiers.map(t => `<option value="${esc(t.label)}">${esc(t.label)}</option>`).join('');
+  sel.value = currentTier().label;
+}
+
+function visitChip(r, me) {
+  const label = r.status === 'went' ? '✅' : r.status === 'missed' ? '❌' : '';
+  const detail = r.status === 'went' ? [
+    r.viewing_minutes ? '👀' + fmtMinutes(r.viewing_minutes) : '',
+    r.coins ? '🪙' + fmtCoins(r.coins) : '',
+    r.super_like ? '💙' : '',
+  ].filter(Boolean).join(' ') : '';
+  const cls = r.status === 'went' ? 'ok' : r.status === 'missed' ? 'ng' : '';
+  const name = r.visitor ? esc(r.visitor) : '枠だけ登録';
+  return `<span class="chip ${cls}${me && r.visitor === me ? ' me' : ''}">${label} ${name}${detail ? ` <small>${detail}</small>` : ''}`
+    + `<button type="button" class="del" data-id="${esc(r.id)}" title="この記録を削除" aria-label="削除">×</button></span>`;
+}
+
+// ── 記録するタブ ───────────────────────────────
+function syncEntryFields() {
+  const hasVisitor = !!normName($('f-visitor').value);
+  $('status-wrap').hidden = !hasVisitor;
+  $('went-fields').hidden = !hasVisitor || $('f-status').value !== 'went';
+  $('coins-other-wrap').hidden = $('f-coins').value !== 'other';
+  $('submit-btn').textContent = hasVisitor ? '記録する' : '枠だけ登録する';
+}
+
+function renderEntrySide() {
+  syncEntryFields();
+  const date = $('f-date').value;
+  const host = normName($('f-host').value), visitor = normName($('f-visitor').value), slot = $('f-slot').value;
+  $('f-jun').textContent = date ? `${fmtDate(date)} ・ ${fmtMonth(date.slice(0, 7))}の${junOf(date)}` : '';
+  const month = date ? date.slice(0, 7) : '';
+  const recs = month ? state.cache[month] : null;
+  if (!recs) {
+    $('pair-card').innerHTML = '<div class="side-hint">読み込み中…</div>';
+    $('frame-card').hidden = true;
+    if (month) loadMonth(month).then(renderEntrySide).catch(showLoadError);
+    return;
+  }
+
+  const pair = host && visitor && host !== visitor ? { visitor, host } : state.lastPair;
+  if (pair) {
+    const p = aggregatePairs(recs).get(pair.visitor + SEP + pair.host) || emptyPair(pair.visitor, pair.host);
+    $('pair-card').innerHTML = `<div class="side-title"><span>📈 ${fmtMonth(month)}の回数と歌推しまで</span>`
+      + `<label>目標<select id="e-target"></select></label></div>` + pairCard(p, currentTier(), true);
+    fillTargetSelect($('e-target'));
+  } else {
+    $('pair-card').innerHTML = '<div class="side-hint">配信した人と枠周りした人を入れると、その月に何回行ったかと、歌推しまでにあと何が必要かがここに出ます。</div>';
+  }
+
+  if (host && date) {
+    const same = recs.filter(r => r.date === date && r.slot === slot && r.host === host);
+    $('frame-card').innerHTML = `<div class="side-title">🗓 この枠の記録（${fmtDate(date)} ${esc(slot)} ／ ${esc(host)}）</div>`
+      + (same.length ? `<div class="chips">${same.map(r => visitChip(r)).join('')}</div>` : '<div class="side-hint">まだ記録はありません</div>');
+    $('frame-card').hidden = false;
+  } else {
+    $('frame-card').hidden = true;
+  }
+}
+
+async function submitEntry(e) {
+  e.preventDefault();
+  const msg = $('form-msg'), btn = $('submit-btn');
+  const date = $('f-date').value, slot = $('f-slot').value, status = $('f-status').value;
+  const host = normName($('f-host').value), visitor = normName($('f-visitor').value);
+  let coins = $('f-coins').value;
+  if (coins === 'other') coins = $('f-coins-other').value.trim() || '0';
+
+  const recs = state.cache[date.slice(0, 7)] || [];
+  const sameFrame = recs.filter(r => r.date === date && r.slot === slot && r.host === host);
+  if (visitor && sameFrame.some(r => r.visitor === visitor)
+      && !confirm(`${visitor} はこの枠にもう記録があります。もう1件追加しますか？`)) return;
+  if (!visitor && sameFrame.length && !confirm('この枠はもう登録されています。もう1件登録しますか？')) return;
+
+  btn.disabled = true;
+  msg.className = 'form-msg';
+  msg.textContent = '保存中…';
+  try {
+    const { record } = await api('/api/waku/records', {
+      date, slot, host, visitor, status, coins,
+      viewing_minutes: $('f-viewing').value,
+      super_like: $('f-superlike').value === '1',
+    });
+    const m = record.date.slice(0, 7);
+    if (state.cache[m]) state.cache[m].push(record);
+    if (!state.months.includes(m)) state.months.push(m);
+    const added = [record.host, record.visitor].filter(n => n && !state.names.includes(n));
+    if (added.length) {
+      state.names = [...state.names, ...added].sort(byName);
+      $('name-list').innerHTML = state.names.map(n => `<option value="${esc(n)}"></option>`).join('');
+    }
+    if (record.visitor) state.lastPair = { visitor: record.visitor, host: record.host };
+    msg.className = 'form-msg ok';
+    msg.textContent = record.visitor
+      ? `✅ 記録しました：${record.visitor} → ${record.host}（${fmtDate(record.date)} ${record.slot}）`
+      : `✅ 枠を登録しました：${record.host}（${fmtDate(record.date)} ${record.slot}）`;
+    $('f-visitor').value = '';
+    $('f-status').value = 'went';
+    $('f-viewing').value = '0';
+    $('f-coins').value = '0';
+    $('f-coins-other').value = '';
+    $('f-superlike').value = '0';
+  } catch (err) {
+    msg.className = 'form-msg error';
+    msg.textContent = '⚠️ ' + err.message;
+  } finally {
+    btn.disabled = false;
+    renderEntrySide();
+  }
+}
+
+// ── 枠一覧タブ ────────────────────────────────
+function buildFrames(recs) {
+  const map = new Map();
+  for (const r of recs) {
+    const key = r.date + SEP + r.slot + SEP + r.host;
+    if (!map.has(key)) map.set(key, { date: r.date, slot: r.slot, host: r.host, jun: r.jun, went: [], missed: [], bare: [] });
+    const f = map.get(key);
+    (r.status === 'went' ? f.went : r.status === 'missed' ? f.missed : f.bare).push(r);
+  }
+  return [...map.values()].sort((a, b) =>
+    a.date.localeCompare(b.date) || slotIndex(a.slot) - slotIndex(b.slot) || byName(a.host, b.host));
+}
+
+function frameCard(f, visitor) {
+  let badge, missing;
+  if (visitor) {
+    missing = f.mine !== 'went';
+    badge = f.mine === 'went' ? `<span class="badge ok">✅ ${esc(visitor)} 行けた</span>`
+      : f.mine === 'missed' ? `<span class="badge ng">❌ ${esc(visitor)} 行けなかった</span>`
+      : `<span class="badge ng">${esc(visitor)} 記録なし</span>`;
+  } else {
+    missing = !f.went.length;
+    badge = f.went.length ? `<span class="badge ok">✅ ${f.went.length}人</span>` : '<span class="badge ng">まだ誰も行けていない</span>';
+  }
+  const chips = [...f.went, ...f.missed, ...f.bare].map(r => visitChip(r, visitor)).join('');
+  return `<article class="frame${missing ? ' missing' : ''}">
+    <div class="frame-head"><span class="slot">${esc(f.slot)}</span><span class="frame-host">${esc(f.host)}</span><span class="side-hint">の枠</span>${badge}</div>
+    <div class="chips">${chips}</div>
+    <div class="frame-foot"><button type="button" class="add-btn" data-date="${esc(f.date)}" data-slot="${esc(f.slot)}" data-host="${esc(f.host)}">＋ この枠に記録</button></div>
+  </article>`;
+}
+
+function renderList() {
+  const recs = periodRecords();
+  fillNameSelect($('l-host'), uniq(recs.map(r => r.host)), 'すべての配信者');
+  fillNameSelect($('l-visitor'), uniq(recs.filter(r => r.visitor).map(r => r.visitor)), 'すべての人');
+  const host = $('l-host').value, visitor = $('l-visitor').value, view = $('l-view').value;
+
+  let frames = buildFrames(recs).filter(f => !host || f.host === host);
+  if (visitor) {
+    frames = frames.filter(f => f.host !== visitor);
+    for (const f of frames) {
+      f.mine = f.went.some(r => r.visitor === visitor) ? 'went' : f.missed.some(r => r.visitor === visitor) ? 'missed' : 'none';
+    }
+    if (view === 'went') frames = frames.filter(f => f.mine === 'went');
+    if (view === 'missed') frames = frames.filter(f => f.mine !== 'went');
+  } else {
+    if (view === 'went') frames = frames.filter(f => f.went.length);
+    if (view === 'missed') frames = frames.filter(f => !f.went.length || f.missed.length);
+  }
+
+  $('l-hint').textContent = view !== 'missed' ? ''
+    : visitor ? `${visitor} が行けていない枠（❌の記録がある枠＋記録がない枠）を表示しています。${visitor} 自身の枠は除きます。`
+    : 'まだ誰も行けていない枠と、❌（行けなかった）の記録がある枠を表示しています。';
+
+  const countOf = status => frames.reduce((n, f) => n + f[status].filter(r => !visitor || r.visitor === visitor).length, 0);
+  $('l-stats').innerHTML = `<span class="stat"><b>${frames.length}</b>枠</span>`
+    + `<span class="stat">行けた <b>${countOf('went')}</b>回</span>`
+    + `<span class="stat">行けなかった <b>${countOf('missed')}</b>回</span>`
+    + `<span class="stat">${esc(periodLabel())}</span>`;
+
+  if (!frames.length) {
+    $('l-body').innerHTML = `<div class="empty">${recs.length ? '条件に合う枠はありません' : esc(periodLabel()) + ' の記録はまだありません。「記録する」タブから追加できます。'}</div>`;
+    return;
+  }
+  let html = '';
+  for (const jun of JUNS) {
+    const fs = frames.filter(f => f.jun === jun);
+    if (!fs.length) continue;
+    const [lo, hi] = JUN_RANGE[jun];
+    html += `<section class="jun-group"><h3 class="jun-title"><span>${fmtMonth(state.month)} ${jun}（${lo}〜${Math.min(hi, daysInMonth(state.month))}日）</span><small>${fs.length}枠</small></h3>`;
+    for (const d of uniq(fs.map(f => f.date))) {
+      html += `<div class="date-row"><div class="date-label">${fmtDate(d)}</div><div>${fs.filter(f => f.date === d).map(f => frameCard(f, visitor)).join('')}</div></div>`;
+    }
+    html += '</section>';
+  }
+  $('l-body').innerHTML = html;
+}
+
+// ── 回数・歌推しタブ ────────────────────────────
+function renderSummary() {
+  const recs = periodRecords();
+  fillNameSelect($('s-visitor'), uniq(recs.flatMap(r => r.visitor ? [r.visitor, r.host] : [r.host])), 'すべての人');
+  fillNameSelect($('s-host'), uniq(recs.map(r => r.host)), 'すべての配信者');
+  fillTargetSelect($('s-target'));
+  const visitor = $('s-visitor').value, host = $('s-host').value;
+  const tier = currentTier();
+  $('s-target-card').innerHTML = targetCard(tier);
+
+  if (!recs.length) {
+    state.people = [];
+    $('s-people').innerHTML = `<div class="empty">${esc(periodLabel())} の記録はまだありません</div>`;
+    $('s-matrix').innerHTML = '';
+    return;
+  }
+
+  const pairs = aggregatePairs(recs);
+  const hosts = uniq(recs.map(r => r.host)).sort(byName);
+  const everyone = uniq([...recs.filter(r => r.visitor).map(r => r.visitor), ...hosts]).sort(byName);
+  const rows = visitor ? [visitor] : everyone;
+  const cols = host ? [host] : hosts;
+
+  state.people = rows.map(name => {
+    const list = cols.filter(h => h !== name).map(h => {
+      const p = pairs.get(name + SEP + h) || emptyPair(name, h);
+      p.done = progress(p, tier).some(x => x.done);
+      return p;
+    });
+    return {
+      name, list,
+      went: list.reduce((n, p) => n + p.went, 0),
+      missed: list.reduce((n, p) => n + p.missed, 0),
+      visited: list.filter(p => p.went).length,
+      cleared: list.filter(p => p.done).length,
+    };
+  }).sort((a, b) => b.went - a.went || byName(a.name, b.name));
+
+  $('s-people').innerHTML = state.people.map(s => `
+    <details class="person" data-name="${esc(s.name)}"${visitor || state.openPeople.has(s.name) ? ' open' : ''}>
+      <summary>
+        <span class="pname">${esc(s.name)}</span>
+        <span class="pstats">
+          <span>行った <b>${s.went}</b>回</span>
+          ${s.missed ? `<span class="ngt">❌ ${s.missed}回</span>` : ''}
+          <span>行った相手 <b>${s.visited}</b>/${s.list.length}人</span>
+          <span class="okt">条件クリア ${s.cleared}人</span>
+        </span>
+      </summary>
+      <div class="person-body"></div>
+    </details>`).join('');
+  document.querySelectorAll('#s-people details[open]').forEach(fillPerson);
+
+  let table = '<div class="table-wrap"><table><thead><tr><th>枠周り＼配信</th>'
+    + cols.map(h => `<th>${esc(h)}</th>`).join('') + '<th>行った相手</th></tr></thead><tbody>';
+  for (const name of rows) {
+    let visited = 0, total = 0;
+    table += `<tr><td>${esc(name)}</td>` + cols.map(h => {
+      if (h === name) return '<td class="self">—</td>';
+      total++;
+      const n = (pairs.get(name + SEP + h) || {}).went || 0;
+      if (n) visited++;
+      return n ? `<td class="hit">${n}</td>` : '<td class="zero">未</td>';
+    }).join('') + `<td>${visited}/${total}</td></tr>`;
+  }
+  $('s-matrix').innerHTML = table + '</tbody></table></div>';
+}
+
+function fillPerson(d) {
+  const s = state.people.find(x => x.name === d.dataset.name);
+  if (!s) return;
+  const view = $('s-view').value;
+  let list = s.list;
+  if (view === 'todo') list = list.filter(p => !p.done);
+  if (view === 'done') list = list.filter(p => p.done);
+  list = [...list].sort((a, b) => (a.done - b.done) || (b.went - a.went) || byName(a.host, b.host));
+  d.querySelector('.person-body').innerHTML = list.length
+    ? `<div class="pair-grid">${list.map(p => pairCard(p, currentTier(), !state.jun && !state.day)).join('')}</div>`
+    : '<div class="empty">該当する組み合わせはありません</div>';
+}
+
+// ── 期間の絞り込み・タブ切り替え ─────────────────────
+function renderPeriodBar() {
+  const months = uniq([...state.months, CONFIG.today.slice(0, 7), state.month]).sort().reverse();
+  $('p-month').innerHTML = months.map(m => `<option value="${esc(m)}">${esc(fmtMonth(m))}</option>`).join('');
+  $('p-month').value = state.month;
+  $('p-jun').value = state.jun;
+  const [lo, hi] = state.jun ? JUN_RANGE[state.jun] : [1, 31];
+  let opts = '<option value="">すべての日</option>';
+  for (let d = lo; d <= Math.min(hi, daysInMonth(state.month)); d++) opts += `<option value="${d}">${d}日</option>`;
+  $('p-day').innerHTML = opts;
+  $('p-day').value = state.day;
+}
+
+function render() {
+  if (state.tab === 'entry') {
+    renderEntrySide();
+    return;
+  }
+  renderPeriodBar();
+  const body = state.tab === 'list' ? $('l-body') : $('s-people');
+  if (!state.cache[state.month]) {
+    body.innerHTML = '<div class="empty">読み込み中…</div>';
+    loadMonth(state.month).then(render).catch(showLoadError);
+    return;
+  }
+  if (state.tab === 'list') renderList();
+  else renderSummary();
+}
+
+function switchTab(tab) {
+  state.tab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('.section').forEach(s => s.classList.toggle('active', s.id === 'tab-' + tab));
+  $('period-bar').hidden = tab === 'entry';
+  render();
+  // 他の人の記録も見えるよう、一覧・集計を開くたびに最新を取り直す
+  if (tab !== 'entry') loadMonth(state.month, true).then(render).catch(showLoadError);
+}
+
+// ── 初期化 ───────────────────────────────────
+$('f-date').value = CONFIG.today;
+$('f-slot').innerHTML = CONFIG.slots.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+$('f-viewing').innerHTML = '<option value="0">なし</option>'
+  + CONFIG.viewing_minutes.map(m => `<option value="${m}">${fmtMinutes(m)}</option>`).join('');
+$('f-coins').innerHTML = '<option value="0">なし</option>'
+  + CONFIG.coin_presets.map(c => `<option value="${c}">${Number(c).toLocaleString('ja-JP')}</option>`).join('')
+  + '<option value="other">その他（直接入力）</option>';
+
+document.querySelectorAll('.tab-btn').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
+$('entry-form').addEventListener('submit', submitEntry);
+['f-date', 'f-slot', 'f-status', 'f-coins'].forEach(id => $(id).addEventListener('change', renderEntrySide));
+['f-host', 'f-visitor'].forEach(id => $(id).addEventListener('input', renderEntrySide));
+$('p-month').addEventListener('change', e => { state.month = e.target.value; state.day = ''; render(); });
+$('p-jun').addEventListener('change', e => { state.jun = e.target.value; state.day = ''; render(); });
+$('p-day').addEventListener('change', e => { state.day = e.target.value; render(); });
+$('p-refresh').addEventListener('click', () => loadMonth(state.month, true).then(render).catch(showLoadError));
+['l-host', 'l-visitor', 'l-view'].forEach(id => $(id).addEventListener('change', renderList));
+['s-visitor', 's-host'].forEach(id => $(id).addEventListener('change', renderSummary));
+$('s-view').addEventListener('change', () => document.querySelectorAll('#s-people details[open]').forEach(fillPerson));
+
+document.addEventListener('change', e => {
+  if (e.target.id === 's-target' || e.target.id === 'e-target') {
+    state.target = e.target.value;
+    render();
+  }
+});
+
+document.addEventListener('toggle', e => {
+  const d = e.target;
+  if (!(d instanceof HTMLDetailsElement) || !d.classList.contains('person')) return;
+  if (d.open) {
+    state.openPeople.add(d.dataset.name);
+    fillPerson(d);
+  } else {
+    state.openPeople.delete(d.dataset.name);
+  }
+}, true);
+
+document.addEventListener('click', async e => {
+  const del = e.target.closest('.del');
+  if (del) {
+    const r = findRecord(del.dataset.id);
+    const what = !r ? 'この記録'
+      : r.visitor ? `${fmtDate(r.date)} ${r.host} の枠 ／ ${r.visitor}（${r.status === 'went' ? '行けた' : '行けなかった'}）`
+      : `${fmtDate(r.date)} ${r.host} の枠（枠だけ登録）`;
+    if (!confirm(`${what}\nを削除します。よろしいですか？`)) return;
+    del.disabled = true;
+    try {
+      await api(`/api/waku/records/${encodeURIComponent(del.dataset.id)}/delete`, {});
+      removeRecord(del.dataset.id);
+      render();
+    } catch (err) {
+      alert(err.message);
+      del.disabled = false;
+    }
+    return;
+  }
+  const add = e.target.closest('.add-btn');
+  if (add) {
+    $('f-date').value = add.dataset.date;
+    $('f-slot').value = add.dataset.slot;
+    $('f-host').value = add.dataset.host;
+    $('f-visitor').value = '';
+    $('form-msg').textContent = '';
+    switchTab('entry');
+    window.scrollTo({ top: 0 });
+    $('f-visitor').focus();
+  }
+});
+
+$('storage-warning').hidden = state.storage !== 'file';
+render();
+</script>
+</body>
+</html>"""
+
+
+def _waku_password():
+    """ライバー共有用の WAKU_PASSWORD。未設定なら WEB_PASSWORD で入れる。"""
+    return os.environ.get("WAKU_PASSWORD", "") or os.environ.get("WEB_PASSWORD", "")
+
+
+def _waku_csrf_ok(data):
+    import hmac
+
+    expected_token = str(session.get("waku_csrf", ""))
+    submitted_token = str((data or {}).get("csrf_token", ""))
+    return bool(expected_token) and hmac.compare_digest(expected_token, submitted_token)
+
+
+@app.route("/waku", methods=["GET", "POST"])
+def waku_index():
+    import hmac
+    import json
+    import secrets
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    import waku_tracker
+
+    password = _waku_password()
+    error_html = ""
+
+    if request.method == "POST":
+        submitted = request.form.get("password", "")
+        if password and hmac.compare_digest(submitted.encode("utf-8"), password.encode("utf-8")):
+            session["waku_ok"] = True
+            return redirect("/waku")
+        error_html = '<p class="error">パスワードが違います</p>'
+
+    if not session.get("waku_ok"):
+        if not password:
+            error_html = '<p class="error">パスワードが未設定です（Render の WAKU_PASSWORD を設定してください）</p>'
+        html = WAKU_LOGIN_HTML.replace("__ERROR__", error_html)
+        return html, (401 if request.method == "POST" else 200), {"Content-Type": "text/html; charset=utf-8"}
+
+    csrf_token = session.get("waku_csrf")
+    if not csrf_token:
+        csrf_token = secrets.token_urlsafe(24)
+        session["waku_csrf"] = csrf_token
+
+    config = waku_tracker.load_config()
+    payload = {
+        **config,
+        "csrf_token": csrf_token,
+        "today": datetime.now(ZoneInfo("Asia/Tokyo")).strftime("%Y-%m-%d"),
+        "storage": waku_tracker.storage_mode(),
+    }
+    # "<" を < に置き換えて、YAML 内の文字列で </script> が閉じられないようにする
+    data_json = json.dumps(payload, ensure_ascii=False).replace("<", "\\u003c")
+    html = WAKU_HTML.replace("__TITLE__", str(escape(config["title"]))).replace("__WAKU_JSON__", data_json)
+    return html, 200, {"Content-Type": "text/html; charset=utf-8"}
+
+
+@app.route("/api/waku/records")
+def api_waku_records():
+    import waku_tracker
+
+    if not session.get("waku_ok"):
+        return jsonify({"error": "ログインが必要です"}), 401
+
+    month = request.args.get("month", "")
+    if not waku_tracker.month_range(month):
+        return jsonify({"error": "月の指定が正しくありません"}), 400
+    try:
+        return jsonify(waku_tracker.load_month(month))
+    except Exception as e:
+        print(f"[waku] load failed: {e}", file=sys.stderr)
+        return jsonify({"error": "記録を読み込めませんでした。時間をおいてもう一度お試しください。"}), 500
+
+
+@app.route("/api/waku/records", methods=["POST"])
+def api_waku_create():
+    import waku_tracker
+
+    if not session.get("waku_ok"):
+        return jsonify({"error": "ログインが必要です"}), 401
+
+    data = request.get_json(silent=True) or {}
+    if not _waku_csrf_ok(data):
+        return jsonify({"error": "不正なリクエストです。ページを再読み込みしてください。"}), 403
+
+    record, error = waku_tracker.build_record(data, waku_tracker.load_config())
+    if error:
+        return jsonify({"error": error}), 400
+    try:
+        waku_tracker.save_record(record)
+    except Exception as e:
+        print(f"[waku] save failed: {e}", file=sys.stderr)
+        return jsonify({"error": "保存に失敗しました。時間をおいてもう一度お試しください。"}), 500
+    return jsonify({"ok": True, "record": waku_tracker.with_jun(record)})
+
+
+@app.route("/api/waku/records/<record_id>/delete", methods=["POST"])
+def api_waku_delete(record_id):
+    import waku_tracker
+
+    if not session.get("waku_ok"):
+        return jsonify({"error": "ログインが必要です"}), 401
+
+    if not _waku_csrf_ok(request.get_json(silent=True) or {}):
+        return jsonify({"error": "不正なリクエストです。ページを再読み込みしてください。"}), 403
+
+    try:
+        deleted = waku_tracker.delete_record(record_id)
+    except Exception as e:
+        print(f"[waku] delete failed: {e}", file=sys.stderr)
+        return jsonify({"error": "削除に失敗しました。記録は削除されていません。"}), 500
+    if not deleted:
+        return jsonify({"error": "対象の記録が見つかりませんでした（すでに削除されている可能性があります）"}), 404
+    return jsonify({"ok": True})
+
+
+@app.route("/waku/logout")
+def waku_logout():
+    session.pop("waku_ok", None)
+    session.pop("waku_csrf", None)
+    return redirect("/waku")
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
