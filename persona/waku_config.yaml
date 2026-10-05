@@ -1,0 +1,373 @@
+# /waku（枠周り記録・歌推しチェック）の設定
+# 選択肢や歌推しの条件を変えるときはこのファイルを編集するだけでOK（コード変更不要）
+# 記録そのものはサーバーには保存されず、使う人のスマホ（ブラウザ）の中に保存される。
+#
+# ── page ─────────────────────────────────────
+# title : ページの見出し（ブラウザのタブにも表示）
+#
+# ── 入力フォームのプルダウン ─────────────────────
+# viewing_minutes : 「視聴時間」の選択肢（分）。0（なし）は自動で先頭に入る
+# coin_presets    : 「コイン」の選択肢。0（なし）と「その他（直接入力）」は自動で入る
+#
+# ── uta_oshi（歌推しの条件） ──────────────────────
+# 出典: 歌推し計算ツール（salon-tools の app/coloring_calculator.html）
+#       https://thunderous-rugelach-1c3cc5.netlify.app/coloring_calculator
+# 計算ツール側の数値が変わったら、ここの tiers も同じように直す。
+#
+# default_target : 「歌推し」タブで最初に選ばれている目標の推しPt（tiers の label のどれか）
+# pattern_names  : パターン A / B / C の名前（計算ツールと同じ）
+# tiers          : 推しPtごとの条件。patterns は [A, B, C] の順に3つ
+#                  coins           : 必要なコイン数
+#                  viewing_hours   : 必要な視聴時間（時間。0.25 = 15分 / 0 = 不要）
+#                  super_like_days : 必要なスーパーいいね（日数。0 = 不要）
+# high_tiers     : 50K以上は計算式で作る（計算ツールと同じ式）
+#                  coins = base_coins + (K - 49) × coins_per_k
+
+page:
+  title: "枠周り記録"
+
+viewing_minutes: [5, 10, 15, 20, 30, 45, 60, 75, 90, 105, 120, 150, 180, 210, 240, 300, 360, 420, 480, 600, 720]
+
+coin_presets: [1, 5, 10, 20, 25, 30, 40, 50, 60, 80, 100, 150, 200, 250, 300, 400, 500, 600, 800, 1000, 1500, 2000, 3000, 5000, 10000]
+
+uta_oshi:
+  default_target: "10pt"
+  pattern_names: ["コイン節約型", "バランス型", "コイン一括型"]
+  tiers:
+    - label: "10pt"
+      pt: 10
+      patterns:
+        - { coins: 1, viewing_hours: 0.25, super_like_days: 0 }
+        - { coins: 10, viewing_hours: 0.1, super_like_days: 0 }
+        - { coins: 30, viewing_hours: 0, super_like_days: 0 }
+    - label: "50pt"
+      pt: 50
+      patterns:
+        - { coins: 5, viewing_hours: 0.5, super_like_days: 0 }
+        - { coins: 20, viewing_hours: 0.2, super_like_days: 0 }
+        - { coins: 60, viewing_hours: 0, super_like_days: 0 }
+    - label: "0.1K"
+      pt: 100
+      patterns:
+        - { coins: 10, viewing_hours: 0.75, super_like_days: 0 }
+        - { coins: 40, viewing_hours: 0.3, super_like_days: 0 }
+        - { coins: 100, viewing_hours: 0, super_like_days: 0 }
+    - label: "0.3K"
+      pt: 300
+      patterns:
+        - { coins: 25, viewing_hours: 1, super_like_days: 0 }
+        - { coins: 60, viewing_hours: 0.4, super_like_days: 0 }
+        - { coins: 200, viewing_hours: 0, super_like_days: 0 }
+    - label: "0.5K"
+      pt: 500
+      patterns:
+        - { coins: 40, viewing_hours: 1.25, super_like_days: 0 }
+        - { coins: 100, viewing_hours: 0.5, super_like_days: 0 }
+        - { coins: 400, viewing_hours: 0, super_like_days: 0 }
+    - label: "0.7K"
+      pt: 700
+      patterns:
+        - { coins: 60, viewing_hours: 1.5, super_like_days: 0 }
+        - { coins: 200, viewing_hours: 0.75, super_like_days: 0 }
+        - { coins: 600, viewing_hours: 0, super_like_days: 0 }
+    - label: "1K"
+      pt: 1000
+      patterns:
+        - { coins: 80, viewing_hours: 1.75, super_like_days: 4 }
+        - { coins: 300, viewing_hours: 1, super_like_days: 2 }
+        - { coins: 800, viewing_hours: 0, super_like_days: 0 }
+    - label: "2K"
+      pt: 2000
+      patterns:
+        - { coins: 100, viewing_hours: 2, super_like_days: 4 }
+        - { coins: 500, viewing_hours: 1.25, super_like_days: 2 }
+        - { coins: 1000, viewing_hours: 0, super_like_days: 0 }
+    - label: "3K"
+      pt: 3000
+      patterns:
+        - { coins: 250, viewing_hours: 2.25, super_like_days: 4 }
+        - { coins: 800, viewing_hours: 1.5, super_like_days: 2 }
+        - { coins: 1200, viewing_hours: 0, super_like_days: 0 }
+    - label: "4K"
+      pt: 4000
+      patterns:
+        - { coins: 500, viewing_hours: 2.5, super_like_days: 4 }
+        - { coins: 1000, viewing_hours: 1.75, super_like_days: 2 }
+        - { coins: 1500, viewing_hours: 0, super_like_days: 0 }
+    - label: "5K"
+      pt: 5000
+      patterns:
+        - { coins: 750, viewing_hours: 2.75, super_like_days: 4 }
+        - { coins: 1125, viewing_hours: 2, super_like_days: 2 }
+        - { coins: 1875, viewing_hours: 0, super_like_days: 0 }
+    - label: "6K"
+      pt: 6000
+      patterns:
+        - { coins: 1100, viewing_hours: 3, super_like_days: 4 }
+        - { coins: 1650, viewing_hours: 2.5, super_like_days: 2 }
+        - { coins: 2750, viewing_hours: 0, super_like_days: 0 }
+    - label: "7K"
+      pt: 7000
+      patterns:
+        - { coins: 1500, viewing_hours: 3.25, super_like_days: 4 }
+        - { coins: 2250, viewing_hours: 2.5, super_like_days: 2 }
+        - { coins: 3750, viewing_hours: 0, super_like_days: 0 }
+    - label: "8K"
+      pt: 8000
+      patterns:
+        - { coins: 2000, viewing_hours: 3.5, super_like_days: 4 }
+        - { coins: 3000, viewing_hours: 3, super_like_days: 2 }
+        - { coins: 5000, viewing_hours: 0, super_like_days: 0 }
+    - label: "9K"
+      pt: 9000
+      patterns:
+        - { coins: 2500, viewing_hours: 3.75, super_like_days: 4 }
+        - { coins: 3750, viewing_hours: 3, super_like_days: 2 }
+        - { coins: 6250, viewing_hours: 0, super_like_days: 0 }
+    - label: "10K"
+      pt: 10000
+      patterns:
+        - { coins: 3000, viewing_hours: 4, super_like_days: 5 }
+        - { coins: 4500, viewing_hours: 3.5, super_like_days: 3 }
+        - { coins: 7500, viewing_hours: 0, super_like_days: 0 }
+    - label: "11K"
+      pt: 11000
+      patterns:
+        - { coins: 4000, viewing_hours: 4.25, super_like_days: 5 }
+        - { coins: 6000, viewing_hours: 3.5, super_like_days: 3 }
+        - { coins: 10000, viewing_hours: 0, super_like_days: 0 }
+    - label: "12K"
+      pt: 12000
+      patterns:
+        - { coins: 5000, viewing_hours: 4.5, super_like_days: 5 }
+        - { coins: 7500, viewing_hours: 4, super_like_days: 3 }
+        - { coins: 12500, viewing_hours: 0, super_like_days: 0 }
+    - label: "13K"
+      pt: 13000
+      patterns:
+        - { coins: 6000, viewing_hours: 4.75, super_like_days: 5 }
+        - { coins: 9000, viewing_hours: 4, super_like_days: 3 }
+        - { coins: 15000, viewing_hours: 0, super_like_days: 0 }
+    - label: "14K"
+      pt: 14000
+      patterns:
+        - { coins: 7000, viewing_hours: 5, super_like_days: 5 }
+        - { coins: 10500, viewing_hours: 4.5, super_like_days: 3 }
+        - { coins: 17500, viewing_hours: 0, super_like_days: 0 }
+    - label: "15K"
+      pt: 15000
+      patterns:
+        - { coins: 8000, viewing_hours: 5.25, super_like_days: 5 }
+        - { coins: 12000, viewing_hours: 4.5, super_like_days: 3 }
+        - { coins: 20000, viewing_hours: 0, super_like_days: 0 }
+    - label: "16K"
+      pt: 16000
+      patterns:
+        - { coins: 9000, viewing_hours: 5.5, super_like_days: 5 }
+        - { coins: 13500, viewing_hours: 4.75, super_like_days: 3 }
+        - { coins: 22500, viewing_hours: 0, super_like_days: 0 }
+    - label: "17K"
+      pt: 17000
+      patterns:
+        - { coins: 10500, viewing_hours: 5.75, super_like_days: 5 }
+        - { coins: 15750, viewing_hours: 4.75, super_like_days: 3 }
+        - { coins: 26250, viewing_hours: 0, super_like_days: 0 }
+    - label: "18K"
+      pt: 18000
+      patterns:
+        - { coins: 12000, viewing_hours: 6, super_like_days: 5 }
+        - { coins: 18000, viewing_hours: 5, super_like_days: 3 }
+        - { coins: 30000, viewing_hours: 0, super_like_days: 0 }
+    - label: "19K"
+      pt: 19000
+      patterns:
+        - { coins: 14000, viewing_hours: 6.25, super_like_days: 5 }
+        - { coins: 21000, viewing_hours: 5, super_like_days: 3 }
+        - { coins: 35000, viewing_hours: 0, super_like_days: 0 }
+    - label: "20K"
+      pt: 20000
+      patterns:
+        - { coins: 16000, viewing_hours: 6.5, super_like_days: 6 }
+        - { coins: 24000, viewing_hours: 5.25, super_like_days: 4 }
+        - { coins: 40000, viewing_hours: 0, super_like_days: 0 }
+    - label: "21K"
+      pt: 21000
+      patterns:
+        - { coins: 17000, viewing_hours: 6.75, super_like_days: 6 }
+        - { coins: 25500, viewing_hours: 5.25, super_like_days: 4 }
+        - { coins: 42500, viewing_hours: 0, super_like_days: 0 }
+    - label: "22K"
+      pt: 22000
+      patterns:
+        - { coins: 18500, viewing_hours: 7, super_like_days: 6 }
+        - { coins: 27750, viewing_hours: 5.5, super_like_days: 4 }
+        - { coins: 46250, viewing_hours: 0, super_like_days: 0 }
+    - label: "23K"
+      pt: 23000
+      patterns:
+        - { coins: 20000, viewing_hours: 7.25, super_like_days: 6 }
+        - { coins: 30000, viewing_hours: 5.5, super_like_days: 4 }
+        - { coins: 50000, viewing_hours: 0, super_like_days: 0 }
+    - label: "24K"
+      pt: 24000
+      patterns:
+        - { coins: 22000, viewing_hours: 7.5, super_like_days: 6 }
+        - { coins: 33000, viewing_hours: 5.75, super_like_days: 4 }
+        - { coins: 55000, viewing_hours: 0, super_like_days: 0 }
+    - label: "25K"
+      pt: 25000
+      patterns:
+        - { coins: 24000, viewing_hours: 7.75, super_like_days: 6 }
+        - { coins: 36000, viewing_hours: 5.75, super_like_days: 4 }
+        - { coins: 60000, viewing_hours: 0, super_like_days: 0 }
+    - label: "26K"
+      pt: 26000
+      patterns:
+        - { coins: 27000, viewing_hours: 8, super_like_days: 6 }
+        - { coins: 40500, viewing_hours: 6, super_like_days: 4 }
+        - { coins: 67500, viewing_hours: 0, super_like_days: 0 }
+    - label: "27K"
+      pt: 27000
+      patterns:
+        - { coins: 30000, viewing_hours: 8.25, super_like_days: 6 }
+        - { coins: 45000, viewing_hours: 6, super_like_days: 4 }
+        - { coins: 75000, viewing_hours: 0, super_like_days: 0 }
+    - label: "28K"
+      pt: 28000
+      patterns:
+        - { coins: 34000, viewing_hours: 8.5, super_like_days: 6 }
+        - { coins: 51000, viewing_hours: 6, super_like_days: 4 }
+        - { coins: 85000, viewing_hours: 0, super_like_days: 0 }
+    - label: "29K"
+      pt: 29000
+      patterns:
+        - { coins: 39000, viewing_hours: 8.75, super_like_days: 6 }
+        - { coins: 58500, viewing_hours: 6, super_like_days: 4 }
+        - { coins: 97500, viewing_hours: 0, super_like_days: 0 }
+    - label: "30K"
+      pt: 30000
+      patterns:
+        - { coins: 44000, viewing_hours: 9, super_like_days: 6 }
+        - { coins: 66000, viewing_hours: 6, super_like_days: 4 }
+        - { coins: 110000, viewing_hours: 0, super_like_days: 0 }
+    - label: "31K"
+      pt: 31000
+      patterns:
+        - { coins: 50000, viewing_hours: 9.25, super_like_days: 6 }
+        - { coins: 75000, viewing_hours: 6, super_like_days: 4 }
+        - { coins: 125000, viewing_hours: 0, super_like_days: 0 }
+    - label: "32K"
+      pt: 32000
+      patterns:
+        - { coins: 58000, viewing_hours: 9.5, super_like_days: 6 }
+        - { coins: 87000, viewing_hours: 6, super_like_days: 4 }
+        - { coins: 145000, viewing_hours: 0, super_like_days: 0 }
+    - label: "33K"
+      pt: 33000
+      patterns:
+        - { coins: 66000, viewing_hours: 9.75, super_like_days: 6 }
+        - { coins: 99000, viewing_hours: 6, super_like_days: 4 }
+        - { coins: 165000, viewing_hours: 0, super_like_days: 0 }
+    - label: "34K"
+      pt: 34000
+      patterns:
+        - { coins: 72000, viewing_hours: 10, super_like_days: 6 }
+        - { coins: 108000, viewing_hours: 6, super_like_days: 4 }
+        - { coins: 180000, viewing_hours: 0, super_like_days: 0 }
+    - label: "35K"
+      pt: 35000
+      patterns:
+        - { coins: 80000, viewing_hours: 10.25, super_like_days: 6 }
+        - { coins: 120000, viewing_hours: 6, super_like_days: 4 }
+        - { coins: 200000, viewing_hours: 0, super_like_days: 0 }
+    - label: "36K"
+      pt: 36000
+      patterns:
+        - { coins: 90000, viewing_hours: 10.5, super_like_days: 6 }
+        - { coins: 135000, viewing_hours: 6, super_like_days: 4 }
+        - { coins: 225000, viewing_hours: 0, super_like_days: 0 }
+    - label: "37K"
+      pt: 37000
+      patterns:
+        - { coins: 100000, viewing_hours: 10.75, super_like_days: 6 }
+        - { coins: 150000, viewing_hours: 6, super_like_days: 4 }
+        - { coins: 250000, viewing_hours: 0, super_like_days: 0 }
+    - label: "38K"
+      pt: 38000
+      patterns:
+        - { coins: 110000, viewing_hours: 11, super_like_days: 6 }
+        - { coins: 165000, viewing_hours: 6, super_like_days: 4 }
+        - { coins: 275000, viewing_hours: 0, super_like_days: 0 }
+    - label: "39K"
+      pt: 39000
+      patterns:
+        - { coins: 120000, viewing_hours: 11.25, super_like_days: 6 }
+        - { coins: 180000, viewing_hours: 6, super_like_days: 4 }
+        - { coins: 300000, viewing_hours: 0, super_like_days: 0 }
+    - label: "40K"
+      pt: 40000
+      patterns:
+        - { coins: 150000, viewing_hours: 11.5, super_like_days: 6 }
+        - { coins: 250000, viewing_hours: 6, super_like_days: 4 }
+        - { coins: 350000, viewing_hours: 0, super_like_days: 0 }
+    - label: "41K"
+      pt: 41000
+      patterns:
+        - { coins: 200000, viewing_hours: 11.75, super_like_days: 6 }
+        - { coins: 300000, viewing_hours: 6, super_like_days: 4 }
+        - { coins: 400000, viewing_hours: 0, super_like_days: 0 }
+    - label: "42K"
+      pt: 42000
+      patterns:
+        - { coins: 300000, viewing_hours: 12, super_like_days: 6 }
+        - { coins: 400000, viewing_hours: 6, super_like_days: 4 }
+        - { coins: 500000, viewing_hours: 0, super_like_days: 0 }
+    - label: "43K"
+      pt: 43000
+      patterns:
+        - { coins: 420000, viewing_hours: 12.25, super_like_days: 6 }
+        - { coins: 520000, viewing_hours: 6, super_like_days: 4 }
+        - { coins: 620000, viewing_hours: 0, super_like_days: 0 }
+    - label: "44K"
+      pt: 44000
+      patterns:
+        - { coins: 550000, viewing_hours: 12.5, super_like_days: 6 }
+        - { coins: 650000, viewing_hours: 6, super_like_days: 4 }
+        - { coins: 750000, viewing_hours: 0, super_like_days: 0 }
+    - label: "45K"
+      pt: 45000
+      patterns:
+        - { coins: 700000, viewing_hours: 12.75, super_like_days: 6 }
+        - { coins: 800000, viewing_hours: 6, super_like_days: 4 }
+        - { coins: 900000, viewing_hours: 0, super_like_days: 0 }
+    - label: "46K"
+      pt: 46000
+      patterns:
+        - { coins: 900000, viewing_hours: 13, super_like_days: 6 }
+        - { coins: 1000000, viewing_hours: 6, super_like_days: 4 }
+        - { coins: 1100000, viewing_hours: 0, super_like_days: 0 }
+    - label: "47K"
+      pt: 47000
+      patterns:
+        - { coins: 1200000, viewing_hours: 13.25, super_like_days: 6 }
+        - { coins: 1300000, viewing_hours: 6, super_like_days: 4 }
+        - { coins: 1400000, viewing_hours: 0, super_like_days: 0 }
+    - label: "48K"
+      pt: 48000
+      patterns:
+        - { coins: 1600000, viewing_hours: 13.5, super_like_days: 6 }
+        - { coins: 1700000, viewing_hours: 6, super_like_days: 4 }
+        - { coins: 1800000, viewing_hours: 0, super_like_days: 0 }
+    - label: "49K"
+      pt: 49000
+      patterns:
+        - { coins: 2000000, viewing_hours: 13.75, super_like_days: 6 }
+        - { coins: 2100000, viewing_hours: 6, super_like_days: 4 }
+        - { coins: 2200000, viewing_hours: 0, super_like_days: 0 }
+  high_tiers:
+    from_k: 50
+    to_k: 100
+    base_coins: [2000000, 2100000, 2200000]
+    coins_per_k: 500000
+    viewing_hours: [14, 6, 0]
+    super_like_days: [6, 4, 0]

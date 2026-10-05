@@ -4536,6 +4536,823 @@ def motion_index():
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
 
+# ── 枠周り記録 /waku（来てくれた人・行った人の記録 → 歌推しまであと何が必要か） ──
+# 記録は各自のブラウザ（localStorage）に保存する。サーバーは歌推しの条件を埋め込んだページを返すだけ。
+
+WAKU_HTML = r"""<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__ | ETERNALd.c.t</title>
+<style>
+:root {
+  --bg: #0d0d1a; --surface: #141428; --surface2: #1a1a2e; --border: #2a2a4e; --line: #1e1e3a;
+  --text: #e0e0ff; --muted: #9ca3af; --faint: #6b7280;
+  --accent: #7c3aed; --accent-2: #a78bfa; --accent-3: #c4b5fd;
+  --ok: #34d399; --ok-bg: rgba(16,185,129,.14); --ng: #f87171; --ng-bg: rgba(239,68,68,.13);
+  --came: #38bdf8; --went: #f472b6;
+  --warn: #fbbf24; --pa: #f59e0b; --pb: #10b981; --pc: #3b82f6;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg); color: var(--text); min-height: 100vh; line-height: 1.5;
+  font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
+  padding: 16px;
+}
+.page { max-width: 1100px; margin: 0 auto; }
+h1 { font-size: 1.25rem; color: var(--accent-3); }
+.subtitle { color: var(--muted); font-size: .78rem; margin-top: 2px; }
+.tabs { display: flex; gap: 8px; position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 10px 0; margin: 4px 0 6px; }
+.tab-btn {
+  flex: 1 1 auto; min-height: 44px; padding: 10px 8px; border: 2px solid var(--accent); border-radius: 10px;
+  background: transparent; color: var(--accent-2); font-size: .85rem; font-weight: 800; cursor: pointer; white-space: nowrap;
+}
+.tab-btn.active { background: var(--accent); color: #fff; }
+.section { display: none; }
+.section.active { display: block; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px; margin-bottom: 14px; }
+.notice { padding: 10px 14px; border-radius: 10px; font-size: .8rem; margin-bottom: 12px; }
+.notice.error { background: var(--ng-bg); border: 1px solid rgba(248,113,113,.4); color: #fecaca; }
+label { display: block; color: var(--muted); font-size: .8rem; font-weight: 700; margin-bottom: 12px; }
+input, select {
+  display: block; width: 100%; margin-top: 6px; padding: 11px 12px; border: 2px solid var(--border);
+  border-radius: 10px; background: var(--surface2); color: var(--text); font-size: 16px; color-scheme: dark;
+}
+input:focus, select:focus { outline: none; border-color: var(--accent); }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 10px; }
+@media (max-width: 560px) { .grid3 { grid-template-columns: 1fr 1fr; } }
+.jun-hint { margin: -4px 0 12px; font-size: .8rem; color: var(--accent-2); font-weight: 700; }
+.primary {
+  width: 100%; padding: 14px; border: none; border-radius: 12px; cursor: pointer;
+  background: linear-gradient(135deg, #7c3aed, #a855f7); color: #fff; font-size: 1rem; font-weight: 800;
+}
+.form-msg { margin-top: 10px; font-size: .85rem; min-height: 1.3em; }
+.form-msg.ok { color: var(--ok); }
+.form-msg.error { color: var(--ng); }
+.entry-layout { display: grid; gap: 14px; }
+@media (min-width: 900px) { .entry-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }
+.side-title { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; font-size: .9rem; font-weight: 800; color: var(--accent-3); margin-bottom: 10px; }
+.side-title label { margin: 0; display: flex; align-items: center; gap: 6px; font-size: .75rem; }
+.side-title select { width: auto; margin: 0; padding: 4px 8px; font-size: 14px; }
+.hint { color: var(--muted); font-size: .82rem; }
+.filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0 10px; padding-bottom: 4px; }
+.stats { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.stat { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 6px 12px; font-size: .78rem; color: var(--muted); }
+.stat b { color: var(--text); font-size: 1.05rem; margin: 0 2px; }
+.sec-note { color: var(--muted); font-size: .76rem; margin-bottom: 10px; }
+.empty { text-align: center; color: var(--faint); padding: 26px 12px; border: 1px dashed var(--border); border-radius: 12px; font-size: .85rem; }
+.badge { display: inline-block; font-size: .72rem; font-weight: 800; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+.badge.ok { background: var(--ok-bg); color: var(--ok); }
+.badge.ng { background: var(--ng-bg); color: var(--ng); }
+.badge.none { background: var(--surface2); color: var(--muted); }
+.badge.warn { background: #2a1f05; color: var(--warn); }
+.patterns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 640px) { .patterns { grid-template-columns: 1fr; } }
+.pattern { background: var(--surface2); border-radius: 10px; padding: 10px 12px; border-left: 4px solid var(--pa); font-size: .84rem; }
+.pattern.p1 { border-left-color: var(--pb); }
+.pattern.p2 { border-left-color: var(--pc); }
+.pattern-name { font-size: .75rem; font-weight: 800; margin-bottom: 4px; }
+.prow { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
+.prow span { color: var(--muted); }
+.c0 { color: var(--pa); } .c1 { color: var(--pb); } .c2 { color: var(--pc); }
+.partner-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+.partner { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 12px; }
+.partner-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.partner-name { font-size: 1.05rem; font-weight: 800; }
+.counts { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--muted); font-size: .78rem; margin: 4px 0 8px; }
+.counts b { color: var(--text); }
+.dir { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 10px; margin-top: 8px; }
+.dir.done { border-color: rgba(52,211,153,.5); }
+.dir-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-weight: 800; font-size: .86rem; }
+.dir-head .went { color: var(--went); }
+.dir-head .came { color: var(--came); }
+.dir-meta { color: var(--muted); font-size: .76rem; margin: 4px 0 6px; }
+.bar { height: 6px; background: var(--line); border-radius: 999px; overflow: hidden; }
+.bar span { display: block; height: 100%; background: linear-gradient(90deg, #7c3aed, #34d399); }
+.bar-label { color: var(--muted); font-size: .7rem; text-align: right; margin: 2px 0 4px; }
+.prog-row { display: flex; justify-content: space-between; gap: 10px; font-size: .8rem; padding: 4px 0; border-top: 1px solid var(--line); }
+.prog-row .pl { font-weight: 800; white-space: nowrap; }
+.prog-row .pv { text-align: right; }
+.prog-row .pv.done { color: var(--ok); font-weight: 800; }
+.jun-group { margin-bottom: 18px; }
+.jun-title { display: flex; justify-content: space-between; align-items: baseline; font-size: .98rem; color: var(--accent-3); border-bottom: 1px solid var(--border); padding: 6px 2px; margin-bottom: 10px; }
+.jun-title small { color: var(--muted); font-weight: 600; }
+.date-row { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 10px; margin-bottom: 8px; }
+@media (max-width: 560px) { .date-row { grid-template-columns: 1fr; gap: 4px; } }
+.date-label { font-weight: 800; font-size: .9rem; padding-top: 8px; }
+.rec { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 6px 6px 6px 10px; margin-bottom: 6px; font-size: .85rem; }
+.rec .type { font-size: .72rem; font-weight: 800; white-space: nowrap; border-radius: 6px; padding: 1px 6px; }
+.type.came { color: var(--came); border: 1px solid rgba(56,189,248,.5); }
+.type.went { color: var(--went); border: 1px solid rgba(244,114,182,.5); }
+.type.missed { color: var(--ng); border: 1px solid rgba(248,113,113,.5); }
+.rec .name { font-weight: 800; }
+.rec small { color: var(--muted); font-size: .74rem; flex: 1; }
+.del { border: none; background: transparent; color: var(--faint); font-size: 1rem; line-height: 1; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; flex-shrink: 0; margin-left: auto; }
+.del:hover { background: var(--ng-bg); color: var(--ng); }
+.backup-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { display: inline-flex; align-items: center; gap: 4px; margin: 0; padding: 9px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface2); color: var(--accent-3); font-size: .82rem; font-weight: 700; cursor: pointer; }
+.target-card summary { list-style: none; cursor: pointer; margin-bottom: 0; }
+.target-card summary::-webkit-details-marker { display: none; }
+.target-card[open] summary { margin-bottom: 10px; }
+.footer { color: var(--faint); font-size: .72rem; text-align: center; margin: 20px 0 8px; }
+.footer a { color: var(--accent-2); }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>🎤 __TITLE__</h1>
+  <p class="subtitle">来てくれた人・行った人の記録から、歌推しまであと何が必要かをチェック</p>
+
+  <nav class="tabs">
+    <button type="button" class="tab-btn active" data-tab="entry">✏️ 記録</button>
+    <button type="button" class="tab-btn" data-tab="oshi">🎯 歌推し</button>
+    <button type="button" class="tab-btn" data-tab="history">📅 履歴</button>
+  </nav>
+
+  <div id="storage-error" class="notice error" hidden>⚠️ このブラウザでは記録を保存できません（シークレットモード・プライベートブラウズなど）。通常のモードで開いてください。</div>
+
+  <section id="tab-entry" class="section active">
+    <div class="entry-layout">
+      <form id="entry-form" class="card" autocomplete="off" novalidate>
+        <label>日付<input type="date" id="f-date" required></label>
+        <div id="f-jun" class="jun-hint"></div>
+        <label>どっち？
+          <select id="f-type">
+            <option value="came">🎧 来てくれた（自分の枠に）</option>
+            <option value="went">🎤 行った（相手の枠に）</option>
+            <option value="missed">❌ 行けなかった（相手の枠に）</option>
+          </select>
+        </label>
+        <label>相手の名前
+          <input type="text" id="f-name" list="name-list" maxlength="40" placeholder="名前を入力" required>
+        </label>
+        <div id="amount-fields">
+          <div class="grid3">
+            <label><span id="l-viewing">視聴時間</span><select id="f-viewing"></select></label>
+            <label><span id="l-coins">コイン</span><select id="f-coins"></select></label>
+            <label><span id="l-superlike">スーパーいいね</span>
+              <select id="f-superlike">
+                <option value="0">なし</option>
+                <option value="1">💙 あり</option>
+              </select>
+            </label>
+          </div>
+          <label id="coins-other-wrap" hidden>コイン（直接入力）
+            <input type="number" id="f-coins-other" min="0" step="1" inputmode="numeric" placeholder="例: 1200">
+          </label>
+        </div>
+        <button type="submit" class="primary">記録する</button>
+        <p id="form-msg" class="form-msg" role="status"></p>
+      </form>
+      <div>
+        <div id="partner-card" class="card"></div>
+        <div id="day-card" class="card"></div>
+      </div>
+    </div>
+  </section>
+
+  <div id="period-bar" class="card filters" hidden>
+    <label>月<select id="p-month"></select></label>
+    <label>旬
+      <select id="p-jun">
+        <option value="">月全体</option>
+        <option value="上旬">上旬（1〜10日）</option>
+        <option value="中旬">中旬（11〜20日）</option>
+        <option value="下旬">下旬（21日〜末日）</option>
+      </select>
+    </label>
+    <label>日にち<select id="p-day"></select></label>
+  </div>
+
+  <section id="tab-oshi" class="section">
+    <div class="card filters">
+      <label>目標の推しPt<select id="o-target"></select></label>
+      <label>どっちの歌推し？
+        <select id="o-dir">
+          <option value="both">両方</option>
+          <option value="went">🎤 自分 → 相手（行った分）</option>
+          <option value="came">🎧 相手 → 自分（来てくれた分）</option>
+        </select>
+      </label>
+      <label>絞り込み
+        <select id="o-show">
+          <option value="">すべて</option>
+          <option value="todo">歌推し未達だけ</option>
+          <option value="done">条件クリアだけ</option>
+          <option value="notyet">行けていない相手（この期間0回）</option>
+          <option value="return">来てくれたのに行けていない相手</option>
+        </select>
+      </label>
+      <label>並び順
+        <select id="o-sort">
+          <option value="close">あと少しの順</option>
+          <option value="count">回数が多い順</option>
+          <option value="name">名前順</option>
+        </select>
+      </label>
+      <label>相手<select id="o-partner"></select></label>
+    </div>
+    <div id="o-target-card"></div>
+    <div id="o-stats" class="stats"></div>
+    <p id="o-hint" class="sec-note"></p>
+    <div id="o-list"></div>
+  </section>
+
+  <section id="tab-history" class="section">
+    <div class="card filters">
+      <label>どっち？
+        <select id="h-type">
+          <option value="">すべて</option>
+          <option value="came">🎧 来てくれた</option>
+          <option value="went">🎤 行った</option>
+          <option value="missed">❌ 行けなかった</option>
+        </select>
+      </label>
+      <label>相手<select id="h-partner"></select></label>
+    </div>
+    <div id="h-stats" class="stats"></div>
+    <div id="h-list"></div>
+  </section>
+
+  <section class="card">
+    <div class="side-title">💾 バックアップ</div>
+    <p class="sec-note">記録はこのスマホ（ブラウザ）の中だけに保存されます。機種変更・ブラウザのデータ削除・しばらく開かなかったときに消えることがあるので、ときどき「バックアップを保存」してください。別のスマホへ移すときも、保存したファイルを「バックアップから戻す」で読み込めます。</p>
+    <div class="backup-actions">
+      <button type="button" class="btn" id="b-export">💾 バックアップを保存</button>
+      <label class="btn">📂 バックアップから戻す<input type="file" id="b-import" accept="application/json,.json" hidden></label>
+      <button type="button" class="btn" id="b-csv">📄 CSVで書き出し</button>
+    </div>
+    <p id="b-msg" class="form-msg"></p>
+  </section>
+
+  <datalist id="name-list"></datalist>
+  <p class="footer">
+    歌推しの条件は<a href="https://thunderous-rugelach-1c3cc5.netlify.app/coloring_calculator" target="_blank" rel="noopener">歌推し計算ツール</a>と同じ数値です。
+    進み具合は、ここに記録した視聴時間・コイン・スーパーいいねを、選んだ期間で合計した目安です。
+  </p>
+</div>
+
+<script>
+const CONFIG = __WAKU_JSON__;
+const STORE_KEY = 'eternal-waku-records-v1';
+const SETTINGS_KEY = 'eternal-waku-settings-v1';
+const TYPES = {
+  came: { icon: '🎧', label: '来てくれた' },
+  went: { icon: '🎤', label: '行った' },
+  missed: { icon: '❌', label: '行けなかった' },
+};
+const JUN_RANGE = { '上旬': [1, 10], '中旬': [11, 20], '下旬': [21, 31] };
+const JUNS = Object.keys(JUN_RANGE);
+const LETTERS = ['A', 'B', 'C'];
+const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
+const TIERS = new Map(CONFIG.tiers.map(t => [t.label, t]));
+
+const $ = id => document.getElementById(id);
+const uniq = list => [...new Set(list)];
+const byName = (a, b) => a.localeCompare(b, 'ja');
+const normName = s => String(s || '').replace(/\s+/g, ' ').trim();
+
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function fmtMinutes(m) {
+  m = Math.round(m);
+  if (m <= 0) return '0分';
+  const h = Math.floor(m / 60), r = m % 60;
+  if (!h) return `${r}分`;
+  return r ? `${h}時間${r}分` : `${h}時間`;
+}
+function fmtCoins(c) {
+  if (c >= 10000) return (c / 10000).toLocaleString('ja-JP', { maximumFractionDigits: 2 }) + '万';
+  return Number(c).toLocaleString('ja-JP');
+}
+function fmtMonth(m) { const [y, mo] = m.split('-'); return `${y}年${Number(mo)}月`; }
+function fmtDate(d) {
+  const dt = new Date(d + 'T00:00:00');
+  return `${dt.getMonth() + 1}/${dt.getDate()}（${WEEKDAYS[dt.getDay()]}）`;
+}
+function junOf(d) { const day = Number(d.slice(8, 10)); return day <= 10 ? '上旬' : day <= 20 ? '中旬' : '下旬'; }
+function daysInMonth(m) { const [y, mo] = m.split('-').map(Number); return new Date(y, mo, 0).getDate(); }
+
+// ── 保存（このブラウザの localStorage） ─────────────────
+function validRecord(r) {
+  return r && typeof r === 'object' && typeof r.id === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.date)
+    && TYPES[r.type] && typeof r.name === 'string' && r.name.trim() !== ''
+    && Number.isFinite(r.minutes) && Number.isFinite(r.coins);
+}
+function cleanRecord(r) {
+  const amounts = r.type !== 'missed';
+  return {
+    id: r.id, date: r.date, type: r.type, name: normName(r.name).slice(0, 40),
+    minutes: amounts ? Math.max(0, Math.round(r.minutes)) : 0,
+    coins: amounts ? Math.max(0, Math.round(r.coins)) : 0,
+    sl: amounts && !!r.sl,
+    created: r.created || '',
+  };
+}
+
+let storageOk = true;
+function loadRecords() {
+  try {
+    const data = JSON.parse(localStorage.getItem(STORE_KEY) || '[]');
+    return Array.isArray(data) ? data.filter(validRecord).map(cleanRecord) : [];
+  } catch (e) {
+    storageOk = false;
+    return [];
+  }
+}
+function saveRecords() {
+  try {
+    localStorage.setItem(STORE_KEY, JSON.stringify(state.records));
+    return true;
+  } catch (e) {
+    storageOk = false;
+    $('storage-error').hidden = false;
+    return false;
+  }
+}
+function loadSettings() {
+  try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') || {}; } catch (e) { return {}; }
+}
+function saveSettings() {
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ target: state.target, dir: state.dir, sort: state.sort }));
+  } catch (e) { /* 設定は保存できなくても動く */ }
+}
+
+const settings = loadSettings();
+const state = {
+  records: loadRecords(),
+  tab: 'entry',
+  month: todayStr().slice(0, 7),
+  jun: '',
+  day: '',
+  target: TIERS.has(settings.target) ? settings.target : CONFIG.default_target,
+  dir: ['both', 'went', 'came'].includes(settings.dir) ? settings.dir : 'both',
+  sort: ['close', 'count', 'name'].includes(settings.sort) ? settings.sort : 'close',
+  lastName: '',
+  targetOpen: false,
+};
+function currentTier() { return TIERS.get(state.target) || CONFIG.tiers[0]; }
+function allNames() { return uniq(state.records.map(r => r.name)).sort(byName); }
+
+// ── 集計 ─────────────────────────────────────
+function periodRecords() {
+  return state.records.filter(r => r.date.startsWith(state.month + '-')
+    && (!state.jun || junOf(r.date) === state.jun)
+    && (!state.day || Number(r.date.slice(8, 10)) === Number(state.day)));
+}
+function periodLabel() {
+  let s = fmtMonth(state.month);
+  if (state.jun) s += ' ' + state.jun;
+  if (state.day) s += ` ${state.day}日`;
+  return s;
+}
+function emptySide() {
+  return { count: 0, minutes: 0, coins: 0, slDates: new Set(), byJun: { '上旬': 0, '中旬': 0, '下旬': 0 } };
+}
+function aggregate(recs) {
+  const map = new Map();
+  for (const r of recs) {
+    if (!map.has(r.name)) map.set(r.name, { name: r.name, went: emptySide(), came: emptySide(), missed: 0 });
+    const a = map.get(r.name);
+    if (r.type === 'missed') { a.missed++; continue; }
+    const side = a[r.type];
+    side.count++;
+    side.minutes += r.minutes;
+    side.coins += r.coins;
+    if (r.sl) side.slDates.add(r.date);
+    side.byJun[junOf(r.date)]++;
+  }
+  return map;
+}
+function emptyPartner(name) { return { name, went: emptySide(), came: emptySide(), missed: 0 }; }
+
+// パターンA/B/Cそれぞれ「あと何が足りないか」と、どこまで進んだか（0〜1）
+function progress(side, tier) {
+  return tier.patterns.map(pt => {
+    const needMin = Math.round(pt.viewing_hours * 60);
+    const lack = {
+      coins: Math.max(0, pt.coins - side.coins),
+      minutes: Math.max(0, needMin - side.minutes),
+      sl: Math.max(0, pt.super_like_days - side.slDates.size),
+    };
+    lack.done = !lack.coins && !lack.minutes && !lack.sl;
+    const parts = [];
+    if (pt.coins) parts.push(Math.min(1, side.coins / pt.coins));
+    if (needMin) parts.push(Math.min(1, side.minutes / needMin));
+    if (pt.super_like_days) parts.push(Math.min(1, side.slDates.size / pt.super_like_days));
+    lack.rate = parts.length ? parts.reduce((a, b) => a + b, 0) / parts.length : 1;
+    return lack;
+  });
+}
+function sideStatus(side, tier) {
+  const prog = progress(side, tier);
+  return { prog, done: prog.some(p => p.done), rate: Math.max(...prog.map(p => p.rate)) };
+}
+function lackText(l) {
+  if (l.done) return '✅ クリア';
+  return 'あと ' + [
+    l.coins ? '🪙' + fmtCoins(l.coins) : '',
+    l.minutes ? '👀' + fmtMinutes(l.minutes) : '',
+    l.sl ? '💙' + l.sl + '日' : '',
+  ].filter(Boolean).join('・');
+}
+
+// ── 表示パーツ ────────────────────────────────
+function dirBlock(kind, p, tier, showJun) {
+  const side = p[kind];
+  const title = kind === 'went'
+    ? `<span class="went">🎤 自分 → ${esc(p.name)}</span>`
+    : `<span class="came">🎧 ${esc(p.name)} → 自分</span>`;
+  if (kind === 'came' && !side.count) {
+    return `<div class="dir"><div class="dir-head">${title}<span class="badge none">来てくれた記録なし</span></div></div>`;
+  }
+  const st = sideStatus(side, tier);
+  const badge = st.done ? '<span class="badge ok">✅ 条件クリア</span>'
+    : side.count ? '<span class="badge none">未達</span>' : '<span class="badge ng">まだ行けていない</span>';
+  const jun = showJun ? `（${JUNS.map(j => `${j}${side.byJun[j]}`).join('・')}）` : '';
+  const pct = Math.round(st.rate * 100);
+  return `<div class="dir${st.done ? ' done' : ''}">
+    <div class="dir-head">${title}${badge}</div>
+    <div class="dir-meta">${kind === 'went' ? '行った' : '来てくれた'} <b>${side.count}回</b>${jun} ・ 👀${fmtMinutes(side.minutes)} ・ 🪙${fmtCoins(side.coins)} ・ 💙${side.slDates.size}日</div>
+    <div class="bar"><span style="width:${pct}%"></span></div>
+    <div class="bar-label">いちばん近いパターンで ${pct}%</div>
+    ${st.prog.map((x, i) => `<div class="prog-row"><span class="pl c${i}">${LETTERS[i]} ${esc(CONFIG.pattern_names[i])}</span><span class="pv${x.done ? ' done' : ''}">${lackText(x)}</span></div>`).join('')}
+  </div>`;
+}
+
+function partnerCard(p, tier, dir, showJun) {
+  const flags = [];
+  if (p.came.count && !p.went.count) flags.push('<span class="badge warn">お返しまだ</span>');
+  return `<article class="partner">
+    <div class="partner-head"><span class="partner-name">${esc(p.name)}</span>${flags.join('')}</div>
+    <div class="counts">
+      <span>🎤 行った <b>${p.went.count}</b>回</span>
+      <span>🎧 来てくれた <b>${p.came.count}</b>回</span>
+      ${p.missed ? `<span>❌ 行けなかった <b>${p.missed}</b>回</span>` : ''}
+    </div>
+    ${dir !== 'came' ? dirBlock('went', p, tier, showJun) : ''}
+    ${dir !== 'went' ? dirBlock('came', p, tier, showJun) : ''}
+  </article>`;
+}
+
+function targetCard(tier) {
+  return `<details class="card target-card"${state.targetOpen ? ' open' : ''}>
+    <summary class="side-title">🎯 目標 ${esc(tier.label)} の条件（タップで開く）</summary>
+    <div class="patterns">${tier.patterns.map((p, i) => `
+      <div class="pattern p${i}">
+        <div class="pattern-name c${i}">パターン${LETTERS[i]} — ${esc(CONFIG.pattern_names[i])}</div>
+        <div class="prow"><span>🪙 コイン</span><b>${fmtCoins(p.coins)}</b></div>
+        <div class="prow"><span>👀 視聴時間</span><b>${p.viewing_hours ? fmtMinutes(p.viewing_hours * 60) : '不要'}</b></div>
+        <div class="prow"><span>💙 スーパーいいね</span><b>${p.super_like_days ? p.super_like_days + '日分' : '不要'}</b></div>
+      </div>`).join('')}
+    </div>
+    <p class="sec-note" style="margin:10px 0 0">どれか1つのパターンの条件をすべて満たすと「条件クリア」。${esc(periodLabel())} の記録を合計した目安です。</p>
+  </details>`;
+}
+
+function recRow(r) {
+  const t = TYPES[r.type];
+  const detail = r.type === 'missed' ? '' : [
+    r.minutes ? '👀' + fmtMinutes(r.minutes) : '',
+    r.coins ? '🪙' + fmtCoins(r.coins) : '',
+    r.sl ? '💙' : '',
+  ].filter(Boolean).join(' ');
+  return `<div class="rec"><span class="type ${r.type}">${t.icon} ${t.label}</span><span class="name">${esc(r.name)}</span>`
+    + `<small>${detail}</small><button type="button" class="del" data-id="${esc(r.id)}" title="この記録を削除" aria-label="削除">×</button></div>`;
+}
+
+function fillSelect(sel, values, allLabel) {
+  const cur = sel.value;
+  const list = uniq([...values, ...(cur ? [cur] : [])]).sort(byName);
+  sel.innerHTML = `<option value="">${allLabel}</option>` + list.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+  sel.value = cur;
+}
+
+// ── 記録タブ ──────────────────────────────────
+function syncEntryFields() {
+  const type = $('f-type').value;
+  $('amount-fields').hidden = type === 'missed';
+  $('coins-other-wrap').hidden = $('f-coins').value !== 'other';
+  const who = type === 'came' ? '相手の' : '自分の';
+  $('l-viewing').textContent = who + '視聴時間';
+  $('l-coins').textContent = type === 'came' ? '相手がくれたコイン' : '自分が使ったコイン';
+  $('l-superlike').textContent = who + 'スーパーいいね';
+}
+
+function renderEntry() {
+  syncEntryFields();
+  const date = $('f-date').value;
+  $('f-jun').textContent = date ? `${fmtDate(date)} ・ ${fmtMonth(date.slice(0, 7))}の${junOf(date)}` : '';
+  const name = normName($('f-name').value) || state.lastName;
+  const month = (date || todayStr()).slice(0, 7);
+  if (name) {
+    const p = aggregate(state.records.filter(r => r.date.startsWith(month + '-'))).get(name) || emptyPartner(name);
+    $('partner-card').innerHTML = `<div class="side-title"><span>📈 ${fmtMonth(month)}の ${esc(name)}</span>`
+      + `<label>目標<select id="e-target"></select></label></div>` + partnerCard(p, currentTier(), 'both', true);
+    fillTargetSelect($('e-target'));
+  } else {
+    $('partner-card').innerHTML = '<div class="hint">相手の名前を入れると、その月に何回来てくれたか・行ったかと、歌推しまでにあと何が必要かがここに出ます。</div>';
+  }
+  const dayRecs = state.records.filter(r => r.date === date);
+  $('day-card').innerHTML = `<div class="side-title">🗓 ${date ? fmtDate(date) : ''}の記録</div>`
+    + (dayRecs.length ? dayRecs.map(recRow).join('') : '<div class="hint">まだ記録はありません</div>');
+}
+
+function submitEntry(e) {
+  e.preventDefault();
+  const msg = $('form-msg');
+  const date = $('f-date').value, type = $('f-type').value, name = normName($('f-name').value);
+  let coins = $('f-coins').value;
+  if (coins === 'other') coins = $('f-coins-other').value.trim() || '0';
+  coins = Number(coins);
+  const fail = text => { msg.className = 'form-msg error'; msg.textContent = '⚠️ ' + text; };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return fail('日付を選んでください');
+  if (!name) return fail('相手の名前を入れてください');
+  if (name.length > 40) return fail('名前は40文字以内で入れてください');
+  if (!Number.isInteger(coins) || coins < 0 || coins > 100000000) return fail('コインは0以上の整数で入れてください');
+  if (!storageOk) return fail('このブラウザでは保存できません（シークレットモードなど）');
+
+  const record = cleanRecord({
+    id: (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2)),
+    date, type, name, coins,
+    minutes: Number($('f-viewing').value),
+    sl: $('f-superlike').value === '1',
+    created: new Date().toISOString(),
+  });
+  state.records.push(record);
+  if (!saveRecords()) {
+    state.records.pop();
+    return fail('保存できませんでした（空き容量・シークレットモードを確認してください）');
+  }
+  state.lastName = record.name;
+  renderNameList();
+  msg.className = 'form-msg ok';
+  msg.textContent = `✅ 記録しました：${TYPES[type].icon} ${record.name}（${fmtDate(date)}・${TYPES[type].label}）`;
+  $('f-name').value = '';
+  $('f-viewing').value = '0';
+  $('f-coins').value = '0';
+  $('f-coins-other').value = '';
+  $('f-superlike').value = '0';
+  renderEntry();
+}
+
+// ── 歌推しタブ ────────────────────────────────
+function fillTargetSelect(sel) {
+  sel.innerHTML = CONFIG.tiers.map(t => `<option value="${esc(t.label)}">${esc(t.label)}</option>`).join('');
+  sel.value = currentTier().label;
+}
+
+function renderOshi() {
+  const recs = periodRecords();
+  const tier = currentTier();
+  const show = $('o-show').value;
+  fillTargetSelect($('o-target'));
+  $('o-dir').value = state.dir;
+  $('o-sort').value = state.sort;
+  fillSelect($('o-partner'), show === 'notyet' ? allNames() : uniq(recs.map(r => r.name)), 'すべての相手');
+  const partnerFilter = $('o-partner').value;
+  $('o-target-card').innerHTML = targetCard(tier);
+
+  const agg = aggregate(recs);
+  // 「行けていない相手」は、これまでに記録したことがある全員が対象
+  let partners = show === 'notyet'
+    ? allNames().map(n => agg.get(n) || emptyPartner(n)).filter(p => !p.went.count)
+    : [...agg.values()];
+  if (partnerFilter) partners = partners.filter(p => p.name === partnerFilter);
+
+  const sides = p => state.dir === 'went' ? ['went'] : state.dir === 'came' ? ['came']
+    : ['went', ...(p.came.count ? ['came'] : [])];
+  for (const p of partners) {
+    p.st = {};
+    for (const k of sides(p)) p.st[k] = sideStatus(p[k], tier);
+    const open = Object.values(p.st).filter(s => !s.done);
+    p.anyDone = Object.values(p.st).some(s => s.done);
+    p.anyTodo = open.length > 0;
+    p.closeness = open.length ? Math.max(...open.map(s => s.rate)) : 2;
+  }
+  if (show === 'todo') partners = partners.filter(p => p.anyTodo);
+  if (show === 'done') partners = partners.filter(p => p.anyDone);
+  if (show === 'return') partners = partners.filter(p => p.came.count && !p.went.count);
+
+  const total = p => p.went.count + p.came.count + p.missed;
+  partners.sort(state.sort === 'name' ? (a, b) => byName(a.name, b.name)
+    : state.sort === 'count' ? (a, b) => total(b) - total(a) || byName(a.name, b.name)
+    : (a, b) => (a.closeness > 1) - (b.closeness > 1) || b.closeness - a.closeness || byName(a.name, b.name));
+
+  const all = [...agg.values()];
+  const sum = k => all.reduce((n, p) => n + (k === 'missed' ? p.missed : p[k].count), 0);
+  const cleared = k => all.filter(p => p[k].count && sideStatus(p[k], tier).done).length;
+  $('o-stats').innerHTML = `<span class="stat">${esc(periodLabel())}</span>`
+    + `<span class="stat">🎤 行った<b>${sum('went')}</b>回</span>`
+    + `<span class="stat">🎧 来てくれた<b>${sum('came')}</b>回</span>`
+    + `<span class="stat">❌<b>${sum('missed')}</b>回</span>`
+    + `<span class="stat">自分→相手 クリア<b>${cleared('went')}</b>人</span>`
+    + `<span class="stat">相手→自分 クリア<b>${cleared('came')}</b>人</span>`;
+
+  $('o-hint').textContent = {
+    todo: '選んだ方向で、まだ歌推しの条件をクリアしていない相手です。',
+    done: '選んだ方向で、歌推しの条件をクリアしている相手です。',
+    notyet: 'これまでに記録したことがある相手のうち、この期間に一度も「行った」がない人です（来てくれた人・行けなかった人も含みます）。',
+    return: 'この期間に来てくれたのに、まだ自分が行けていない相手です。',
+  }[show] || '';
+
+  if (!partners.length) {
+    $('o-list').innerHTML = `<div class="empty">${state.records.length ? '条件に合う相手はいません' : 'まだ記録がありません。「✏️ 記録」タブから追加できます。'}</div>`;
+    return;
+  }
+  $('o-list').innerHTML = `<div class="partner-grid">${partners.map(p => partnerCard(p, tier, state.dir, !state.jun && !state.day)).join('')}</div>`;
+}
+
+// ── 履歴タブ ──────────────────────────────────
+function renderHistory() {
+  const recs = periodRecords();
+  fillSelect($('h-partner'), uniq(recs.map(r => r.name)), 'すべての相手');
+  const type = $('h-type').value, partner = $('h-partner').value;
+  const list = recs.filter(r => (!type || r.type === type) && (!partner || r.name === partner))
+    .sort((a, b) => a.date.localeCompare(b.date) || String(a.created).localeCompare(String(b.created)));
+  const count = t => list.filter(r => r.type === t).length;
+  $('h-stats').innerHTML = `<span class="stat">${esc(periodLabel())}</span>`
+    + `<span class="stat">🎧 来てくれた<b>${count('came')}</b>回</span>`
+    + `<span class="stat">🎤 行った<b>${count('went')}</b>回</span>`
+    + `<span class="stat">❌ 行けなかった<b>${count('missed')}</b>回</span>`;
+  if (!list.length) {
+    $('h-list').innerHTML = `<div class="empty">${esc(periodLabel())} の記録はありません</div>`;
+    return;
+  }
+  let html = '';
+  for (const jun of JUNS) {
+    const js = list.filter(r => junOf(r.date) === jun);
+    if (!js.length) continue;
+    const [lo, hi] = JUN_RANGE[jun];
+    html += `<section class="jun-group"><h3 class="jun-title"><span>${fmtMonth(state.month)} ${jun}（${lo}〜${Math.min(hi, daysInMonth(state.month))}日）</span><small>${js.length}件</small></h3>`;
+    for (const d of uniq(js.map(r => r.date))) {
+      html += `<div class="date-row"><div class="date-label">${fmtDate(d)}</div><div>${js.filter(r => r.date === d).map(recRow).join('')}</div></div>`;
+    }
+    html += '</section>';
+  }
+  $('h-list').innerHTML = html;
+}
+
+// ── 期間・タブ ────────────────────────────────
+function renderPeriodBar() {
+  const months = uniq([...state.records.map(r => r.date.slice(0, 7)), todayStr().slice(0, 7), state.month]).sort().reverse();
+  $('p-month').innerHTML = months.map(m => `<option value="${esc(m)}">${esc(fmtMonth(m))}</option>`).join('');
+  $('p-month').value = state.month;
+  $('p-jun').value = state.jun;
+  const [lo, hi] = state.jun ? JUN_RANGE[state.jun] : [1, 31];
+  let opts = '<option value="">すべての日</option>';
+  for (let d = lo; d <= Math.min(hi, daysInMonth(state.month)); d++) opts += `<option value="${d}">${d}日</option>`;
+  $('p-day').innerHTML = opts;
+  $('p-day').value = state.day;
+}
+
+function renderNameList() {
+  $('name-list').innerHTML = allNames().map(n => `<option value="${esc(n)}"></option>`).join('');
+}
+
+function render() {
+  if (state.tab === 'entry') return renderEntry();
+  renderPeriodBar();
+  if (state.tab === 'oshi') renderOshi();
+  else renderHistory();
+}
+
+function switchTab(tab) {
+  state.tab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('.section[id^="tab-"]').forEach(s => s.classList.toggle('active', s.id === 'tab-' + tab));
+  $('period-bar').hidden = tab === 'entry';
+  render();
+}
+
+// ── バックアップ ───────────────────────────────
+function download(filename, text, type) {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+function backupMsg(text, ok) {
+  $('b-msg').className = 'form-msg ' + (ok ? 'ok' : 'error');
+  $('b-msg').textContent = text;
+}
+$('b-export').addEventListener('click', () => {
+  const body = JSON.stringify({ app: 'eternal-waku', version: 1, exported_at: new Date().toISOString(), records: state.records }, null, 2);
+  download(`waku-backup-${todayStr()}.json`, body, 'application/json');
+  backupMsg(`✅ ${state.records.length}件をバックアップしました（ダウンロードしたファイルを保管してください）`, true);
+});
+$('b-csv').addEventListener('click', () => {
+  const q = v => `"${String(v).replace(/"/g, '""')}"`;
+  const rows = [['日付', '旬', '種類', '相手', '視聴時間（分）', 'コイン', 'スーパーいいね']]
+    .concat([...state.records].sort((a, b) => a.date.localeCompare(b.date))
+      .map(r => [r.date, junOf(r.date), TYPES[r.type].label, r.name, r.minutes, r.coins, r.sl ? 'あり' : '']));
+  download(`waku-${todayStr()}.csv`, '﻿' + rows.map(r => r.map(q).join(',')).join('\r\n'), 'text/csv');
+  backupMsg(`✅ ${state.records.length}件をCSVで書き出しました`, true);
+});
+$('b-import').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  try {
+    const data = JSON.parse(await file.text());
+    const incoming = (Array.isArray(data) ? data : data.records || []).filter(validRecord).map(cleanRecord);
+    const have = new Set(state.records.map(r => r.id));
+    const added = incoming.filter(r => !have.has(r.id));
+    if (!incoming.length) return backupMsg('⚠️ このファイルには読み込める記録がありません', false);
+    state.records.push(...added);
+    if (!saveRecords()) {
+      state.records.splice(state.records.length - added.length, added.length);
+      return backupMsg('⚠️ 保存できませんでした', false);
+    }
+    renderNameList();
+    render();
+    backupMsg(`✅ ${added.length}件を戻しました（すでにあった${incoming.length - added.length}件はそのまま）`, true);
+  } catch (err) {
+    backupMsg('⚠️ バックアップファイルを読み込めませんでした', false);
+  }
+});
+
+// ── 初期化 ───────────────────────────────────
+$('f-date').value = todayStr();
+$('f-viewing').innerHTML = '<option value="0">なし</option>'
+  + CONFIG.viewing_minutes.map(m => `<option value="${m}">${fmtMinutes(m)}</option>`).join('');
+$('f-coins').innerHTML = '<option value="0">なし</option>'
+  + CONFIG.coin_presets.map(c => `<option value="${c}">${Number(c).toLocaleString('ja-JP')}</option>`).join('')
+  + '<option value="other">その他（直接入力）</option>';
+
+document.querySelectorAll('.tab-btn').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
+$('entry-form').addEventListener('submit', submitEntry);
+['f-date', 'f-type', 'f-coins'].forEach(id => $(id).addEventListener('change', renderEntry));
+$('f-name').addEventListener('input', renderEntry);
+$('p-month').addEventListener('change', e => { state.month = e.target.value; state.day = ''; render(); });
+$('p-jun').addEventListener('change', e => { state.jun = e.target.value; state.day = ''; render(); });
+$('p-day').addEventListener('change', e => { state.day = e.target.value; render(); });
+$('o-dir').addEventListener('change', e => { state.dir = e.target.value; saveSettings(); renderOshi(); });
+$('o-sort').addEventListener('change', e => { state.sort = e.target.value; saveSettings(); renderOshi(); });
+['o-show', 'o-partner'].forEach(id => $(id).addEventListener('change', renderOshi));
+['h-type', 'h-partner'].forEach(id => $(id).addEventListener('change', renderHistory));
+document.addEventListener('change', e => {
+  if (e.target.id === 'o-target' || e.target.id === 'e-target') {
+    state.target = e.target.value;
+    saveSettings();
+    render();
+  }
+});
+document.addEventListener('toggle', e => {
+  if (e.target.classList && e.target.classList.contains('target-card')) state.targetOpen = e.target.open;
+}, true);
+document.addEventListener('click', e => {
+  const del = e.target.closest('.del');
+  if (!del) return;
+  const r = state.records.find(x => x.id === del.dataset.id);
+  if (!r || !confirm(`${fmtDate(r.date)} ${TYPES[r.type].label}：${r.name}\nこの記録を削除します。よろしいですか？`)) return;
+  const before = state.records;
+  state.records = state.records.filter(x => x.id !== r.id);
+  if (!saveRecords()) {
+    state.records = before;
+    alert('削除を保存できませんでした');
+    return;
+  }
+  renderNameList();
+  render();
+});
+
+// ブラウザに「この記録は消さないで」と頼む（対応ブラウザのみ）
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+try { localStorage.setItem(STORE_KEY + '-check', '1'); localStorage.removeItem(STORE_KEY + '-check'); } catch (e) { storageOk = false; }
+$('storage-error').hidden = storageOk;
+renderNameList();
+render();
+</script>
+</body>
+</html>"""
+
+
+@app.route("/waku")
+def waku_index():
+    import json
+
+    import waku_tracker
+
+    config = waku_tracker.load_config()
+    # "<" を < に置き換えて、YAML 内の文字列で </script> が閉じられないようにする
+    data_json = json.dumps(config, ensure_ascii=False).replace("<", "\\u003c")
+    html = WAKU_HTML.replace("__TITLE__", str(escape(config["title"]))).replace("__WAKU_JSON__", data_json)
+    return html, 200, {"Content-Type": "text/html; charset=utf-8"}
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
