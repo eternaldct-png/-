@@ -23,9 +23,6 @@ services:
       - key: AUDITION_STATUS
         sync: false          # open/closed をRenderダッシュボードで設定（value:で固定するとデプロイのたびに
                              # 上書きされてしまうため sync: false にしてある）。未設定時はclosed扱い。
-      - key: WAKU_PASSWORD
-        sync: false          # /waku（枠周り記録）のログインパスワード。ライバーに共有する用（任意の文字列）
-                             # 未設定だと WEB_PASSWORD で入れるが、WEB_PASSWORD は管理画面用なのでライバーには教えない
 
   - type: web
     name: eternal-schedule
