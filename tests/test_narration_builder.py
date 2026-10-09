@@ -51,5 +51,21 @@ class TimingTest(unittest.TestCase):
         self.assertEqual(expr.count("clip("), 2)
 
 
+class MotionPvCueSheetTest(unittest.TestCase):
+    def test_motion_pv_cues_fit_inside_video(self):
+        config = nb.load_cues(REPO / "media" / "narration" / "eternaldct_motion_pv.yaml")
+        self.assertLessEqual(len(config["cues"]), 10)  # Flash TTS の無料枠（1日10回）以内
+        self.assertLess(config["cues"][-1]["until"], 62.0)
+
+
+class BgmSynthTest(unittest.TestCase):
+    def test_compose_length_level_and_silence_after_final_hit(self):
+        from src import bgm_synth
+        x = bgm_synth.compose(duration=12, bpm=120, impact_bar=1, build_bar=3, drop_bar=4, final_hit=9.0)
+        self.assertEqual(x.shape, (12 * bgm_synth.SR, 2))
+        self.assertLessEqual(abs(x).max(), 10 ** (-1 / 20) + 1e-6)  # ピーク -1dBFS 以下（音割れなし）
+        self.assertLess(abs(x[-10:]).max(), 1e-4)                     # 最後はフェードアウトして無音（-80dB 未満）
+
+
 if __name__ == "__main__":
     unittest.main()

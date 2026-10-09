@@ -209,4 +209,6 @@ Claude Code から Gemini 3.8 Flash TTS を呼び出してテキストを音声�
 - `src/narration_builder.py` — 台本YAML（`media/narration/*.yaml`、各セリフに `at`/`until` 秒）から
   セリフごとに音声生成 → 秒数どおり配置 → ナレーション中だけBGMを下げて動画に合成。生成済みクリップはキャッシュ再利用
   （例: `python3 src/narration_builder.py media/narration/eternaldct_promo_60s.yaml --video promo.mp4`）
+- `src/bgm_synth.py` — 動画用オリジナルBGMをコードで合成（numpy/scipy、著作権フリー）。`narration_builder.py --music` で
+  ナレーションと一緒に合成。Lyria（音楽生成API）は無料枠なしのため、無料で音楽を付けるときはこちら
 - セットアップ手順: `docs/gemini_tts_setup.md`

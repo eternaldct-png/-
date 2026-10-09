@@ -29,6 +29,7 @@ import gemini_tts  # noqa: E402
 
 MAX_SPEEDUP = 1.2
 TARGET_SPEECH_DB = -18.0   # 発話部分の平均音量の目標（dBFS）
+MUSIC_LEVEL_DB = -20.0     # --music の曲の平均音量の目標（dBFS）。ナレーション中はさらに bgm_duck_db 下がる
 EDGE_FADE_IN = 0.01
 EDGE_FADE_OUT = 0.03
 
@@ -157,12 +158,22 @@ def ducking_expression(placed: list[dict], duck_db: float, fade_in: float = 0.25
     return f"1-{1 - gain:.4f}*{env}"
 
 
+def video_duration(ffmpeg: str, video: Path) -> float:
+    info = subprocess.run([ffmpeg, "-hide_banner", "-i", str(video)], capture_output=True, text=True).stderr
+    m = re.search(r"Duration: (\d+):(\d+):([\d.]+)", info)
+    if not m:
+        raise gemini_tts.GeminiTTSError(f"動画の長さを読み取れませんでした: {video}")
+    h, mi, sec = m.groups()
+    return int(h) * 3600 + int(mi) * 60 + float(sec)
+
+
 def has_audio(ffmpeg: str, video: Path) -> bool:
     info = subprocess.run([ffmpeg, "-hide_banner", "-i", str(video)], capture_output=True, text=True).stderr
     return bool(re.search(r"Stream #\d+:\d+.*: Audio:", info))
 
 
-def build(config: dict, placed: list[dict], out_dir: Path, video: Path | None) -> list[Path]:
+def build(config: dict, placed: list[dict], out_dir: Path, video: Path | None,
+          music: Path | None = None) -> list[Path]:
     ffmpeg = gemini_tts.ffmpeg_exe()
     if not ffmpeg:
         raise gemini_tts.GeminiTTSError("ffmpeg が見つかりません。pip install -r requirements-mcp.txt を実行してください")
@@ -178,20 +189,42 @@ def build(config: dict, placed: list[dict], out_dir: Path, video: Path | None) -
     if not video:
         return outputs
 
-    # 動画に合成（元の音声がある場合はナレーション中だけ BGM を下げる）
+    # 動画に合成。BGM（元の動画の音声 and/or --music の曲）はナレーション中だけ下げる
     result = out_dir / f"{video.stem}_narrated.mp4"
-    filters, narr = _narration_filters(placed, 1)
+    if music and music.suffix.lower() != ".wav":  # 音量の測定に wav が必要なので変換しておく
+        converted = out_dir / "music.wav"
+        subprocess.run([ffmpeg, "-y", "-loglevel", "error", "-i", str(music), "-ac", "2", "-ar", "44100",
+                        "-c:a", "pcm_s16le", str(converted)], check=True)
+        music = converted
+    music_inputs = ["-i", str(music)] if music else []
+    length = video_duration(ffmpeg, video)
+    first_clip = 1 + (1 if music else 0)
+    filters, narr = _narration_filters(placed, first_clip)
+    bgm_sources = []
     if has_audio(ffmpeg, video):
+        filters.append("[0:a]aformat=sample_rates=48000:channel_layouts=stereo[va]")
+        bgm_sources.append("[va]")
+    if music:
+        gain = speech_gain_db(music, float(config.get("music_level_db", MUSIC_LEVEL_DB)))
+        filters.append(f"[1:a]aformat=sample_rates=48000:channel_layouts=stereo,volume={gain:.1f}dB[mus]")
+        bgm_sources.append("[mus]")
+    if bgm_sources:
+        if len(bgm_sources) == 2:
+            filters.append("[va][mus]amix=inputs=2:normalize=0:duration=longest[bgm_raw]")
+            bgm_in = "[bgm_raw]"
+        else:
+            bgm_in = bgm_sources[0]
         duck = ducking_expression(placed, float(config.get("bgm_duck_db", 9)))
         filters += [
-            f"[0:a]aformat=sample_rates=48000:channel_layouts=stereo,volume='{duck}':eval=frame[bgm]",
-            f"[bgm]{narr}amix=inputs=2:normalize=0:duration=first,alimiter=limit=0.95[out]",
+            f"{bgm_in}volume='{duck}':eval=frame[bgm]",
+            f"[bgm]{narr}amix=inputs=2:normalize=0:duration=longest,alimiter=limit=0.95,apad=whole_dur={length:.3f},atrim=0:{length:.3f}[out]",
         ]
     else:
-        filters.append(f"{narr}alimiter=limit=0.95[out]")
-    subprocess.run([ffmpeg, "-y", "-loglevel", "error", "-i", str(video), *clip_inputs,
+        filters.append(f"{narr}alimiter=limit=0.95,apad=whole_dur={length:.3f},atrim=0:{length:.3f}[out]")
+    # 音声は動画と同じ長さちょうどにそろえる（ナレーションが先に終わっても動画を切らない）
+    subprocess.run([ffmpeg, "-y", "-loglevel", "error", "-i", str(video), *music_inputs, *clip_inputs,
                     "-filter_complex", ";".join(filters), "-map", "0:v", "-map", "[out]",
-                    "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest", str(result)], check=True)
+                    "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-t", f"{length:.3f}", str(result)], check=True)
     outputs.append(result)
     return outputs
 
@@ -201,6 +234,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("cues", help="ナレーション台本の YAML（media/narration/*.yaml）")
     parser.add_argument("--video", help="ナレーションを重ねる動画（省略時はナレーション音声だけ作る）")
     parser.add_argument("-o", "--out-dir", help="出力先フォルダ（省略時 media/tts_output/<YAML名>/）")
+    parser.add_argument("--music", help="BGM として重ねる曲（wav/mp3）。音声のない動画に音楽を付けるとき")
     parser.add_argument("--pace", type=float, default=0.0,
                         help="API 呼び出しの最小間隔（秒）。無料枠の1分あたり上限に当たるときは 13 など")
     args = parser.parse_args(argv)
@@ -214,7 +248,10 @@ def main(argv: list[str] | None = None) -> int:
     try:
         config = load_cues(cue_file)
         placed = generate_clips(config, out_dir, pace=args.pace)
-        outputs = build(config, placed, out_dir, video)
+        music = Path(args.music) if args.music else None
+        if music and not music.exists():
+            raise gemini_tts.GeminiTTSError(f"曲が見つかりません: {music}")
+        outputs = build(config, placed, out_dir, video, music)
     except (gemini_tts.GeminiTTSError, subprocess.CalledProcessError) as e:
         print(f"エラー: {e}", file=sys.stderr)
         return 1

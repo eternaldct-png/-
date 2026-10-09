@@ -1,0 +1,52 @@
+# ETERNAL d.c.t MOTION WORKS PV（ETERNALdct_motion_PV.mp4・62秒・14スタイルのショーリール）のナレーション
+#
+# 作り方:
+#   python3 src/narration_builder.py media/narration/eternaldct_motion_pv.yaml \
+#       --video ETERNALdct_motion_PV.mp4 --music media/music/eternaldct_motion_pv_bgm.wav --pace 13
+#
+# 14スタイルすべてを読み上げると詰め込みすぎになるので、9か所に絞って音楽で見せる区間を残している。
+# （Gemini TTS の無料枠は1日10回なので、9セリフなら1日で作れる）
+
+voice: Sulafat
+style: "明るく、軽快なテンポのナレーター。映像作品のショーリールを紹介するように、楽しげに"
+bgm_duck_db: 8
+
+cues:
+  - at: 1.2           # MOTION WORKS / こんな動画、つくれます。
+    until: 3.9
+    text: "こんな動画、つくれます。"
+    style: "わくわくさせるように、明るく"
+
+  - at: 4.4           # 01 ロゴアニメ
+    until: 7.8
+    text: "ロゴアニメーション。"
+
+  - at: 8.2           # 02 配信オープニング
+    until: 11.2
+    text: "配信の、オープニング。"
+
+  - at: 15.2          # 04 ライバー紹介（縦型）
+    until: 18.5
+    text: "縦型も、おまかせ。"
+
+  - at: 26.2          # 07 SNS縦型広告
+    until: 29.8
+    text: "最初の2秒で、指を止める。"
+    style: "少し力強く、言い切るように"
+
+  - at: 38.2          # 10 求人・オーディション
+    until: 41.8
+    text: "ライバー募集の、告知も。"
+
+  - at: 42.2          # 11 テロップ
+    until: 46.5
+    text: "テロップで、伝わり方が変わる。"
+
+  - at: 50.8          # 13 店頭サイネージ → 14 ツール操作デモ
+    until: 56.0
+    text: "お店のメニューも、アプリの操作説明も。"
+
+  - at: 58.4          # あなたの「伝えたい」を、動きで。（文字が出始める位置）
+    until: 61.9
+    text: "あなたの「伝えたい」を、動きで。"
+    style: "ゆっくり、印象的に、温かく締めくくる"

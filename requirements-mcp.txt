@@ -5,3 +5,6 @@ requests>=2.31.0
 pyyaml>=6.0.1
 # ffmpeg を別途インストールしなくても mp3 変換・動画へのナレーション合成ができるように
 imageio-ffmpeg>=0.5.0
+# オリジナル BGM の合成（src/bgm_synth.py）
+numpy>=1.24
+scipy>=1.10

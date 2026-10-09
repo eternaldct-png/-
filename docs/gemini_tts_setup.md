@@ -92,6 +92,21 @@ python3 src/narration_builder.py media/narration/eternaldct_promo_60s.yaml --vid
 - 気に入らない声が出たら、その行の `NN_*.wav` を削除して再実行すると作り直せる（同じ文でも毎回少しずつ読み方が変わる）。
 - ffmpeg は `requirements-mcp.txt` の `imageio-ffmpeg` に同梱されているので別途インストール不要。
 
+## 音声のない動画に BGM も付ける
+```bash
+# 1) 動画の長さ・構成に合わせてオリジナル BGM を合成（外部音源・API 不要、著作権の心配なし）
+python3 src/bgm_synth.py -o media/music/my_bgm.wav --duration 62 --bpm 118 \
+    --impact-bar 2 --build-bar 26 --drop-bar 28 --final-hit 60.0
+# 2) ナレーションと一緒に動画へ合成（ナレーション中だけ BGM が下がる）
+python3 src/narration_builder.py media/narration/eternaldct_motion_pv.yaml \
+    --video PV.mp4 --music media/music/my_bgm.wav --pace 13
+```
+- `--impact-bar` / `--build-bar` / `--drop-bar` は小節番号（1小節 = 240 / BPM 秒。118BPM なら約2.03秒）。
+  映像の切り替わりに合わせて決め所を置く。`--final-hit` は最後の決め音の秒数。
+- 市販の曲や Lyria で作った曲を使う場合も `--music` に渡せばよい（wav / mp3）。
+- **Lyria（Google の音楽生成 API）は無料枠なし**（2026年10月時点、全 Lyria モデルの無料枠上限が 0）。
+  使うには AI Studio で課金設定が必要。
+
 ## MCPを使わずにコマンドで使う
 ```bash
 python3 src/gemini_tts.py "こんにちは" --voice Kore --style "明るく元気に"
