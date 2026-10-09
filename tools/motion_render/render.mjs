@@ -22,7 +22,8 @@ async function loadPlaywright() {
 }
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
-const OUT = path.resolve(ROOT, '../../src/static/motion');
+// OUT_DIR を指定すると /motion 以外（SNS投稿用など）の場所に書き出せる
+const OUT = process.env.OUT_DIR ? path.resolve(process.env.OUT_DIR) : path.resolve(ROOT, '../../src/static/motion');
 const [sceneArg, mode = 'stills', arg = '0'] = process.argv.slice(2);
 if (!sceneArg) { console.error('usage: node render.mjs <scene|all> <stills|video> [times]'); process.exit(1); }
 if (!fs.existsSync(path.join(ROOT, 'fonts', 'fonts.css'))) { console.error('fonts/ がありません。先に python3 fetch_fonts.py を実行してください'); process.exit(1); }

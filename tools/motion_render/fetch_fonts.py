@@ -13,6 +13,7 @@ FAMILIES = [
     "Montserrat:wght@700;800;900",
     "Zen+Maru+Gothic:wght@700",
     "Dela+Gothic+One",
+    "Shippori+Mincho:wght@800",
 ]
 FONT_DIR = Path(__file__).resolve().parent / "fonts"
 

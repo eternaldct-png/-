@@ -36,6 +36,14 @@ node render.mjs all video                    # 全作例を書き出し
 - 店名・価格・日付・名前（「LIVER NAME」「20XX」「〇〇ライブホール」など）はサンプル表記です。
   実案件用に変えるときは各 `scenes/*.js` の文字列を書き換えてください。
 
+## SNS投稿用（/motion に載せない動画）
+`OUT_DIR` を付けると `src/static/motion/` 以外に書き出せる。SNSは再圧縮されるので `CRF=18` 前後の高画質で出す。
+```bash
+CRF=18 OUT_DIR=out node render.mjs lyric-vertical video   # out/lyric-vertical.mp4（縦9:16・15秒）
+```
+- `lyric-vertical` … 縦型リリック「灯（ともしび）」。歌詞はオリジナル、キャラは c3。音なしなので、BGM・楽曲は投稿アプリ側で付ける。
+- 文字は TikTok / リール の UI（上150px・下300px・右端100px）を避けて配置している。
+
 ## ホームページ（eternaldct.net）への反映
 ホームページは静的サイト（`eternaldct-png/ETERNAL-` リポジトリの `eternaldct-new-site/`）。作例集は `motion.html`。
 ```bash
