@@ -5426,6 +5426,24 @@ def waku_index():
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
 
+# ── /leads（X営業リスト・DM下書き・自動返信エージェント） ───────────────────
+# 中身は src/sales_leads.py（ロジック）と src/sales_leads_web.py（画面）
+
+import sales_leads_web
+
+
+def _notify_sales_leads(text):
+    """返信・引き継ぎを、オーディション通知と同じ「連携 admin」済みのLINEへ送る"""
+    import line_messaging
+
+    for user_id in _audition_line_admin_user_ids():
+        line_messaging.push_text(user_id, f"【X営業】{text}")
+
+
+sales_leads_web.NOTIFY = _notify_sales_leads
+app.register_blueprint(sales_leads_web.bp)
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)

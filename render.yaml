@@ -23,6 +23,14 @@ services:
       - key: AUDITION_STATUS
         sync: false          # open/closed をRenderダッシュボードで設定（value:で固定するとデプロイのたびに
                              # 上書きされてしまうため sync: false にしてある）。未設定時はclosed扱い。
+      - key: XAI_API_KEY
+        sync: false          # /leads の Grok 検索（見込み客探し）に必要（https://console.x.ai）
+      - key: LEADS_X_ACCESS_TOKEN
+        sync: false          # /leads 営業用Xアカウントのアクセストークン（DMの読み取り・返信。docs/sales_leads_setup.md）
+      - key: LEADS_X_ACCESS_SECRET
+        sync: false          # 同上のシークレット
+      - key: LEADS_TASK_SECRET
+        sync: false          # /tasks/leads-agent（自動返信の定期実行）用トークン
 
   - type: web
     name: eternal-schedule
