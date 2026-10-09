@@ -23,6 +23,10 @@ services:
       - key: AUDITION_STATUS
         sync: false          # open/closed をRenderダッシュボードで設定（value:で固定するとデプロイのたびに
                              # 上書きされてしまうため sync: false にしてある）。未設定時はclosed扱い。
+      - key: GEMINI_API_KEY
+        sync: false          # 投稿文を自分の声で読み上げる🔊ボタンに必要（Google AI Studio の有料枠プロジェクトのキー推奨）
+      - key: GEMINI_TTS_VOICE
+        sync: false          # AI Studio の Voice Replication で作った声ID（voice_...）。試すだけなら Kore など既製の声名でも可
 
   - type: web
     name: eternal-schedule

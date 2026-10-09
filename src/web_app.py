@@ -4,10 +4,11 @@ kazuto 投稿文ジェネレーター — スマホ対応Webアプリ
 スマホで開いてボタンを押すだけで投稿文を生成し、コピーできる。
 自動投稿なし。X API 不要。
 """
+import hmac
 import os
 import sys
 from pathlib import Path
-from flask import Flask, request, jsonify, session, redirect
+from flask import Flask, Response, request, jsonify, session, redirect
 from markupsafe import escape
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -88,6 +89,45 @@ def api_generate():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# ── 自分の声で読み上げ API（Gemini TTS）────────────────────────────
+# 自分の声で好きな文章をしゃべらせられるので、WEB_PASSWORD でログインした人だけに限る。
+
+@app.route("/api/tts/login", methods=["POST"])
+def api_tts_login():
+    web_password = os.environ.get("WEB_PASSWORD", "")
+    if not web_password:
+        return jsonify({"error": "WEB_PASSWORD が未設定のため、読み上げは使えません"}), 503
+    data = request.get_json(silent=True) or {}
+    password = str(data.get("password", ""))
+    if not hmac.compare_digest(password.encode("utf-8"), web_password.encode("utf-8")):
+        return jsonify({"error": "パスワードが違います"}), 401
+    session["tts_ok"] = True
+    return jsonify({"ok": True})
+
+
+@app.route("/api/tts", methods=["POST"])
+def api_tts():
+    """投稿文を自分の声で読み上げた WAV を返す"""
+    import voice_tts
+
+    # JSON 以外は受け付けない（他サイトからフォーム送信で叩かれるのを防ぐ）
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "不正なリクエストです"}), 400
+    if not session.get("tts_ok"):
+        return jsonify({"error": "ログインが必要です", "need_login": True}), 401
+
+    text = voice_tts.clean_text_for_speech(str(data.get("text", "")))
+    if not text:
+        return jsonify({"error": "読み上げる文章がありません"}), 400
+
+    try:
+        wav = voice_tts.synthesize(text)
+    except voice_tts.TTSError as e:
+        return jsonify({"error": str(e)}), 502
+    return Response(wav, mimetype="audio/wav", headers={"Cache-Control": "no-store"})
 
 
 # ── フロントエンド HTML ────────────────────────────────────────────
@@ -316,6 +356,41 @@ body {
   cursor: pointer; transition: all 0.15s;
 }
 .regen-btn:active { opacity: 0.7; }
+.regen-btn:disabled { opacity: 0.5; cursor: wait; }
+
+/* ── 自分の声で読み上げ ── */
+.voice-area:empty { display: none; }
+.voice-area {
+  padding: 0 14px 12px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.voice-area audio { width: 100%; height: 40px; }
+.voice-note { font-size: 12px; color: var(--muted); line-height: 1.5; }
+.voice-err { font-size: 12px; color: #ef4444; line-height: 1.5; word-break: break-word; }
+.voice-dl {
+  align-self: flex-start;
+  font-size: 12px; font-weight: 700;
+  color: var(--accent-light); text-decoration: none;
+}
+
+/* ── パスワード入力 ── */
+.pw-modal {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0,0,0,0.6);
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+}
+.pw-modal[hidden] { display: none; }
+.pw-box {
+  width: 100%; max-width: 360px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px 16px 16px;
+}
+.pw-title { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+.pw-note { font-size: 12px; color: var(--muted); line-height: 1.6; margin-bottom: 12px; }
+.pw-actions { display: flex; gap: 8px; margin-top: 12px; }
 
 /* ── 空状態 ── */
 .empty {
@@ -465,6 +540,18 @@ body {
 
 <div class="toast" id="toast"></div>
 
+<div class="pw-modal" id="pwModal" hidden>
+  <form class="pw-box" onsubmit="submitTtsLogin(event)">
+    <div class="pw-title">🔒 読み上げ機能のログイン</div>
+    <div class="pw-note">自分の声で読み上げる機能は、パスワードを知っている人だけが使えます（/goods/admin と同じパスワード）。</div>
+    <input id="pwInput" class="theme-input" type="password" autocomplete="current-password" placeholder="パスワード">
+    <div class="pw-actions">
+      <button type="button" class="regen-btn" onclick="closeTtsLogin()">キャンセル</button>
+      <button type="submit" class="copy-btn">ログイン</button>
+    </div>
+  </form>
+</div>
+
 <script>
 let selectedSlot = '';
 let selectedCount = 1;
@@ -543,7 +630,7 @@ async function regenerateOne(idx) {
   const card = document.querySelectorAll('.post-card')[idx];
   if (!card) return;
 
-  const regenBtn = card.querySelector('.regen-btn');
+  const regenBtn = card.querySelector('.regen-btn:not(.voice-btn)');
   regenBtn.textContent = '⌛';
   regenBtn.disabled = true;
 
@@ -558,6 +645,7 @@ async function regenerateOne(idx) {
       const ta = card.querySelector('.post-text');
       ta.value = data.posts[0];
       updateCharBadge(card);
+      clearVoice(idx);
       toast('再生成しました ✓', 'ok');
     } else {
       toast(data.error || '再生成に失敗', 'err');
@@ -574,6 +662,7 @@ async function regenerateOne(idx) {
 function renderPosts(posts, maxLen) {
   maxLen = maxLen || selectedMaxLength;
   const el = document.getElementById('results');
+  Object.keys(voiceCache).forEach(clearVoice);
   el.innerHTML = '';
   posts.forEach((text, i) => {
     const card = document.createElement('div');
@@ -587,8 +676,10 @@ function renderPosts(posts, maxLen) {
       <textarea class="post-text" id="text-${i}" oninput="onTextInput(this, ${i})">${escHtml(text)}</textarea>
       <div class="post-actions">
         <button class="copy-btn" onclick="copyPost(${i}, this)">📋 コピー</button>
+        <button class="regen-btn voice-btn" onclick="speakPost(${i})" title="自分の声で読み上げ">🔊</button>
         <button class="regen-btn" onclick="regenerateOne(${i})">🔄</button>
       </div>
+      <div class="voice-area" id="voice-${i}"></div>
     `;
     el.appendChild(card);
     updateCharBadge(card);
@@ -601,6 +692,115 @@ function onTextInput(ta, idx) {
   const card = ta.closest('.post-card');
   updateCharBadge(card);
   autoResize(ta);
+  if (voiceCache[idx] && voiceCache[idx].text !== ta.value) clearVoice(idx);
+}
+
+// ── 自分の声で読み上げ ──
+const voiceCache = {};   // idx → { text, url }（同じ文章なら API を呼ばずに再生する）
+let pendingVoiceIdx = null;
+
+function clearVoice(idx) {
+  const cached = voiceCache[idx];
+  if (cached) URL.revokeObjectURL(cached.url);
+  delete voiceCache[idx];
+  const area = document.getElementById('voice-' + idx);
+  if (area) area.innerHTML = '';
+}
+
+function showVoicePlayer(idx, url) {
+  const area = document.getElementById('voice-' + idx);
+  const d = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const fname = `kazuto_voice_${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}_${idx + 1}.wav`;
+  area.innerHTML = `<audio controls src="${url}"></audio>
+    <a class="voice-dl" href="${url}" download="${fname}">⬇️ 音声を保存（WAV）</a>`;
+  area.querySelector('audio').play().catch(() => {});
+}
+
+async function speakPost(idx) {
+  const ta = document.getElementById('text-' + idx);
+  const area = document.getElementById('voice-' + idx);
+  if (!ta || !area) return;
+  const text = ta.value;
+  if (!text.trim()) { toast('読み上げる文章がありません', 'err'); return; }
+
+  const cached = voiceCache[idx];
+  if (cached && cached.text === text) {
+    const audio = area.querySelector('audio');
+    if (audio) { audio.currentTime = 0; audio.play().catch(() => {}); return; }
+  }
+
+  const btn = ta.closest('.post-card').querySelector('.voice-btn');
+  btn.textContent = '⌛';
+  btn.disabled = true;
+  area.innerHTML = '<div class="voice-note">🎙 自分の声で読み上げ中…（長い文章だと30秒ほどかかります）</div>';
+
+  try {
+    const res = await fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    if (res.ok) {
+      const blob = await res.blob();
+      // 待っている間に作り直し・書き換えをした場合は、古い音声を出さない
+      if (!ta.isConnected || ta.value !== text) { area.innerHTML = ''; return; }
+      clearVoice(idx);
+      const url = URL.createObjectURL(blob);
+      voiceCache[idx] = { text, url };
+      showVoicePlayer(idx, url);
+      return;
+    }
+    const data = await res.json().catch(() => ({}));
+    if (data.need_login) {
+      area.innerHTML = '';
+      openTtsLogin(idx);
+      return;
+    }
+    area.innerHTML = '';
+    const err = document.createElement('div');
+    err.className = 'voice-err';
+    err.textContent = data.error || '読み上げに失敗しました';
+    area.appendChild(err);
+  } catch(e) {
+    area.innerHTML = '<div class="voice-err">通信エラーが発生しました</div>';
+  } finally {
+    btn.textContent = '🔊';
+    btn.disabled = false;
+  }
+}
+
+function openTtsLogin(idx) {
+  pendingVoiceIdx = idx;
+  const input = document.getElementById('pwInput');
+  input.value = '';
+  document.getElementById('pwModal').hidden = false;
+  input.focus();
+}
+
+function closeTtsLogin() {
+  document.getElementById('pwModal').hidden = true;
+  pendingVoiceIdx = null;
+}
+
+async function submitTtsLogin(ev) {
+  ev.preventDefault();
+  const password = document.getElementById('pwInput').value;
+  try {
+    const res = await fetch('/api/tts/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { toast(data.error || 'ログインに失敗しました', 'err'); return; }
+    const idx = pendingVoiceIdx;
+    closeTtsLogin();
+    toast('ログインしました ✓', 'ok');
+    if (idx !== null) speakPost(idx);
+  } catch(e) {
+    toast('通信エラーが発生しました', 'err');
+  }
 }
 
 function updateCharBadge(card) {

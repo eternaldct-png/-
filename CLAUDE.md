@@ -92,6 +92,8 @@ git push -u origin claude/homepage-payment-spreadsheet-DD1ly
 | `WEB_PASSWORD` | `/goods/admin` ログインパスワード |
 | `FLASK_SECRET_KEY` | セッション用秘密鍵 |
 | `ANTHROPIC_API_KEY` | 投稿文生成 |
+| `GEMINI_API_KEY` | 投稿文の読み上げ（自分の声・Gemini TTS） |
+| `GEMINI_TTS_VOICE` | 読み上げに使う声ID（`voice_...`） |
 
 ---
 
@@ -99,6 +101,32 @@ git push -u origin claude/homepage-payment-spreadsheet-DD1ly
 - URL: `https://kazuto-post-generator.onrender.com/goods/admin`
 - パスワード: Render の `WEB_PASSWORD` で設定した値
 - 表示内容: 注文日時 / 商品名 / オプション（サイズ・カラー・デザイン）/ 金額 / 氏名 / 住所 / 連絡先
+
+---
+
+## 投稿ジェネレーター（`/`）の読み上げ（自分の声）
+
+生成した投稿カードの🔊ボタンで、投稿文を **kazuto 本人の声**（Gemini 3.8 Flash TTS の声の複製）で読み上げる。
+再生してそのまま「⬇️ 音声を保存（WAV）」でダウンロードできる。
+
+**コード:** `src/voice_tts.py`（Gemini API 呼び出し）、ルートは `src/web_app.py` の `/api/tts` `/api/tts/login`
+
+### 仕組み
+- 🔊を押すと `/api/tts` が Gemini API（`gemini-3.8-flash-tts`）を呼び、WAV を返す。URL とハッシュタグは読み上げない。
+- **使えるのは `WEB_PASSWORD` でログインした人だけ**（初回の🔊でパスワード入力が出る。`/goods/admin` と同じパスワード）。
+  自分の声で好きな文章を話させられるため、ページ自体は公開でも読み上げはロックしている。`WEB_PASSWORD` 未設定なら読み上げは使えない。
+- 同じ文章をもう一度押したときは API を呼ばずに再生する（料金節約）。文章を書き換えると作り直す。
+- 1回 2,000 文字まで。
+
+### セットアップ（初回だけ）
+1. Google AI Studio の Playground で Gemini 3.8 Flash TTS →「Create new voice」→「Voice Replication」。
+   本人の声 10〜30 秒と、同意文の読み上げ録音で声を作る（**有料枠のプロジェクトで作る**。無料枠は送ったデータが Google の改善に使われる規約のため）。
+2. 作った声の ID（`voice_...`）をコピーする（AI Studio の「Get code」で出るコードの `voice` の値。画面の表示は変わることがある）。
+3. Render の `kazuto-post-generator` に環境変数を設定:
+   - `GEMINI_API_KEY` — 同じプロジェクトの API キー
+   - `GEMINI_TTS_VOICE` — `voice_...` の ID（動作確認だけなら `Kore` など既製の声の名前でも動く）
+   - `GEMINI_TTS_MODEL` — 任意。安くするなら `gemini-3.8-flash-lite-tts`
+4. 2026年10月時点で Gemini 3.8 TTS はプレビュー版。API の形が変わってエラーが出たら `src/voice_tts.py` の `build_request_body` を直す。
 
 ---
 
