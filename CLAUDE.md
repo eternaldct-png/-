@@ -251,6 +251,30 @@ Googleフォームの代わりに、サイト内に応募フォームを実装�
 
 ---
 
+## /leads（X営業リスト・DM下書き・自動返信エージェント）
+
+AI導入支援の見込み客をXで探し、DMを送り、返信にエージェントが自動対応する管理画面。セットアップは `docs/sales_leads_setup.md`。
+
+**設定ファイル:** `persona/sales_leads_config.yaml`（検索キーワード・DMの書き方・自動返信のルール。コード変更不要）
+**コード:** `src/sales_leads.py`（ロジック）、`src/sales_leads_web.py`（画面・Blueprint）
+
+### 仕組み
+- `/leads/admin` — `WEB_PASSWORD` でログイン。Grok（`XAI_API_KEY`、xAI Responses API の `x_search`）で候補を探す／手動追加 →
+  Claudeで下書き → 「📩 Xで送る」で**文面入りのDM作成画面**（`x.com/messages/compose?recipient_id=…&text=…`）を開き、送信ボタンは人が押す。
+  CSV書き出し（スプシ用）あり。状態: 候補→送信待ち→送信済み→返信あり→担当者対応／面談予約／成約／見送り／配信停止。
+- `/tasks/leads-agent?token=<LEADS_TASK_SECRET>` — cronで10〜15分おき。営業用アカウント（`LEADS_X_ACCESS_TOKEN` 等）のDMを読み、
+  返信してきた相手にだけClaudeが自動返信する。初回は位置を記録するだけ。`active_hours` 外は返さない。
+  停止ワード→配信停止（以後送らない）、引き継ぎワード・上限回数・AIの判断→担当者対応にしてLINE（「連携 admin」）へ通知。
+- データは `DATABASE_URL` の `sales_leads` テーブル（id, data(JSON文字列)）。未設定時は `posts/sales_leads.json`。
+
+### 注意
+- **知らない相手への最初のDMをAPIで自動送信する機能は付けない**（Xの自動化ルールで禁止。営業用アカウントが凍結される）。
+  自動化してよいのは「相手から来たDMへの返信」だけ。
+- `business.achievements` に無い実績はAIに言わせない設定。実績を書くときは事実だけにする。
+- `tests/test_sales_leads.py` が、初回に過去DMへ返信しないこと・停止ワード・引き継ぎ・営業時間・CSRFなどをチェックする。
+
+---
+
 ## 面談予約アプリ（src/booking_app.py）
 
 kazuto / あまりん / さな / しー / かぴのすけ の5人それぞれについて、外部ゲストが
