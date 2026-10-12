@@ -275,6 +275,20 @@ AI導入支援の見込み客をXで探し、DMを送り、返信にエージェ
 
 ---
 
+## AIキャラ TikTok LIVE（tools/ai_live/・試作）
+
+AIキャラが TikTok LIVE のコメント・ギフト・フォローに反応してしゃべる配信ツール（B案＝AIキャラ主体）。
+Render ではなく **配信するWindows PCで動かす**。手順は `tools/ai_live/README.md`、費用は `docs/ai_live_cost.md`。
+
+- 設定は `tools/ai_live/config.yaml`（キャラ設定・AIモデル・ギフト演出のランク・NGワード）。コード変更不要。
+- コメント受信は非公式ライブラリ TikTokLive（仕様変更で止まることがある）。返事は Claude、声は VOICEVOX。
+- 配信画面は `http://127.0.0.1:8765/`（キャラ静止画・字幕・ギフト演出）を LIVE Studio でキャプチャする。
+- `python ai_live.py --demo --no-ai` で、TikTokにもAIにもつながずに画面と声だけ確認できる。
+- 無人放置は収益化の対象外になるおそれがあるため、人が `/say` `/ai` `/pause` で介入できる運用が前提。
+- `tests/test_ai_live.py` が NGワード・ギフトのランク・返事の順番・AI代の集計をチェックする。
+
+---
+
 ## 面談予約アプリ（src/booking_app.py）
 
 kazuto / あまりん / さな / しー / かぴのすけ の5人それぞれについて、外部ゲストが

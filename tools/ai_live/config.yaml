@@ -1,0 +1,100 @@
+# AIキャラ TikTok LIVE（B案：AIキャラ主体の配信）の設定
+# コードを変えずに、キャラ・しゃべり方・ギフト演出・安全ルールをここで調整する。
+
+tiktok:
+  # 配信するアカウントの @ID（@ は付けても付けなくてもよい）
+  unique_id: "@your_account"
+  # 非公式の受信ライブラリ（TikTokLive）が使う署名サーバーのAPIキー。
+  # 無料枠でも動くが制限が厳しい。本番は環境変数 SIGN_API_KEY に入れる（ここには書かない）。
+
+character:
+  name: "ルナ"                      # キャラ名（仮）
+  first_person: "わたし"
+  # キャラ設定。短く・具体的に。長くするとAI代が増える。
+  persona: |
+    ETERNAL d.c.t 所属のAIライバー。歌と音楽が大好きで、明るくて少しおっちょこちょい。
+    視聴者のことは「みんな」と呼ぶ。語尾はやわらかく、敬語とタメ口のあいだくらい。
+    ギフトやフォローには必ず名前を呼んでお礼を言う。
+    自分がAIであることは隠さない（聞かれたら「AIのライバーだよ」と答える）。
+  # 雑談のネタ（コメントが来ないときに使う）
+  idle_topics:
+    - 最近ハマっている曲
+    - 配信を見てくれている人の今日の晩ごはん
+    - 好きな季節
+    - カラオケで歌いたい曲
+    - ETERNAL d.c.t のライバーさんの配信の話
+  # 画面に出すキャラ画像（静止画をしゃべるときに揺らす簡易アバター）
+  image: "../motion_render/chars/c1.webp"
+
+ai:
+  # Claude のモデル。速さとコストのバランスで選ぶ（費用は README の表を参照）
+  #   claude-opus-5-5  … 賢い・自然。1返事あたり約1.6円（推定）
+  #   claude-haiku-5-5 … 速くて安い。1返事あたり約0.04円（推定）
+  model: "claude-opus-5-5"
+  effort: "low"                    # low にすると返事が速く・安くなる
+  max_reply_chars: 70              # 1回の返事の長さの上限（長いと間延びする）
+  history_turns: 8                 # 直近いくつのやりとりを覚えておくか
+  # 料金（USD / 100万トークン）。コスト集計用。公式の料金が変わったら直す
+  price_usd_per_mtok:
+    claude-opus-5-5: { input: 4.00, output: 20.00 }
+    claude-sonnet-5-5: { input: 2.00, output: 10.00 }
+    claude-haiku-5-5: { input: 0.10, output: 0.50 }
+  usd_jpy: 160                     # 集計用の為替レート（仮）
+
+voice:
+  engine: "voicevox"               # voicevox / none（none は字幕だけ）
+  voicevox_url: "http://127.0.0.1:50021"
+  speaker_id: 3                    # VOICEVOX の話者ID（キャラごとの利用規約とクレジット表記を必ず確認）
+  speed: 1.15
+  # 音声の出力先デバイス名の一部（例: "CABLE Input"）。空なら既定のスピーカー。
+  # sounddevice と numpy を入れたときだけ有効
+  output_device: ""
+
+behavior:
+  reply_interval_sec: 2            # 返事と返事のあいだの最低間隔
+  idle_after_sec: 25               # この秒数コメントが無ければ雑談する
+  comment_queue_max: 15            # 溜めておくコメント数（古いものから捨てる）
+  user_cooldown_sec: 30            # 同じ人のコメントに続けて返事しない秒数
+  greet_followers: true
+  greet_joins: false               # 入室あいさつ（人が多いとうるさいので既定はオフ）
+
+gifts:
+  # ダイヤ数（1回あたり × 連打数）でランクを決め、演出とセリフを変える。
+  # 上から順に判定し、min_diamonds 以上の最初のランクを使う。
+  tiers:
+    - name: "big"
+      min_diamonds: 1000
+      effect: "fireworks"          # overlay.html の演出名: fireworks / hearts / sparkle
+      use_ai: true                 # true ならAIが特別なお礼を考える
+      line: "{user}さん、{gift}ありがとう！！ほんとにほんとにうれしい！"
+    - name: "middle"
+      min_diamonds: 100
+      effect: "hearts"
+      use_ai: true
+      line: "{user}さん、{gift}ありがとう！すっごくうれしい！"
+    - name: "small"
+      min_diamonds: 0
+      effect: "sparkle"
+      use_ai: false                # 小さいギフトは定型文（速い・AI代ゼロ）
+      line: "{user}さん、{gift}ありがとう〜！"
+
+safety:
+  # コメントにこの言葉が含まれていたら読まない・返事しない
+  ng_words:
+    - 死ね
+    - 殺す
+    - 住所
+    - 電話番号
+    - LINE教えて
+    - 裏垢
+  # AIの返事にこの言葉が入っていたら、言わずに差し替える
+  output_ng_words:
+    - 死ね
+    - 殺す
+  fallback_line: "ごめんね、そのお話はできないの〜。ほかのこと聞かせて！"
+  max_comment_chars: 120           # これより長いコメントは読まない
+  skip_urls: true                  # URL入りのコメントは読まない
+
+overlay:
+  host: "127.0.0.1"
+  port: 8765

@@ -1,0 +1,8 @@
+# AIキャラ TikTok LIVE（配信するPCで pip install -r requirements.txt）
+TikTokLive>=7.0      # 非公式。TikTokの仕様変更で動かなくなることがある
+anthropic>=0.40.0
+pyyaml>=6.0.1
+requests>=2.31.0
+# 任意: 音声を仮想オーディオ（VB-CABLE など）へ直接流すとき
+# sounddevice
+# numpy
