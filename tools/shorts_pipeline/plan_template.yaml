@@ -1,0 +1,30 @@
+# ショート動画1本ぶんの設計図（Codex が企画段階でこれをコピーして埋める）
+# 置き場所: tools/shorts_pipeline/work/<id>/plan.yaml （work/ は git に入れない）
+id: "2026-10-17-sample"          # 日付-テーマ。フォルダ名にもなる
+title: "企画タイトル（社内用）"
+goal: "何のための動画か（例: オーディション応募を増やす / グッズ認知）"
+target: "誰に見せるか（例: 歌が好きな20〜30代の主婦・副業層）"
+platforms: [tiktok, youtube_shorts, instagram_reels]
+
+hook: "冒頭2秒で出す一言（画面上部に大きく）"
+bgm: ""                          # 権利処理済みの音源パス（例: assets/bgm/xxx.mp3）。空ならクリップの音を使う
+keep_clip_audio: true            # Grok が付けた音（効果音・環境音）を残すか
+bgm_volume: 0.35                 # クリップ音を残すときの BGM 音量
+
+shots:                           # 3〜5カット。1カット 5〜8 秒が安定（15秒は破綻しやすい）
+  - id: s1
+    image_prompt: >-
+      縦長 9:16。（Codex の画像生成に渡す指示。キャラ・服・背景・光・画角を具体的に）
+    image: images/s1.png         # Codex が生成した画像の保存先
+    video_prompt: >-
+      (Grok に渡す動きの指示。英語推奨: camera slowly pushes in, hair moves in the wind ...)
+    duration: 6                  # Grok に頼む秒数（1〜15）
+    video: clips/s1.mp4          # Grok の出力の保存先（grok_video.py が書く）
+    trim: [0.2, 5.8]             # 使う区間（秒）。破綻したコマを切る。省略で全体
+    caption: "このカットのテロップ"
+
+caption_post: |
+  投稿文（1行目が勝負）
+  #タグ1 #タグ2
+ai_generated: true               # AI生成ラベルを各SNSで必ずオンにする
+notes: "使用素材・出演者の許可状況など"

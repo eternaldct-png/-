@@ -306,3 +306,16 @@ kazuto / あまりん / さな / しー / かぴのすけ の5人それぞれに
 ### データ
 - `posts/booking_availability.json` — 各人の空き時間（`DATABASE_URL` 設定時は Postgres の `booking_availability` テーブル）
 - `posts/booking_reservations.json` — 確定した予約（同テーブル構成時は `interview_bookings` テーブル。予約の一意制約は `(member, slot)` の組み合わせ単位）
+
+---
+
+## tools/shorts_pipeline（AIショート動画の制作パイプライン）
+
+TikTok / YouTube ショート / リール向けの縦型動画を、Mac の **Codex アプリ**に作らせるための道具一式。手順は `tools/shorts_pipeline/AGENTS.md`（Codex が自動で読む）、セットアップは同フォルダの `README.md`。
+
+- 画像は Codex の画像生成（ChatGPT サブスク内）。動画は `grok_video.py`（xAI API・従量課金。`XAI_API_KEY`）。
+- `assemble.py` が ffmpeg で 1080x1920 の完成版＋CapCut 用素材（`out/segments/`・`captions.srt`）を作る。CapCut の仕上げは Codex の computer use で画面操作する（CapCut に編集用の公式 API は無い）。
+- `qc.py` が解像度・尺・黒コマ・止まった映像・音量（-14 LUFS）をチェックし、目視採点用のコマ一覧を出す。
+- **投稿は自動化しない**（TikTok は審査前のアプリから投稿すると非公開になる。凍結リスクもある）。AI生成ラベルを付けて人が投稿する。
+- `grok_video.py` のエンドポイント・フィールド名は公式ドキュメント未確認。エラー時は docs.x.ai を見て直す。
+- `tests/test_shorts_pipeline.py` がダミー動画で assemble / qc を通しでチェックする。
