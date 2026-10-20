@@ -232,6 +232,7 @@ def to_markdown(brief, form, genre, config):
             "", f"### カット{i}（{float(c['start']):g}–{float(c['end']):g}秒）",
             f"- 最初の画像: {c.get('first_frame', '')}",
             f"- 最後の画像: {c.get('last_frame', '') or '（指定なし）'}",
+            "- 参照画像: （任意。1行に1つ「- 参照画像: https://… 説明」。キャラ三面図・商品・背景など）",
             "- 動画プロンプト:", "```", str(c.get("video_prompt", "")), "```",
         ]
     lines += ["", "## 自動チェック"]
@@ -419,7 +420,31 @@ def direct_image_url(url):
     return f"https://drive.google.com/uc?export=download&id={m.group(1) or m.group(2)}"
 
 
-def start_draft(prompt, seconds, aspect, config, store, image_url="", http_post=None, now=None):
+def parse_reference_lines(text, config):
+    """参照画像の入力（1行に1つ「URL 説明」）を [{"url", "label"}] にする。不正なURLは ValueError。"""
+    limit = int(config.get("draft", {}).get("max_reference_images", 9))
+    refs = []
+    for line in str(text or "").replace("\r\n", "\n").split("\n"):
+        line = line.strip().lstrip("-・* ").strip()
+        if not line:
+            continue
+        url, _, label = line.partition(" ")
+        url = _safe_https(direct_image_url(url))
+        if not url:
+            raise ValueError(f"参照画像のURLは https:// で始めてください: {line[:60]}")
+        refs.append({"url": url, "label": label.strip()[:80]})
+    if len(refs) > limit:
+        raise ValueError(f"参照画像は{limit}枚までです（{len(refs)}枚あります）")
+    return refs
+
+
+def reference_prompt(prompt, refs):
+    """reference-to-video 用に、プロンプトの先頭へ @Image1… が何の画像かを書き足す"""
+    lines = [f"@Image{i}: {r['label'] or 'reference'}" for i, r in enumerate(refs, 1)]
+    return "Reference images (keep appearance consistent with them):\n" + "\n".join(lines) + "\n\n" + prompt
+
+
+def start_draft(prompt, seconds, aspect, config, store, image_url="", http_post=None, now=None, references=None):
     """下書きを1本キューに入れる。予算オーバー・未設定なら ValueError。"""
     d = config.get("draft", {})
     if not d.get("enabled", False):
@@ -438,11 +463,26 @@ def start_draft(prompt, seconds, aspect, config, store, image_url="", http_post=
     if spent + cost > budget:
         raise ValueError(f"今月の上限（{budget:,}円）を超えます（使用済み約{spent:,}円＋今回約{cost:,}円）")
 
-    model = d.get("image_to_video_model") if image_url else d.get("text_to_video_model")
+    refs = list(references or [])
+    if refs:
+        # 参照画像があるときは reference-to-video。最初の画像（絵コンテ）も @Image1 として渡す
+        if image_url:
+            refs.insert(0, {"url": image_url, "label": "storyboard / opening frame"})
+        limit = int(d.get("max_reference_images", 9))
+        if len(refs) > limit:
+            raise ValueError(f"画像は最初の画像と参照画像あわせて{limit}枚までです（{len(refs)}枚あります）")
+        model = d.get("reference_to_video_model")
+        prompt = reference_prompt(prompt, refs)
+    elif image_url:
+        model = d.get("image_to_video_model")
+    else:
+        model = d.get("text_to_video_model")
     payload = {"prompt": prompt[:4000], "resolution": d.get("resolution", "480p"),
                "duration": str(sec) if d.get("duration_as_string", True) else sec,
                "aspect_ratio": (d.get("aspect_map") or {}).get(aspect, aspect)}
-    if image_url:
+    if refs:
+        payload["image_urls"] = [r["url"] for r in refs]
+    elif image_url:
         payload["image_url"] = image_url
     payload.update(d.get("extra_input") or {})
 
@@ -460,7 +500,8 @@ def start_draft(prompt, seconds, aspect, config, store, image_url="", http_post=
     draft = {
         "id": uuid.uuid4().hex[:12], "created_at": (now or datetime.now(JST)).isoformat(timespec="seconds"),
         "status": "queued", "model": model, "seconds": sec, "aspect": aspect, "cost_jpy": cost,
-        "prompt": prompt[:4000], "image_url": image_url, "request_id": body.get("request_id", ""),
+        "prompt": prompt[:4000], "image_url": image_url,
+        "reference_urls": [r["url"] for r in refs], "request_id": body.get("request_id", ""),
         "status_url": body["status_url"], "response_url": body["response_url"], "video_url": "", "error": "",
     }
     store.save(draft)
@@ -548,7 +589,7 @@ def parse_markdown(text, config):
         if m:
             current = {"no": int(m.group(1)), "start": float(m.group(2)), "end": float(m.group(3)),
                        "scene": "", "dialogue": "", "camera": "", "first_frame": "", "last_frame": "",
-                       "video_prompt": "", "text_overlay": "", "image_url": ""}
+                       "video_prompt": "", "text_overlay": "", "image_url": "", "references": []}
             cuts.append(current)
             continue
         if stripped.startswith("## ") or stripped.startswith("# "):
@@ -565,6 +606,10 @@ def parse_markdown(text, config):
             form["genre"] = next((g["id"] for g in config.get("genres", []) if g.get("name") == name), "")
         elif m := _TABLE_ROW.match(stripped):
             scenes[int(m.group(1))] = m.group(2)
+        elif current is not None and (m := re.match(r"^-\s*参照画像[：:]\s*(https://\S+)\s*(.*)$", stripped)):
+            url = _safe_https(direct_image_url(m.group(1)))
+            if url:
+                current["references"].append({"url": url, "label": m.group(2).strip()[:80]})
         elif current is not None and (m := re.match(r"^-\s*(最初の画像|最後の画像|画像URL)[：:]\s*(.*)$", stripped)):
             value = m.group(2).strip()
             if m.group(1) == "最初の画像":

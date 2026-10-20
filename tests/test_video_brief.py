@@ -190,6 +190,32 @@ class VideoDraftTest(unittest.TestCase):
         self.assertEqual(headers["Authorization"], "Key k")
         self.assertEqual(self.store.get(d["id"])["cost_jpy"], 100)
 
+    def test_references_use_reference_to_video_with_image_urls(self):
+        refs = vb.parse_reference_lines(
+            "https://ex.com/sheet.png キャラ三面図\n\n- https://drive.google.com/file/d/AbC_1/view 商品", self.config)
+        self.assertEqual(refs[1], {"url": "https://drive.google.com/uc?export=download&id=AbC_1", "label": "商品"})
+        vb.start_draft("she smiles", 5, "16:9", self.config, self.store, image_url="https://ex.com/board.png",
+                       references=refs, http_post=self._post)
+        url, payload, _ = self.posts[0]
+        self.assertTrue(url.endswith(self.config["draft"]["reference_to_video_model"]))
+        self.assertEqual(payload["image_urls"], ["https://ex.com/board.png", "https://ex.com/sheet.png",
+                                                 "https://drive.google.com/uc?export=download&id=AbC_1"])
+        self.assertNotIn("image_url", payload)
+        self.assertIn("@Image2: キャラ三面図", payload["prompt"])
+        self.assertTrue(payload["prompt"].endswith("she smiles"))
+
+    def test_reference_limits_and_bad_urls(self):
+        with self.assertRaises(ValueError):
+            vb.parse_reference_lines("http://ex.com/a.png", self.config)
+        self.config["draft"]["max_reference_images"] = 2
+        with self.assertRaises(ValueError):
+            vb.parse_reference_lines("https://a.png\nhttps://b.png\nhttps://c.png", self.config)
+        refs = vb.parse_reference_lines("https://ex.com/a.png\nhttps://ex.com/b.png", self.config)
+        with self.assertRaises(ValueError):  # 最初の画像を足すと3枚
+            vb.start_draft("a", 5, "16:9", self.config, self.store, image_url="https://ex.com/c.png",
+                           references=refs, http_post=self._post)
+        self.assertEqual(self.posts, [])
+
     def test_google_drive_share_link_is_converted(self):
         direct = "https://drive.google.com/uc?export=download&id=1n_Nef-bnV"
         for link in ["https://drive.google.com/file/d/1n_Nef-bnV/view?usp=drive_link",
@@ -344,6 +370,21 @@ class LoadMarkdownTest(unittest.TestCase):
         md = md.replace("### カット2（4–9秒）", "### カット2（4–9秒）\n- 画像URL: https://ex.com/cut2.png")
         _, brief = vb.parse_markdown(md, self.config)
         self.assertEqual([c["image_url"] for c in brief["cuts"]], ["https://ex.com/cut1.png", "https://ex.com/cut2.png", ""])
+
+    def test_reference_lines_in_markdown_are_loaded(self):
+        self.assertIn("- 参照画像: （任意", self.md)
+        md = self.md.replace("### カット2（4–9秒）",
+                             "### カット2（4–9秒）\n- 参照画像: https://ex.com/sheet.png キャラ三面図\n- 参照画像: https://ex.com/item.png 商品")
+        _, brief = vb.parse_markdown(md, self.config)
+        self.assertEqual(brief["cuts"][0]["references"], [])
+        self.assertEqual([r["label"] for r in brief["cuts"][1]["references"]], ["キャラ三面図", "商品"])
+        client = web_app.app.test_client()
+        with client.session_transaction() as s:
+            s["video_brief_ok"] = True
+            s["video_brief_csrf"] = "tok"
+        with patch.dict(os.environ, {"FAL_KEY": "k"}):
+            html = client.post("/video-brief/load", data={"csrf_token": "tok", "markdown": md}).get_data(as_text=True)
+        self.assertIn("https://ex.com/sheet.png キャラ三面図\nhttps://ex.com/item.png 商品</textarea>", html)
 
     def test_no_cuts_is_an_error(self):
         with self.assertRaises(ValueError):
