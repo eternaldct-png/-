@@ -190,6 +190,20 @@ class VideoDraftTest(unittest.TestCase):
         self.assertEqual(headers["Authorization"], "Key k")
         self.assertEqual(self.store.get(d["id"])["cost_jpy"], 100)
 
+    def test_key_with_pasted_newline_is_cleaned(self):
+        with patch.dict(os.environ, {"FAL_KEY": " fal_sk_abc\ndef \n"}):
+            vb.start_draft("a", 5, "16:9", self.config, self.store, http_post=self._post)
+        self.assertEqual(self.posts[0][2]["Authorization"], "Key fal_sk_abcdef")
+
+    def test_connection_error_never_shows_the_key(self):
+        def boom(url, json=None, headers=None, timeout=None):
+            raise ValueError(f"bad header value: {headers['Authorization']!r}")
+        with patch.dict(os.environ, {"FAL_KEY": "fal_sk_secret123"}):
+            with self.assertRaises(RuntimeError) as cm:
+                vb.start_draft("a", 5, "16:9", self.config, self.store, http_post=boom)
+        self.assertNotIn("secret", str(cm.exception))
+        self.assertIn("***", str(cm.exception))
+
     def test_payload_matches_fal_seedance_input(self):
         vb.start_draft("a cat", 5, "2.39:1", self.config, self.store, http_post=self._post)
         _, payload, _ = self.posts[0]

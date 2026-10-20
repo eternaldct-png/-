@@ -344,7 +344,18 @@ class DraftStore:
 
 
 def draft_api_key(config):
-    return os.environ.get(config.get("draft", {}).get("api_key_env", "FAL_KEY"), "")
+    """APIキー。貼り付け時に紛れた改行・空白は取り除く（ヘッダーに入れられないため）"""
+    return "".join(os.environ.get(config.get("draft", {}).get("api_key_env", "FAL_KEY"), "").split())
+
+
+def _redact(text, key):
+    """エラー文にAPIキーが混ざって画面・ログに出ないよう伏せる"""
+    text = str(text)
+    if key:
+        text = text.replace(key, "***")
+        if len(key) > 16:
+            text = text.replace(key[:8], "***").replace(key[-8:], "***")
+    return re.sub(r"(Key\s+)\S+", r"\1***", text)
 
 
 def draft_seconds(seconds, config):
@@ -410,7 +421,7 @@ def start_draft(prompt, seconds, aspect, config, store, image_url="", http_post=
     try:
         r = post(f"{FAL_QUEUE}/{model}", json=payload, headers={"Authorization": f"Key {key}"}, timeout=30)
     except Exception as e:
-        raise RuntimeError(f"fal.ai に接続できませんでした: {e}")
+        raise RuntimeError(f"fal.ai に接続できませんでした: {_redact(e, key)}")
     if r.status_code not in (200, 201, 202):
         raise RuntimeError(f"fal.ai エラー（{r.status_code}）: {r.text[:300]}")
     body = r.json()
@@ -451,7 +462,8 @@ def refresh_draft(draft, config, store, http_get=None):
         return draft
     import requests
     get = http_get or requests.get
-    headers = {"Authorization": f"Key {draft_api_key(config)}"}
+    key = draft_api_key(config)
+    headers = {"Authorization": f"Key {key}"}
     try:
         r = get(draft["status_url"], headers=headers, timeout=20)
         if r.status_code >= 400:
@@ -470,7 +482,7 @@ def refresh_draft(draft, config, store, http_get=None):
         elif status == "IN_QUEUE":
             draft["status"] = "queued"
     except Exception as e:
-        _log(f"refresh failed: {e}")
+        _log(f"refresh failed: {_redact(e, key)}")
         return draft
     store.save(draft)
     return draft
