@@ -303,6 +303,10 @@ AI導入支援の見込み客をXで探し、DMを送り、返信にエージェ
 - 記録は `DATABASE_URL` の `video_drafts` テーブル（未設定時は `posts/video_drafts.json`。Render無料プランでは消えるので、
   予算の集計がリセットされる → `DATABASE_URL` 必須）。
 - 動画は fal.ai 側のURL（一定期間で消える）。必要なものは手元・Googleドライブに保存する。リポジトリには置かない。
+- **保存した指示書の読み込み**: フォーム下の「📂 保存した指示書から下書きを作る」で、前に保存したMarkdownを選ぶ／貼ると、
+  同じカット割り（カット番号・秒・プロンプト）のまま下書きボタンが出る（`/video-brief/load`、Claudeは呼ばない）。
+  各カットの「- 最初の画像:」行（または追記した「- 画像URL:」行）に https:// のURLがあれば、画像URL欄に自動で入る。
+  読み込みは `video_brief.parse_markdown`（`to_markdown` の書式が前提。書式を変えたら両方直す）。
 
 ---
 

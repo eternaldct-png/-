@@ -153,18 +153,52 @@ def _draft_section(brief, form, config):
         return ""
     rows = []
     for i, cut in enumerate(brief.get("cuts", []), 1):
+        no = cut.get("no", i)
         sec = vb.draft_seconds(float(cut.get("end", 0)) - float(cut.get("start", 0)), config)
         data = json.dumps({"prompt": cut.get("video_prompt", ""), "seconds": sec, "aspect": form.get("aspect", "")},
                           ensure_ascii=False)
         rows.append(
-            f'<div class="cut" data-cut="{escape(data)}"><b>カット{i}</b> {escape(cut.get("scene", ""))}'
-            f'<input class="img" placeholder="最初の画像のURL（任意・https://）">'
+            f'<div class="cut" data-cut="{escape(data)}"><b>カット{no}</b> {escape(cut.get("scene", ""))}'
+            f'<input class="img" value="{escape(cut.get("image_url", ""))}" placeholder="最初の画像のURL（任意・https://）">'
             f'<button type="button" class="ghost" onclick="draft(this)">🎬 下書きを作る（{sec}秒・約{vb.draft_cost_jpy(sec, config):,}円）</button>'
             f'<div class="out"></div></div>'
         )
     return (f'<h2>🎬 下書き動画（{escape(d.get("resolution", "480p"))}）</h2>'
             '<p class="hint">OKが出たカットだけ、本番（1080p）を Higgsfield 等で手で作ってください。'
-            '画像URLを入れると、その画像から動かします（キャラの見た目を固定したいとき）。</p>' + "".join(rows))
+            '画像URLを入れると、その画像から動かします（キャラの見た目を固定したいとき）。'
+            '指示書の各カットの「- 最初の画像:」の行に https:// のURLを書いて保存しておくと、読み込んだときに自動で入ります。</p>'
+            + "".join(rows))
+
+
+@bp.route("/video-brief/load", methods=["POST"])
+def video_brief_load():
+    """保存した指示書（Markdown）を読み込んで、同じカット割りで下書きボタンを出す"""
+    if not session.get("video_brief_ok"):
+        return redirect("/video-brief")
+    sent = str(request.form.get("csrf_token", ""))
+    if not hmac.compare_digest(str(session.get("video_brief_csrf", "")), sent):
+        return _html("<p>画面が古くなっています。戻って再読み込みしてください。</p>", 400)
+    config = vb.load_config()
+    text = str(request.form.get("markdown", ""))
+    if len(text) > 200_000:
+        return _html(_form_page(config, "指示書が大きすぎます（200KBまで）"), 400)
+    try:
+        form, brief = vb.parse_markdown(text, config)
+    except ValueError as e:
+        return _html(_form_page(config, str(e)), 400)
+    with_image = sum(1 for c in brief["cuts"] if c.get("image_url"))
+    status = (f'<p class="badge ok">📂 「{escape(form["subject"] or "指示書")}」を読み込みました'
+              f'（カット{len(brief["cuts"])}本・画像URLあり{with_image}本）</p>')
+    if not vb.draft_api_key(config) or not config.get("draft", {}).get("enabled"):
+        status += '<p class="hint">⚠️ FAL_KEY 未設定のため、下書きボタンは出ません。</p>'
+    body = (
+        RESULT_HTML.replace("__STATUS__", status)
+        .replace("__DRAFTS__", _draft_section(brief, form, config))
+        .replace("__MD__", str(escape(text)))
+        .replace("__FILENAME__", "brief.md")
+        .replace("__CSRF__", _csrf_token())
+    )
+    return _html(body)
 
 
 def _require_login_json():
@@ -244,6 +278,8 @@ label { display: block; font-weight: 700; margin: 14px 0 6px; font-size: 13px; }
 .tips ul, details ul { padding-left: 18px; }
 details { margin-top: 16px; font-size: 12px; color: var(--muted); }
 button[type=submit] { width: 100%; margin-top: 18px; }
+.load { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border); }
+.load h2 { font-size: 15px; margin-bottom: 4px; } .load input[type=file] { margin: 10px 0 8px; }
 .error { text-align: left; }
 </style></head><body><div class="box">
 <h1>🎬 __TITLE__</h1>
@@ -263,9 +299,21 @@ __TIPS__
 <label>依頼メモ（任意）</label><textarea name="memo" rows="4" placeholder="クライアントの要望、入れたいセリフなど">__MEMO__</textarea>
 <button type="submit">指示書を作る</button>
 </form>
+<form method="POST" action="/video-brief/load" class="load">
+<input type="hidden" name="csrf_token" value="__CSRF__">
+<h2>📂 保存した指示書から下書きを作る</h2>
+<p class="hint">前に保存したMarkdownを読み込むと、同じカット割り（カット1・カット2…）のまま下書きボタンが出ます。作っておいた画像と合わせたいときに。</p>
+<input type="file" accept=".md,.markdown,.txt,text/markdown,text/plain" onchange="loadMd(this)">
+<textarea name="markdown" id="loadmd" rows="4" placeholder="ファイルを選ぶか、指示書のMarkdownをここに貼り付け" required></textarea>
+<button type="submit" class="ghost">読み込む</button>
+</form>
 <details><summary>全ジャンル共通のルール</summary><ul>__FOUNDATIONS__</ul></details>
 </div>
 <script>
+function loadMd(input) {
+  const f = input.files[0]; if (!f) return;
+  const r = new FileReader(); r.onload = () => { document.getElementById('loadmd').value = r.result; }; r.readAsText(f);
+}
 const g = document.getElementById('genre'), s = document.getElementById('seconds'), a = document.getElementById('aspect');
 function sync(first) {
   const opt = g.selectedOptions[0];
