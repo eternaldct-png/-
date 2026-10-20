@@ -275,6 +275,25 @@ AI導入支援の見込み客をXで探し、DMを送り、返信にエージェ
 
 ---
 
+## /video-brief（AI動画の制作指示書メーカー）
+
+ジャンル・案件・尺・素材を入れると、Claudeが秒割り台本・カットごとの動画生成プロンプト（英語）・用意する参照素材を書き、
+チェックリスト付きのMarkdownで出す管理ツール。動画生成そのもの（Higgsfield等）と編集は人が行う。
+
+**設定ファイル:** `persona/video_brief_config.yaml`（7ジャンルの勝ちパターン・共通ルール・権利チェック・見積もりの考え方。コード変更不要）
+**コード:** `src/video_brief.py`（ロジック）、`src/video_brief_web.py`（画面・Blueprint）
+**元ネタの要約:** `docs/video_production_playbook.md`
+
+### 仕組み
+- `/video-brief` — `WEB_PASSWORD` でログイン（`/goods/admin` と同じパスワード）。`ANTHROPIC_API_KEY` が必要（新しい環境変数は不要）。
+- AIが書いた台本は、`video_brief.check_cuts` が機械的にチェックする:
+  セリフが「尺×`chars_per_second`（8文字/秒）」を超えていないか、カットのすき間・重なり、`max_clip_seconds`（30秒）超え、
+  2カット目以降の「最初の画像」指定の有無、合計の尺。
+- 結果はサーバーに保存しない（画面からMarkdownで保存／コピーして案件フォルダへ）。
+- `tests/test_video_brief.py` が、7ジャンルの設定・文字数チェック・つなぎのチェック・ログイン/CSRFをチェックする。
+
+---
+
 ## 面談予約アプリ（src/booking_app.py）
 
 kazuto / あまりん / さな / しー / かぴのすけ の5人それぞれについて、外部ゲストが
