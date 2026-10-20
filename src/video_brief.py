@@ -474,3 +474,70 @@ def refresh_draft(draft, config, store, http_get=None):
         return draft
     store.save(draft)
     return draft
+
+
+# ── ⑤ 保存した Markdown を読み込む（同じカット割りで下書きを作り直す用） ──────
+
+_CUT_HEAD = re.compile(r"^###\s*カット\s*(\d+)\s*[（(]\s*([\d.]+)\s*[–\-~〜ー]\s*([\d.]+)\s*秒\s*[）)]")
+_TABLE_ROW = re.compile(r"^\|\s*(\d+)\s*\|\s*[\d.]+\s*[–\-~〜]\s*[\d.]+\s*\|\s*(.*?)\s*\|")
+_URL = re.compile(r"https://[^\s\"'<>）)]+")
+
+
+def parse_markdown(text, config):
+    """to_markdown で書き出した指示書から (form, brief) を作る。カットが無ければ ValueError。"""
+    lines = str(text or "").replace("\r\n", "\n").split("\n")
+    form = {"subject": "", "seconds": 0, "aspect": "16:9", "genre": ""}
+    scenes = {}
+    cuts = []
+    current = None
+    in_code = False
+    code = []
+    for line in lines:
+        stripped = line.strip()
+        if in_code:
+            if stripped.startswith("```"):
+                in_code = False
+                if current is not None and not current["video_prompt"]:
+                    current["video_prompt"] = "\n".join(code).strip()
+            else:
+                code.append(line)
+            continue
+        m = _CUT_HEAD.match(stripped)
+        if m:
+            current = {"no": int(m.group(1)), "start": float(m.group(2)), "end": float(m.group(3)),
+                       "scene": "", "dialogue": "", "camera": "", "first_frame": "", "last_frame": "",
+                       "video_prompt": "", "text_overlay": "", "image_url": ""}
+            cuts.append(current)
+            continue
+        if stripped.startswith("## ") or stripped.startswith("# "):
+            current = None
+        if stripped.startswith("```"):
+            in_code, code = True, []
+            continue
+        if m := re.match(r"^#\s*制作指示書[：:]\s*(.*)$", stripped):
+            form["subject"] = m.group(1).strip()
+        elif m := re.match(r"^-\s*尺[：:]\s*(\d+)\s*秒\s*/\s*縦横比[：:]\s*(\S+)", stripped):
+            form["seconds"], form["aspect"] = int(m.group(1)), m.group(2)
+        elif m := re.match(r"^-\s*ジャンル[：:]\s*(.*)$", stripped):
+            name = m.group(1).strip()
+            form["genre"] = next((g["id"] for g in config.get("genres", []) if g.get("name") == name), "")
+        elif m := _TABLE_ROW.match(stripped):
+            scenes[int(m.group(1))] = m.group(2)
+        elif current is not None and (m := re.match(r"^-\s*(最初の画像|最後の画像|画像URL)[：:]\s*(.*)$", stripped)):
+            value = m.group(2).strip()
+            if m.group(1) == "最初の画像":
+                current["first_frame"] = value
+            elif m.group(1) == "最後の画像":
+                current["last_frame"] = value
+            url = _URL.search(value)
+            if url and m.group(1) != "最後の画像" and not current["image_url"]:
+                current["image_url"] = url.group(0)
+    cuts = [c for c in cuts if c["video_prompt"] and c["end"] > c["start"]]
+    if not cuts:
+        raise ValueError("カットが見つかりませんでした（このツールで保存した指示書のMarkdownを読み込んでください）")
+    cuts.sort(key=lambda c: c["no"])
+    for c in cuts:
+        c["scene"] = scenes.get(c["no"], "")
+    if form["aspect"] not in config.get("aspects", []):
+        form["aspect"] = "16:9"
+    return form, {"cuts": cuts}

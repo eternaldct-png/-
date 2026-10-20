@@ -270,5 +270,62 @@ class VideoDraftTest(unittest.TestCase):
             self.assertNotIn("下書きを作る（", html)
 
 
+
+class LoadMarkdownTest(unittest.TestCase):
+    def setUp(self):
+        self.config = vb.load_config()
+        self.genre = vb.get_genre(self.config, "anime")
+        cuts = [_cut(0, 4, "ほかほか", first_frame="三面図"), _cut(4, 9), _cut(9, 15)]
+        cuts[1]["video_prompt"] = "steam rises\nfrom a sweet potato"
+        cuts[2]["scene"] = "お店|カウンター"
+        form = {"subject": "焼きいも", "seconds": 15, "aspect": "9:16", "goal": ""}
+        self.md, _ = vb.to_markdown(_brief(cuts), form, self.genre, self.config)
+
+    def test_round_trip_keeps_cut_numbers_times_and_prompts(self):
+        form, brief = vb.parse_markdown(self.md, self.config)
+        self.assertEqual((form["subject"], form["seconds"], form["aspect"], form["genre"]), ("焼きいも", 15, "9:16", "anime"))
+        self.assertEqual([(c["no"], c["start"], c["end"]) for c in brief["cuts"]], [(1, 0, 4), (2, 4, 9), (3, 9, 15)])
+        self.assertEqual(brief["cuts"][1]["video_prompt"], "steam rises\nfrom a sweet potato")
+        self.assertEqual(brief["cuts"][2]["scene"], "お店／カウンター")
+        self.assertEqual(brief["cuts"][0]["first_frame"], "三面図")
+        self.assertEqual(brief["cuts"][0]["image_url"], "")
+
+    def test_image_url_written_in_markdown_is_prefilled(self):
+        md = self.md.replace("- 最初の画像: 三面図", "- 最初の画像: 三面図 https://ex.com/cut1.png")
+        md = md.replace("### カット2（4–9秒）", "### カット2（4–9秒）\n- 画像URL: https://ex.com/cut2.png")
+        _, brief = vb.parse_markdown(md, self.config)
+        self.assertEqual([c["image_url"] for c in brief["cuts"]], ["https://ex.com/cut1.png", "https://ex.com/cut2.png", ""])
+
+    def test_no_cuts_is_an_error(self):
+        with self.assertRaises(ValueError):
+            vb.parse_markdown("# メモ\nただの文章", self.config)
+
+    def test_web_load_shows_same_cuts_with_draft_buttons(self):
+        client = web_app.app.test_client()
+        with client.session_transaction() as s:
+            s["video_brief_ok"] = True
+            s["video_brief_csrf"] = "tok"
+        md = self.md.replace("- 最初の画像: 三面図", "- 最初の画像: https://ex.com/a.png")
+        with patch.dict(os.environ, {"FAL_KEY": "k"}):
+            html = client.post("/video-brief/load", data={"csrf_token": "tok", "markdown": md}).get_data(as_text=True)
+        self.assertIn("カット3本・画像URLあり1本", html)
+        self.assertIn("<b>カット2</b>", html)
+        self.assertIn('value="https://ex.com/a.png"', html)
+        self.assertIn("下書きを作る（5秒", html)
+        self.assertEqual(client.post("/video-brief/load", data={"csrf_token": "x", "markdown": md}).status_code, 400)
+        r = client.post("/video-brief/load", data={"csrf_token": "tok", "markdown": "なにもない"})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("カットが見つかりませんでした", r.get_data(as_text=True))
+
+    def test_form_page_has_load_section(self):
+        client = web_app.app.test_client()
+        with client.session_transaction() as s:
+            s["video_brief_ok"] = True
+            s["video_brief_csrf"] = "tok"
+        html = client.get("/video-brief").get_data(as_text=True)
+        self.assertIn('action="/video-brief/load"', html)
+        self.assertNotIn("__CSRF__", html)
+
+
 if __name__ == "__main__":
     unittest.main()
