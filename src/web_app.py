@@ -5444,6 +5444,14 @@ sales_leads_web.NOTIFY = _notify_sales_leads
 app.register_blueprint(sales_leads_web.bp)
 
 
+# ── /video-brief（AI動画の制作指示書メーカー） ──────────────────────
+# 中身は src/video_brief.py（ロジック）と src/video_brief_web.py（画面）
+
+import video_brief_web
+
+app.register_blueprint(video_brief_web.bp)
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port, debug=False)
