@@ -1,10 +1,14 @@
 import json
 import os
+import tempfile
 import unittest
+from datetime import datetime
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from src import web_app
+import video_brief_web
 import video_brief as vb  # web_app と同じモジュール（src を sys.path に入れて読み込まれる）
 
 
@@ -140,6 +144,122 @@ class VideoBriefWebTest(unittest.TestCase):
         })
         self.assertEqual(response.status_code, 400)
         self.assertIn("3〜180秒", response.get_data(as_text=True))
+
+
+
+class Resp:
+    def __init__(self, status_code, data):
+        self.status_code, self._data, self.text = status_code, data, json.dumps(data)
+
+    def json(self):
+        return self._data
+
+
+class VideoDraftTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.store = vb.DraftStore(database_url="", file_path=Path(self.tmp.name) / "drafts.json")
+        self.config = vb.load_config()
+        self.config["draft"].update(enabled=True, monthly_budget_jpy=1000, usd_per_second=0.2, jpy_per_usd=100)
+        self.posts = []
+        self.env = patch.dict(os.environ, {"FAL_KEY": "k"})
+        self.env.start()
+
+    def tearDown(self):
+        self.env.stop()
+        self.tmp.cleanup()
+
+    def _post(self, url, json=None, headers=None, timeout=None):
+        self.posts.append((url, json, headers))
+        return Resp(200, {"request_id": "r1", "status_url": "https://queue.fal.run/x/requests/r1/status",
+                          "response_url": "https://queue.fal.run/x/requests/r1"})
+
+    def test_cost_and_seconds_are_clamped(self):
+        self.assertEqual(vb.draft_seconds(30, self.config), 15)
+        self.assertEqual(vb.draft_seconds(1, self.config), 4)
+        self.assertEqual(vb.draft_cost_jpy(5, self.config), 100)  # 5秒×$0.2×100円
+
+    def test_start_draft_sends_480p_and_records_cost(self):
+        d = vb.start_draft("a cat", 5, "9:16", self.config, self.store, http_post=self._post)
+        url, payload, headers = self.posts[0]
+        self.assertTrue(url.endswith(self.config["draft"]["text_to_video_model"]))
+        self.assertEqual(payload["resolution"], "480p")
+        self.assertEqual(payload["duration"], "5")
+        self.assertEqual(payload["aspect_ratio"], "9:16")
+        self.assertNotIn("image_url", payload)
+        self.assertEqual(headers["Authorization"], "Key k")
+        self.assertEqual(self.store.get(d["id"])["cost_jpy"], 100)
+
+    def test_image_url_switches_to_image_to_video(self):
+        vb.start_draft("a cat", 5, "16:9", self.config, self.store, image_url="https://ex.com/a.png", http_post=self._post)
+        url, payload, _ = self.posts[0]
+        self.assertTrue(url.endswith(self.config["draft"]["image_to_video_model"]))
+        self.assertEqual(payload["image_url"], "https://ex.com/a.png")
+
+    def test_budget_blocks_before_calling_api(self):
+        for _ in range(10):
+            vb.start_draft("a", 5, "16:9", self.config, self.store, http_post=self._post)  # 100円×10 = 1000円
+        with self.assertRaises(ValueError) as cm:
+            vb.start_draft("a", 5, "16:9", self.config, self.store, http_post=self._post)
+        self.assertIn("上限", str(cm.exception))
+        self.assertEqual(len(self.posts), 10)
+
+    def test_failed_drafts_do_not_count_and_last_month_resets(self):
+        self.store.save({"id": "a", "created_at": "2026-09-30T23:00:00+09:00", "status": "done", "cost_jpy": 900})
+        self.store.save({"id": "b", "created_at": "2026-10-01T00:10:00+09:00", "status": "failed", "cost_jpy": 900})
+        self.store.save({"id": "c", "created_at": "2026-10-02T10:00:00+09:00", "status": "done", "cost_jpy": 300})
+        now = datetime(2026, 10, 20, tzinfo=vb.JST)
+        self.assertEqual(vb.spent_this_month(self.store.all(), now), 300)
+
+    def test_missing_key_or_disabled_is_refused(self):
+        with patch.dict(os.environ, {"FAL_KEY": ""}):
+            with self.assertRaises(ValueError):
+                vb.start_draft("a", 5, "16:9", self.config, self.store, http_post=self._post)
+        self.config["draft"]["enabled"] = False
+        with self.assertRaises(ValueError):
+            vb.start_draft("a", 5, "16:9", self.config, self.store, http_post=self._post)
+        self.assertEqual(self.posts, [])
+
+    def test_refresh_draft_records_video_url(self):
+        d = vb.start_draft("a", 5, "16:9", self.config, self.store, http_post=self._post)
+        answers = {d["status_url"]: Resp(200, {"status": "IN_PROGRESS"})}
+        get = lambda url, headers=None, timeout=None: answers[url]
+        self.assertEqual(vb.refresh_draft(d, self.config, self.store, http_get=get)["status"], "running")
+        answers[d["status_url"]] = Resp(200, {"status": "COMPLETED"})
+        answers[d["response_url"]] = Resp(200, {"video": {"url": "https://v.fal.media/out.mp4"}})
+        d = vb.refresh_draft(d, self.config, self.store, http_get=get)
+        self.assertEqual((d["status"], d["video_url"]), ("done", "https://v.fal.media/out.mp4"))
+        self.assertEqual(self.store.get(d["id"])["status"], "done")
+
+    def test_web_draft_endpoints(self):
+        client = web_app.app.test_client()
+        self.assertEqual(client.post("/video-brief/draft", json={}).status_code, 401)
+        with client.session_transaction() as s:
+            s["video_brief_ok"] = True
+            s["video_brief_csrf"] = "tok"
+        self.assertEqual(client.post("/video-brief/draft", json={"csrf_token": "x"}).status_code, 400)
+        r = client.post("/video-brief/draft", json={"csrf_token": "tok", "prompt": "a", "image_url": "javascript:x"})
+        self.assertEqual(r.status_code, 400)
+        fake = {"id": "abc", "status": "queued", "cost_jpy": 100}
+        with patch.object(video_brief_web, "get_store", return_value=self.store), \
+                patch.object(vb, "start_draft", return_value=fake) as start:
+            r = client.post("/video-brief/draft", json={"csrf_token": "tok", "prompt": "a", "seconds": 5, "aspect": "9:16"})
+        self.assertEqual(r.get_json()["id"], "abc")
+        self.assertEqual(start.call_args.args[2], "9:16")
+
+    def test_result_page_shows_draft_buttons_only_with_key(self):
+        client = web_app.app.test_client()
+        with client.session_transaction() as s:
+            s["video_brief_ok"] = True
+            s["video_brief_csrf"] = "tok"
+        brief = _brief([_cut(0, 15, first_frame="三面図"), _cut(15, 30)])
+        data = {"csrf_token": "tok", "genre": "anime", "subject": "x", "seconds": "30", "aspect": "16:9"}
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "x"}), patch.object(vb, "generate_brief", return_value=brief):
+            html = client.post("/video-brief/generate", data=data).get_data(as_text=True)
+            self.assertIn("下書きを作る（15秒", html)
+            with patch.dict(os.environ, {"FAL_KEY": ""}):
+                html = client.post("/video-brief/generate", data=data).get_data(as_text=True)
+            self.assertNotIn("下書きを作る（", html)
 
 
 if __name__ == "__main__":
