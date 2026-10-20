@@ -316,6 +316,12 @@ AI導入支援の見込み客をXで探し、DMを送り、返信にエージェ
   指示書では「- 参照セット: キャラ名」の行で自動展開（未登録の名前は読み込み時に警告）。
   保存先は `DATABASE_URL` の `video_characters` テーブル（未設定時は `posts/video_characters.json`。Render無料プランでは消える）。
   ストアは `video_brief.JsonStore` を継承（`DraftStore` と共通）。
+- **下書きをつないで1本にする**: `/video-brief/drafts`（ログイン必須）に完成した下書きが新しい順に並び、「順番」を入れて「つなぐ」で
+  確認用のmp4を1本作る（生成はしないので追加費用なし・音なし・縦横比は1本目に合わせて余白でそろえる・12本まで）。
+  いちばん新しい案件の各カットの最新の下書きには、カット番号が順番として最初から入る（下書きの記録に `subject` と `cut` を保存）。
+  ffmpeg は `imageio-ffmpeg`（requirements.txt）同梱の実行ファイルを使う（Render にシステムの ffmpeg は不要）。
+  できたファイルは一時ディレクトリ（`video_brief_concat`、2時間で削除）から `/video-brief/concat/<job>.mp4` で配信する。
+  fal.ai の動画URLの期限が切れた下書きはつなげない。gunicorn の `--timeout 120` に収めるため、ffmpeg は90秒で打ち切る。
 
 ---
 

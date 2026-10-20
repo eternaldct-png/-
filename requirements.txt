@@ -16,6 +16,9 @@ requests>=2.31.0
 
 # 投稿管理ダッシュボード (Web UI)
 flask>=3.0.0
+
+# /video-brief の下書きをつなぐ（ffmpeg の実行ファイル同梱。Render にシステムの ffmpeg が無くても動く）
+imageio-ffmpeg>=0.5.1
 gunicorn>=21.2.0
 
 # 商品購入・決済 (Stripe)
