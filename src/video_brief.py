@@ -5,12 +5,19 @@
 セリフの文字数・カットの尺・つなぎ方をこのモジュールが機械的にチェックする。
 """
 import json
+import os
 import re
+import uuid
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import yaml
 
 CONFIG_PATH = Path(__file__).parent.parent / "persona" / "video_brief_config.yaml"
+DRAFTS_FILE = Path(__file__).parent.parent / "posts" / "video_drafts.json"
+FAL_QUEUE = "https://queue.fal.run"
+JST = ZoneInfo("Asia/Tokyo")
 
 
 def load_config(path=CONFIG_PATH):
@@ -22,6 +29,7 @@ def load_config(path=CONFIG_PATH):
     config.setdefault("compliance", [])
     config.setdefault("estimate", [])
     config.setdefault("genres", [])
+    config.setdefault("draft", {})
     return config
 
 
@@ -240,3 +248,229 @@ def to_markdown(brief, form, genre, config):
     if config.get("estimate"):
         lines += ["", "## 見積もりの考え方"] + [f"- {x}" for x in config["estimate"]]
     return "\n".join(lines) + "\n", issues
+
+
+# ── ④ 下書き動画の自動生成（fal.ai のキュー型API） ──────────────────
+
+
+def _log(msg):
+    print(f"[video_brief] {msg}")
+
+
+class DraftStore:
+    """下書きの記録（金額・状態）を id → dict で保存する。DATABASE_URL があればDB、無ければJSONファイル。"""
+
+    def __init__(self, database_url=None, file_path=DRAFTS_FILE):
+        self.database_url = os.environ.get("DATABASE_URL", "") if database_url is None else database_url
+        self.file_path = Path(file_path)
+        self._table_ready = False
+
+    def _conn(self):
+        if not self.database_url:
+            return None
+        try:
+            import psycopg2
+            conn = psycopg2.connect(self.database_url, sslmode="require")
+        except Exception as e:
+            _log(f"DB connection failed: {e}")
+            return None
+        if not self._table_ready:
+            try:
+                with conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "CREATE TABLE IF NOT EXISTS video_drafts ("
+                            " id TEXT PRIMARY KEY,"
+                            " data TEXT NOT NULL,"
+                            " updated_at TIMESTAMPTZ NOT NULL DEFAULT now())"
+                        )
+                self._table_ready = True
+            except Exception as e:
+                _log(f"table setup failed: {e}")
+                conn.close()
+                return None
+        return conn
+
+    def _read_file(self):
+        try:
+            if self.file_path.exists():
+                with open(self.file_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+        except Exception as e:
+            _log(f"file load failed: {e}")
+        return {}
+
+    def _write_file(self, data):
+        self.file_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self.file_path.with_suffix(self.file_path.suffix + ".tmp")
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        tmp.replace(self.file_path)
+
+    def all(self):
+        conn = self._conn()
+        if conn:
+            try:
+                with conn:
+                    with conn.cursor() as cur:
+                        cur.execute("SELECT id, data FROM video_drafts")
+                        return {row[0]: json.loads(row[1]) for row in cur.fetchall()}
+            finally:
+                conn.close()
+        return self._read_file()
+
+    def get(self, draft_id):
+        return self.all().get(draft_id)
+
+    def save(self, draft):
+        conn = self._conn()
+        if conn:
+            try:
+                with conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "INSERT INTO video_drafts (id, data, updated_at) VALUES (%s, %s, now())"
+                            " ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = now()",
+                            (draft["id"], json.dumps(draft, ensure_ascii=False)),
+                        )
+                return
+            finally:
+                conn.close()
+        data = self._read_file()
+        data[draft["id"]] = draft
+        self._write_file(data)
+
+
+def draft_api_key(config):
+    return os.environ.get(config.get("draft", {}).get("api_key_env", "FAL_KEY"), "")
+
+
+def draft_seconds(seconds, config):
+    d = config.get("draft", {})
+    lo, hi = int(d.get("min_seconds", 4)), int(d.get("max_seconds", 15))
+    try:
+        sec = int(round(float(seconds)))
+    except (TypeError, ValueError):
+        sec = lo
+    return max(lo, min(hi, sec))
+
+
+def draft_cost_jpy(seconds, config):
+    d = config.get("draft", {})
+    return int(round(draft_seconds(seconds, config) * float(d.get("usd_per_second", 0)) * float(d.get("jpy_per_usd", 155))))
+
+
+def _month(now=None):
+    return (now or datetime.now(JST)).strftime("%Y-%m")
+
+
+def spent_this_month(drafts, now=None):
+    """今月の見積もり使用額（失敗した下書きは返金される前提で数えない）"""
+    month = _month(now)
+    return sum(int(d.get("cost_jpy", 0)) for d in drafts.values()
+               if str(d.get("created_at", "")).startswith(month) and d.get("status") != "failed")
+
+
+def _safe_https(url):
+    url = str(url or "").strip()
+    return url if re.match(r"^https://[^\s\"'<>]+$", url) else ""
+
+
+def start_draft(prompt, seconds, aspect, config, store, image_url="", http_post=None, now=None):
+    """下書きを1本キューに入れる。予算オーバー・未設定なら ValueError。"""
+    d = config.get("draft", {})
+    if not d.get("enabled", False):
+        raise ValueError("下書きの自動生成はオフになっています（video_brief_config.yaml の draft.enabled）")
+    key = draft_api_key(config)
+    if not key:
+        raise ValueError(f"{d.get('api_key_env', 'FAL_KEY')} が未設定です（Renderの環境変数を確認）")
+    prompt = str(prompt or "").strip()
+    if not prompt:
+        raise ValueError("プロンプトが空です")
+    image_url = _safe_https(image_url) if image_url else ""
+    sec = draft_seconds(seconds, config)
+    cost = draft_cost_jpy(sec, config)
+    budget = int(d.get("monthly_budget_jpy", 0))
+    spent = spent_this_month(store.all(), now)
+    if spent + cost > budget:
+        raise ValueError(f"今月の上限（{budget:,}円）を超えます（使用済み約{spent:,}円＋今回約{cost:,}円）")
+
+    model = d.get("image_to_video_model") if image_url else d.get("text_to_video_model")
+    payload = {"prompt": prompt[:4000], "resolution": d.get("resolution", "480p"),
+               "duration": str(sec) if d.get("duration_as_string", True) else sec,
+               "aspect_ratio": aspect}
+    if image_url:
+        payload["image_url"] = image_url
+    payload.update(d.get("extra_input") or {})
+
+    import requests
+    post = http_post or requests.post
+    try:
+        r = post(f"{FAL_QUEUE}/{model}", json=payload, headers={"Authorization": f"Key {key}"}, timeout=30)
+    except Exception as e:
+        raise RuntimeError(f"fal.ai に接続できませんでした: {e}")
+    if r.status_code not in (200, 201, 202):
+        raise RuntimeError(f"fal.ai エラー（{r.status_code}）: {r.text[:300]}")
+    body = r.json()
+    if not body.get("status_url") or not body.get("response_url"):
+        raise RuntimeError(f"fal.ai の応答が想定と違います: {str(body)[:300]}")
+    draft = {
+        "id": uuid.uuid4().hex[:12], "created_at": (now or datetime.now(JST)).isoformat(timespec="seconds"),
+        "status": "queued", "model": model, "seconds": sec, "aspect": aspect, "cost_jpy": cost,
+        "prompt": prompt[:4000], "image_url": image_url, "request_id": body.get("request_id", ""),
+        "status_url": body["status_url"], "response_url": body["response_url"], "video_url": "", "error": "",
+    }
+    store.save(draft)
+    return draft
+
+
+def _find_video_url(output):
+    if isinstance(output, dict):
+        video = output.get("video")
+        if isinstance(video, dict) and _safe_https(video.get("url")):
+            return video["url"]
+        if isinstance(video, str) and _safe_https(video):
+            return video
+        for v in output.values():
+            found = _find_video_url(v)
+            if found:
+                return found
+    if isinstance(output, list):
+        for v in output:
+            found = _find_video_url(v)
+            if found:
+                return found
+    return ""
+
+
+def refresh_draft(draft, config, store, http_get=None):
+    """fal.ai に状態を聞きに行き、終わっていれば動画URLを記録する"""
+    if draft.get("status") in ("done", "failed"):
+        return draft
+    import requests
+    get = http_get or requests.get
+    headers = {"Authorization": f"Key {draft_api_key(config)}"}
+    try:
+        r = get(draft["status_url"], headers=headers, timeout=20)
+        if r.status_code >= 400:
+            raise RuntimeError(f"状態の確認に失敗（{r.status_code}）: {r.text[:200]}")
+        status = r.json().get("status", "")
+        if status == "COMPLETED":
+            r = get(draft["response_url"], headers=headers, timeout=30)
+            if r.status_code >= 400:
+                draft.update(status="failed", error=f"生成に失敗しました（{r.status_code}）: {r.text[:300]}")
+            else:
+                url = _find_video_url(r.json())
+                draft.update(status="done", video_url=url) if url else draft.update(
+                    status="failed", error="動画のURLが見つかりませんでした")
+        elif status == "IN_PROGRESS":
+            draft["status"] = "running"
+        elif status == "IN_QUEUE":
+            draft["status"] = "queued"
+    except Exception as e:
+        _log(f"refresh failed: {e}")
+        return draft
+    store.save(draft)
+    return draft

@@ -165,3 +165,29 @@ genres:
       - "ダンスなどの動きは、お手本動画の動きをキャラに写して指定する"
     upsell:
       - "ナレーション入りなら多言語の吹き替え版（リップシンク付き）"
+
+# ── 下書き動画の自動生成（480p・使った分だけ課金） ───────────────────
+# 指示書のカットごとに「🎬 下書きを作る」ボタンが出る。本番（1080p）は人が手で作る。
+# fal.ai のキュー型API（https://queue.fal.run）を使う。APIキーは Render の環境変数 FAL_KEY に入れる。
+# ⚠️ モデルIDと単価は 2026年10月の二次情報。最初に fal.ai のモデルページで確認して直すこと。
+draft:
+  enabled: true
+  api_key_env: "FAL_KEY"
+  # 最初の画像URLなし → text_to_video、あり → image_to_video
+  text_to_video_model: "bytedance/seedance-2.5/text-to-video"
+  image_to_video_model: "bytedance/seedance-2.5/image-to-video"
+  resolution: "480p"
+  # 単価（ドル/秒）と為替（円/ドル）。表示する金額と予算の計算に使う
+  usd_per_second: 0.2205
+  jpy_per_usd: 155
+  # 月の上限（円）。これを超える下書きは作らない（日本時間の月初にリセット）
+  # fal.ai の管理画面でも上限を設定しておくこと（こちらは見積もりベースの安全装置）
+  monthly_budget_jpy: 5000
+  # 1回で作る秒数の範囲（カットの尺をこの範囲に丸める）
+  min_seconds: 4
+  max_seconds: 15
+  # duration を "5" のような文字列で送るか（モデルの仕様に合わせる）
+  duration_as_string: true
+  # モデルに追加で渡す入力（例: generate_audio: false）
+  extra_input:
+    generate_audio: false
