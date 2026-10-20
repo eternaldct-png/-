@@ -168,12 +168,14 @@ def _draft_section(brief, form, config):
         rows.append(
             f'<div class="cut" data-cut="{escape(data)}"><b>カット{no}</b> {escape(cut.get("scene", ""))}'
             f'<input class="img" value="{escape(cut.get("image_url", ""))}" placeholder="最初の画像のURL（任意・https://）">'
+            f'<textarea class="refs" rows="2" placeholder="参照画像（任意・1行に1つ「URL 説明」例: https://… キャラ三面図）">'
+            f'{escape(chr(10).join((r["url"] + " " + r.get("label", "")).strip() for r in cut.get("references", [])))}</textarea>'
             f'<button type="button" class="ghost" onclick="draft(this)">🎬 下書きを作る（{sec}秒・約{vb.draft_cost_jpy(sec, config):,}円）</button>'
             f'<div class="out"></div></div>'
         )
     return (f'<h2>🎬 下書き動画（{escape(d.get("resolution", "480p"))}）</h2>'
             '<p class="hint">OKが出たカットだけ、本番（1080p）を Higgsfield 等で手で作ってください。'
-            '画像URLを入れると、その画像から動かします（キャラの見た目を固定したいとき）。'
+            '画像URLを入れると、その画像から動かします。参照画像（三面図・商品・背景など）を入れると、複数の画像を参考に作ります（キャラや商品の見た目をそろえたいとき）。'
             '指示書の各カットの「- 最初の画像:」の行に https:// のURLを書いて保存しておくと、読み込んだときに自動で入ります。</p>'
             + "".join(rows))
 
@@ -194,7 +196,7 @@ def video_brief_load():
         form, brief = vb.parse_markdown(text, config)
     except ValueError as e:
         return _html(_form_page(config, str(e)), 400)
-    with_image = sum(1 for c in brief["cuts"] if c.get("image_url"))
+    with_image = sum(1 for c in brief["cuts"] if c.get("image_url") or c.get("references"))
     status = (f'<p class="badge ok">📂 「{escape(form["subject"] or "指示書")}」を読み込みました'
               f'（カット{len(brief["cuts"])}本・画像URLあり{with_image}本）</p>')
     if not vb.draft_api_key(config) or not config.get("draft", {}).get("enabled"):
@@ -231,7 +233,9 @@ def video_brief_draft():
     if image_url and not vb._safe_https(image_url):
         return jsonify({"error": "画像URLは https:// で始まるURLにしてください"}), 400
     try:
-        draft = vb.start_draft(body.get("prompt", ""), body.get("seconds", 5), aspect, config, get_store(), image_url)
+        refs = vb.parse_reference_lines(body.get("references", ""), config)
+        draft = vb.start_draft(body.get("prompt", ""), body.get("seconds", 5), aspect, config, get_store(), image_url,
+                               references=refs)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
@@ -347,7 +351,7 @@ RESULT_HTML = (
 textarea { font-family: ui-monospace, Menlo, monospace; font-size: 12px; min-height: 70vh; }
 h2 { font-size: 15px; margin: 20px 0 4px; }
 .cut { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; margin-top: 10px; }
-.cut input { margin: 8px 0; } .cut video { width: 100%; max-height: 360px; margin-top: 8px; border-radius: 8px; background: #000; }
+.cut input, .cut textarea.refs { margin: 8px 0 0; } .cut button { margin-top: 8px; } .cut video { width: 100%; max-height: 360px; margin-top: 8px; border-radius: 8px; background: #000; }
 .out { font-size: 12px; margin-top: 6px; }
 a.ghost { padding: 10px 14px; border-radius: 10px; background: var(--surface2); color: var(--accent); border: 1px solid var(--border); text-decoration: none; font-weight: 700; }
 </style></head><body><div class="box">
@@ -369,7 +373,8 @@ async function draft(btn) {
   btn.disabled = true; out.textContent = '送信中…';
   try {
     const r = await fetch('/video-brief/draft', {method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({...d, image_url: box.querySelector('.img').value, csrf_token: CSRF})});
+      body: JSON.stringify({...d, image_url: box.querySelector('.img').value,
+        references: box.querySelector('.refs').value, csrf_token: CSRF})});
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || r.status);
     poll(j.id, out, btn, 0);

@@ -307,6 +307,10 @@ AI導入支援の見込み客をXで探し、DMを送り、返信にエージェ
   同じカット割り（カット番号・秒・プロンプト）のまま下書きボタンが出る（`/video-brief/load`、Claudeは呼ばない）。
   各カットの「- 最初の画像:」行（または追記した「- 画像URL:」行）に https:// のURLがあれば、画像URL欄に自動で入る。
   読み込みは `video_brief.parse_markdown`（`to_markdown` の書式が前提。書式を変えたら両方直す）。
+- **参照画像（複数）**: 各カットの「参照画像」欄に1行1つ「URL 説明」（例: `https://… キャラ三面図`）を入れると、
+  `reference_to_video_model`（Seedance 2.5 reference-to-video、`image_urls` で複数渡す）で作る。最初の画像も入れていれば @Image1 として先頭に渡し、
+  プロンプトの先頭に「@Image1: 説明…」を自動で書き足す。上限は `max_reference_images`（最初の画像込み）。
+  指示書では「- 参照画像: https://… 説明」の行（何行でも）から自動で入る。Googleドライブの共有リンクは直接URLに変換して送る。
 
 ---
 

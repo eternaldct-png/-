@@ -176,6 +176,11 @@ draft:
   # 最初の画像URLなし → text_to_video、あり → image_to_video
   text_to_video_model: "bytedance/seedance-2.5/us/text-to-video"
   image_to_video_model: "bytedance/seedance-2.5/us/image-to-video"
+  # 参照画像（三面図・商品・背景など）を1枚以上入れたとき → reference-to-video（image_urls で複数渡す）
+  # ⚠️ 2026年10月の fal.ai ドキュメント検索で確認したID（/us/ なし）。動かなければモデルページで確認して直す
+  reference_to_video_model: "bytedance/seedance-2.5/reference-to-video"
+  # 1カットで渡せる画像の上限（最初の画像＋参照画像）
+  max_reference_images: 9
   resolution: "480p"
   # 単価（ドル/秒）と為替（円/ドル）。表示する金額と予算の計算に使う
   usd_per_second: 0.2205
