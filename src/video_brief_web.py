@@ -24,6 +24,20 @@ def get_store():
     return _store
 
 
+_char_store = None
+
+
+def get_char_store():
+    global _char_store
+    if _char_store is None:
+        _char_store = vb.CharacterStore()
+    return _char_store
+
+
+def _ref_lines(images):
+    return "\n".join((r["url"] + " " + r.get("label", "")).strip() for r in images)
+
+
 def _html(body, status=200):
     return body, status, {"Content-Type": "text/html; charset=utf-8"}
 
@@ -159,6 +173,10 @@ def _draft_section(brief, form, config):
     d = config.get("draft", {})
     if not d.get("enabled") or not vb.draft_api_key(config):
         return ""
+    sets = get_char_store().sets()
+    set_options = "".join(f'<option value="{escape(c["id"])}">{escape(c["name"])}（{len(c.get("images", []))}枚）</option>'
+                          for c in sets)
+    set_json = json.dumps({c["id"]: _ref_lines(c.get("images", [])) for c in sets}, ensure_ascii=False).replace("<", "\\u003c")
     rows = []
     for i, cut in enumerate(brief.get("cuts", []), 1):
         no = cut.get("no", i)
@@ -169,14 +187,18 @@ def _draft_section(brief, form, config):
             f'<div class="cut" data-cut="{escape(data)}"><b>カット{no}</b> {escape(cut.get("scene", ""))}'
             f'<input class="img" value="{escape(cut.get("image_url", ""))}" placeholder="最初の画像のURL（任意・https://）">'
             f'<textarea class="refs" rows="2" placeholder="参照画像（任意・1行に1つ「URL 説明」例: https://… キャラ三面図）">'
-            f'{escape(chr(10).join((r["url"] + " " + r.get("label", "")).strip() for r in cut.get("references", [])))}</textarea>'
-            f'<button type="button" class="ghost" onclick="draft(this)">🎬 下書きを作る（{sec}秒・約{vb.draft_cost_jpy(sec, config):,}円）</button>'
+            f'{escape(_ref_lines(cut.get("references", [])))}</textarea>'
+            + (f'<select class="charset" onchange="addSet(this)"><option value="">＋ キャラの参照画像セットを追加</option>{set_options}</select>'
+               if sets else '')
+            + f'<button type="button" class="ghost" onclick="draft(this)">🎬 下書きを作る（{sec}秒・約{vb.draft_cost_jpy(sec, config):,}円）</button>'
             f'<div class="out"></div></div>'
         )
     return (f'<h2>🎬 下書き動画（{escape(d.get("resolution", "480p"))}）</h2>'
             '<p class="hint">OKが出たカットだけ、本番（1080p）を Higgsfield 等で手で作ってください。'
             '画像URLを入れると、その画像から動かします。参照画像（三面図・商品・背景など）を入れると、複数の画像を参考に作ります（キャラや商品の見た目をそろえたいとき）。'
-            '指示書の各カットの「- 最初の画像:」の行に https:// のURLを書いて保存しておくと、読み込んだときに自動で入ります。</p>'
+            '指示書の各カットの「- 最初の画像:」の行に https:// のURLを書いて保存しておくと、読み込んだときに自動で入ります。'
+            ' <a href="/video-brief/characters" target="_blank">🧑‍🎨 キャラの参照画像セットを登録・編集</a></p>'
+            + f'<script>const CHARSETS = {set_json};</script>'
             + "".join(rows))
 
 
@@ -196,9 +218,13 @@ def video_brief_load():
         form, brief = vb.parse_markdown(text, config)
     except ValueError as e:
         return _html(_form_page(config, str(e)), 400)
+    missing = vb.expand_sets(brief, get_char_store().sets())
     with_image = sum(1 for c in brief["cuts"] if c.get("image_url") or c.get("references"))
     status = (f'<p class="badge ok">📂 「{escape(form["subject"] or "指示書")}」を読み込みました'
               f'（カット{len(brief["cuts"])}本・画像URLあり{with_image}本）</p>')
+    if missing:
+        status += (f'<p class="hint">⚠️ 登録されていない参照セット: {escape("、".join(missing))}'
+                   '（<a href="/video-brief/characters" target="_blank">登録画面</a>で名前を確認してください）</p>')
     if not vb.draft_api_key(config) or not config.get("draft", {}).get("enabled"):
         status += '<p class="hint">⚠️ FAL_KEY 未設定のため、下書きボタンは出ません。</p>'
     body = (
@@ -255,6 +281,102 @@ def video_brief_draft_status(draft_id):
         return jsonify({"error": "見つかりません"}), 404
     draft = vb.refresh_draft(draft, vb.load_config(), store)
     return jsonify({"status": draft["status"], "video_url": draft.get("video_url", ""), "error": draft.get("error", "")})
+
+
+@bp.route("/video-brief/characters", methods=["GET", "POST"])
+def video_brief_characters():
+    """キャラごとの参照画像セット（三面図・衣装・表情など）の登録・編集・削除"""
+    if not session.get("video_brief_ok"):
+        return redirect("/video-brief")
+    config = vb.load_config()
+    store = get_char_store()
+    error, msg, values = "", "", {}
+    if request.method == "POST":
+        if not hmac.compare_digest(str(session.get("video_brief_csrf", "")), str(request.form.get("csrf_token", ""))):
+            return _html("<p>画面が古くなっています。戻って再読み込みしてください。</p>", 400)
+        char_id = str(request.form.get("id", "")).strip()
+        if request.form.get("action") == "delete" and char_id:
+            store.delete(char_id)
+            msg = "削除しました"
+        else:
+            values = {"id": char_id, "name": request.form.get("name", ""), "images": request.form.get("images", "")}
+            try:
+                if char_id and not store.get(char_id):
+                    raise ValueError("このセットは見つかりません（削除された可能性があります）")
+                char = vb.make_character(values["name"], values["images"], config, char_id or None)
+                if any(c["name"] == char["name"] and c["id"] != char["id"] for c in store.sets()):
+                    raise ValueError(f"「{char['name']}」はもう登録されています。別の名前にしてください")
+                store.save(char)
+                msg, values = f"「{char['name']}」を保存しました", {}
+            except ValueError as e:
+                error = str(e)
+    elif request.args.get("edit"):
+        c = store.get(request.args["edit"])
+        if c:
+            values = {"id": c["id"], "name": c["name"], "images": _ref_lines(c.get("images", []))}
+    csrf = _csrf_token()
+    cards = "".join(
+        f'<div class="set"><b>{escape(c["name"])}</b> <span class="hint">（{len(c.get("images", []))}枚）</span>'
+        + "<ul>" + "".join(f'<li><a href="{escape(r["url"])}" target="_blank" rel="noopener">{escape(r.get("label") or r["url"])}</a></li>'
+                           for r in c.get("images", [])) + "</ul>"
+        f'<a class="ghost" href="/video-brief/characters?edit={escape(c["id"])}">✏️ 編集</a>'
+        f'<form method="POST" onsubmit="return confirm(\'「{escape(c["name"])}」を削除しますか？\')">'
+        f'<input type="hidden" name="csrf_token" value="{csrf}"><input type="hidden" name="id" value="{escape(c["id"])}">'
+        f'<input type="hidden" name="action" value="delete"><button class="danger" type="submit">削除</button></form></div>'
+        for c in store.sets()
+    ) or '<p class="hint">まだ登録がありません。</p>'
+    limit = int(config.get("draft", {}).get("max_reference_images", 9))
+    body = (
+        CHARS_HTML.replace("__CSRF__", csrf)
+        .replace("__MSG__", f'<p class="ok">✅ {escape(msg)}</p>' if msg else "")
+        .replace("__ERROR__", f'<p class="error">{escape(error)}</p>' if error else "")
+        .replace("__FORM_TITLE__", "✏️ セットを編集" if values.get("id") else "＋ 新しいセットを登録")
+        .replace("__ID__", str(escape(values.get("id", ""))))
+        .replace("__NAME__", str(escape(values.get("name", ""))))
+        .replace("__IMAGES__", str(escape(values.get("images", ""))))
+        .replace("__LIMIT__", str(limit))
+        .replace("__CARDS__", cards)
+        .replace("__STORAGE__", "データベースに保存" if os.environ.get("DATABASE_URL") else "⚠️ DATABASE_URL 未設定（再起動で消えます）")
+    )
+    return _html(body)
+
+
+CHARS_HTML = (
+    r"""<!DOCTYPE html>
+<html lang="ja"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>キャラの参照画像セット</title><style>"""
+    + _BASE_CSS
+    + r"""
+.box { max-width: 640px; margin: 0 auto 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 20px; box-shadow: var(--shadow); }
+h1 { font-size: 18px; margin-bottom: 6px; } h2 { font-size: 15px; margin-bottom: 8px; }
+label { display: block; font-weight: 700; margin: 12px 0 6px; font-size: 13px; }
+button[type=submit] { margin-top: 12px; }
+.set { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; margin-top: 10px; }
+.set ul { padding-left: 18px; margin: 6px 0; font-size: 12px; word-break: break-all; }
+.set form { display: inline; } .set button { margin-top: 0; padding: 6px 10px; font-size: 12px; }
+a.ghost { display: inline-block; padding: 6px 10px; border-radius: 10px; background: var(--surface2); color: var(--accent); border: 1px solid var(--border); text-decoration: none; font-weight: 700; font-size: 12px; }
+.ok { color: var(--ok); font-weight: 700; } .error { text-align: left; }
+</style></head><body>
+<div class="box">
+<h1>🧑‍🎨 キャラの参照画像セット</h1>
+<p class="hint">キャラごとに三面図・衣装・表情などの画像URLをまとめて登録しておくと、下書きを作るときにプルダウンで参照画像に追加できます。指示書では「- 参照セット: キャラ名」と書けば自動で入ります。<a href="/video-brief">← 指示書メーカーに戻る</a></p>
+__MSG____ERROR__
+</div>
+<div class="box">
+<h2>__FORM_TITLE__</h2>
+<form method="POST" action="/video-brief/characters">
+<input type="hidden" name="csrf_token" value="__CSRF__"><input type="hidden" name="id" value="__ID__">
+<label>キャラ名</label><input name="name" value="__NAME__" placeholder="例: しー" maxlength="40" required>
+<label>画像（1行に1つ「URL 説明」・__LIMIT__枚まで）</label>
+<textarea name="images" rows="5" placeholder="https://drive.google.com/file/d/…/view 三面図&#10;https://drive.google.com/file/d/…/view 配信衣装" required>__IMAGES__</textarea>
+<p class="hint">Googleドライブの共有リンクはそのまま貼れます（「リンクを知っている全員」に共有しておく）。1カットで使える画像は、最初の画像・ほかの参照画像と合わせて__LIMIT__枚までです。</p>
+<button type="submit">保存する</button>
+</form>
+</div>
+<div class="box"><h2>登録済み</h2>__CARDS__<p class="hint" style="margin-top:12px">保存先: __STORAGE__</p></div>
+</body></html>"""
+)
 
 
 LOGIN_HTML = (
@@ -319,6 +441,7 @@ __TIPS__
 <textarea name="markdown" id="loadmd" rows="4" placeholder="ファイルを選ぶか、指示書のMarkdownをここに貼り付け" required></textarea>
 <button type="submit" class="ghost">読み込む</button>
 </form>
+<p class="hint" style="margin-top:16px"><a href="/video-brief/characters">🧑‍🎨 キャラの参照画像セットを登録・編集</a></p>
 <details><summary>全ジャンル共通のルール</summary><ul>__FOUNDATIONS__</ul></details>
 </div>
 <script>
@@ -351,7 +474,7 @@ RESULT_HTML = (
 textarea { font-family: ui-monospace, Menlo, monospace; font-size: 12px; min-height: 70vh; }
 h2 { font-size: 15px; margin: 20px 0 4px; }
 .cut { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; margin-top: 10px; }
-.cut input, .cut textarea.refs { margin: 8px 0 0; } .cut button { margin-top: 8px; } .cut video { width: 100%; max-height: 360px; margin-top: 8px; border-radius: 8px; background: #000; }
+.cut input, .cut textarea.refs, .cut select.charset { margin: 8px 0 0; } .cut button { margin-top: 8px; } .cut video { width: 100%; max-height: 360px; margin-top: 8px; border-radius: 8px; background: #000; }
 .out { font-size: 12px; margin-top: 6px; }
 a.ghost { padding: 10px 14px; border-radius: 10px; background: var(--surface2); color: var(--accent); border: 1px solid var(--border); text-decoration: none; font-weight: 700; }
 </style></head><body><div class="box">
@@ -367,6 +490,14 @@ __DRAFTS__
 </div>
 <script>
 const CSRF = '__CSRF__';
+function addSet(sel) {
+  const lines = (typeof CHARSETS !== 'undefined' && CHARSETS[sel.value]) || '';
+  const ta = sel.closest('.cut').querySelector('.refs');
+  const have = new Set(ta.value.split('\n').map(l => l.trim().split(' ')[0]).filter(Boolean));
+  const add = lines.split('\n').filter(l => l && !have.has(l.split(' ')[0]));
+  if (add.length) ta.value = (ta.value.trim() ? ta.value.trim() + '\n' : '') + add.join('\n');
+  sel.value = '';
+}
 async function draft(btn) {
   const box = btn.closest('.cut'), out = box.querySelector('.out'), d = JSON.parse(box.dataset.cut);
   if (!confirm(btn.textContent.replace('🎬 ', '') + 'で作ります。よろしいですか？')) return;

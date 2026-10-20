@@ -417,5 +417,70 @@ class LoadMarkdownTest(unittest.TestCase):
         self.assertNotIn("__CSRF__", html)
 
 
+
+class CharacterSetTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.config = vb.load_config()
+        self.chars = vb.CharacterStore(database_url="", file_path=Path(self.tmp.name) / "chars.json")
+        self.patcher = patch.object(video_brief_web, "get_char_store", return_value=self.chars)
+        self.patcher.start()
+        self.client = web_app.app.test_client()
+        with self.client.session_transaction() as s:
+            s["video_brief_ok"] = True
+            s["video_brief_csrf"] = "tok"
+
+    def tearDown(self):
+        self.patcher.stop()
+        self.tmp.cleanup()
+
+    def test_make_character_validates(self):
+        c = vb.make_character(" しー ", "https://drive.google.com/file/d/X1/view 三面図\nhttps://ex.com/b.png 衣装", self.config)
+        self.assertEqual(c["name"], "しー")
+        self.assertEqual(c["images"][0]["url"], "https://drive.google.com/uc?export=download&id=X1")
+        for name, text in [("", "https://ex.com/a.png"), ("a", ""), ("a", "http://ex.com/a.png")]:
+            with self.assertRaises(ValueError):
+                vb.make_character(name, text, self.config)
+
+    def test_page_add_edit_delete(self):
+        self.assertEqual(self.client.get("/video-brief/characters").status_code, 200)
+        r = self.client.post("/video-brief/characters", data={"csrf_token": "tok", "name": "しー",
+                                                              "images": "https://ex.com/a.png 三面図"})
+        self.assertIn("「しー」を保存しました", r.get_data(as_text=True))
+        cid = self.chars.sets()[0]["id"]
+        r = self.client.post("/video-brief/characters", data={"csrf_token": "tok", "name": "しー",
+                                                              "images": "https://ex.com/x.png 別"})
+        self.assertIn("もう登録されています", r.get_data(as_text=True))
+        html = self.client.get(f"/video-brief/characters?edit={cid}").get_data(as_text=True)
+        self.assertIn("https://ex.com/a.png 三面図</textarea>", html)
+        self.client.post("/video-brief/characters", data={"csrf_token": "tok", "id": cid, "name": "しー",
+                                                          "images": "https://ex.com/a.png 三面図\nhttps://ex.com/c.png 衣装"})
+        self.assertEqual(len(self.chars.get(cid)["images"]), 2)
+        self.assertEqual(self.client.post("/video-brief/characters", data={"csrf_token": "x", "id": cid,
+                                                                          "action": "delete"}).status_code, 400)
+        self.client.post("/video-brief/characters", data={"csrf_token": "tok", "id": cid, "action": "delete"})
+        self.assertEqual(self.chars.sets(), [])
+
+    def test_requires_login(self):
+        client = web_app.app.test_client()
+        self.assertEqual(client.get("/video-brief/characters").status_code, 302)
+
+    def test_dropdown_and_markdown_sets(self):
+        self.chars.save(vb.make_character("しー", "https://ex.com/sheet.png 三面図\nhttps://ex.com/cos.png 衣装", self.config))
+        genre = vb.get_genre(self.config, "anime")
+        md, _ = vb.to_markdown(_brief([_cut(0, 5, first_frame="三面図"), _cut(5, 10)]),
+                               {"subject": "x", "seconds": 10, "aspect": "16:9"}, genre, self.config)
+        self.assertIn("- 参照セット: （任意", md)
+        md = md.replace("### カット2（5–10秒）", "### カット2（5–10秒）\n- 参照セット: しー\n- 参照セット: いない人"
+                        "\n- 参照画像: https://ex.com/sheet.png 重複")
+        with patch.dict(os.environ, {"FAL_KEY": "k"}):
+            html = self.client.post("/video-brief/load", data={"csrf_token": "tok", "markdown": md}).get_data(as_text=True)
+        self.assertIn("登録されていない参照セット: いない人", html)
+        self.assertIn("https://ex.com/sheet.png 三面図\nhttps://ex.com/cos.png 衣装</textarea>", html)
+        self.assertIn("＋ キャラの参照画像セットを追加", html)
+        self.assertIn("しー（2枚）", html)
+        self.assertIn("const CHARSETS = {", html)
+
+
 if __name__ == "__main__":
     unittest.main()

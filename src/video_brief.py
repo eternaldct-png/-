@@ -16,6 +16,7 @@ import yaml
 
 CONFIG_PATH = Path(__file__).parent.parent / "persona" / "video_brief_config.yaml"
 DRAFTS_FILE = Path(__file__).parent.parent / "posts" / "video_drafts.json"
+CHARACTERS_FILE = Path(__file__).parent.parent / "posts" / "video_characters.json"
 FAL_QUEUE = "https://queue.fal.run"
 JST = ZoneInfo("Asia/Tokyo")
 
@@ -233,6 +234,7 @@ def to_markdown(brief, form, genre, config):
             f"- 最初の画像: {c.get('first_frame', '')}",
             f"- 最後の画像: {c.get('last_frame', '') or '（指定なし）'}",
             "- 参照画像: （任意。1行に1つ「- 参照画像: https://… 説明」。キャラ三面図・商品・背景など）",
+            "- 参照セット: （任意。登録したキャラの参照画像セット名。1行に1つ）",
             "- 動画プロンプト:", "```", str(c.get("video_prompt", "")), "```",
         ]
     lines += ["", "## 自動チェック"]
@@ -258,12 +260,15 @@ def _log(msg):
     print(f"[video_brief] {msg}")
 
 
-class DraftStore:
-    """下書きの記録（金額・状態）を id → dict で保存する。DATABASE_URL があればDB、無ければJSONファイル。"""
+class JsonStore:
+    """id → dict で保存する。DATABASE_URL があればDB（table）、無ければJSONファイル。"""
 
-    def __init__(self, database_url=None, file_path=DRAFTS_FILE):
+    table = ""
+    default_file = None
+
+    def __init__(self, database_url=None, file_path=None):
+        self.file_path = Path(file_path or self.default_file)
         self.database_url = os.environ.get("DATABASE_URL", "") if database_url is None else database_url
-        self.file_path = Path(file_path)
         self._table_ready = False
 
     def _conn(self):
@@ -280,7 +285,7 @@ class DraftStore:
                 with conn:
                     with conn.cursor() as cur:
                         cur.execute(
-                            "CREATE TABLE IF NOT EXISTS video_drafts ("
+                            f"CREATE TABLE IF NOT EXISTS {self.table} ("
                             " id TEXT PRIMARY KEY,"
                             " data TEXT NOT NULL,"
                             " updated_at TIMESTAMPTZ NOT NULL DEFAULT now())"
@@ -316,14 +321,14 @@ class DraftStore:
             try:
                 with conn:
                     with conn.cursor() as cur:
-                        cur.execute("SELECT id, data FROM video_drafts")
+                        cur.execute(f"SELECT id, data FROM {self.table}")
                         return {row[0]: json.loads(row[1]) for row in cur.fetchall()}
             finally:
                 conn.close()
         return self._read_file()
 
-    def get(self, draft_id):
-        return self.all().get(draft_id)
+    def get(self, item_id):
+        return self.all().get(item_id)
 
     def save(self, draft):
         conn = self._conn()
@@ -332,7 +337,7 @@ class DraftStore:
                 with conn:
                     with conn.cursor() as cur:
                         cur.execute(
-                            "INSERT INTO video_drafts (id, data, updated_at) VALUES (%s, %s, now())"
+                            f"INSERT INTO {self.table} (id, data, updated_at) VALUES (%s, %s, now())"
                             " ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = now()",
                             (draft["id"], json.dumps(draft, ensure_ascii=False)),
                         )
@@ -342,6 +347,64 @@ class DraftStore:
         data = self._read_file()
         data[draft["id"]] = draft
         self._write_file(data)
+
+    def delete(self, item_id):
+        conn = self._conn()
+        if conn:
+            try:
+                with conn:
+                    with conn.cursor() as cur:
+                        cur.execute(f"DELETE FROM {self.table} WHERE id = %s", (item_id,))
+                return
+            finally:
+                conn.close()
+        data = self._read_file()
+        data.pop(item_id, None)
+        self._write_file(data)
+
+
+class DraftStore(JsonStore):
+    """下書きの記録（金額・状態）"""
+    table = "video_drafts"
+    default_file = DRAFTS_FILE
+
+
+class CharacterStore(JsonStore):
+    """キャラごとの参照画像セット {id, name, images: [{url, label}], updated_at}"""
+    table = "video_characters"
+    default_file = CHARACTERS_FILE
+
+    def sets(self):
+        return sorted(self.all().values(), key=lambda c: str(c.get("name", "")))
+
+
+def expand_sets(brief, sets):
+    """指示書の「- 参照セット: 名前」を、登録済みセットの画像に展開する。見つからない名前のリストを返す。"""
+    by_name = {c.get("name"): c for c in sets}
+    missing = []
+    for cut in brief.get("cuts", []):
+        refs = []
+        for name in cut.get("sets", []):
+            if name in by_name:
+                refs += [dict(r) for r in by_name[name].get("images", [])]
+            elif name not in missing:
+                missing.append(name)
+        seen = set()
+        cut["references"] = [r for r in refs + cut.get("references", [])
+                             if not (r["url"] in seen or seen.add(r["url"]))]
+    return missing
+
+
+def make_character(name, images_text, config, char_id=None, now=None):
+    """入力からキャラの参照画像セットを作る。名前なし・画像なし・URL不正は ValueError。"""
+    name = str(name or "").strip()[:40]
+    if not name:
+        raise ValueError("キャラ名を入れてください")
+    images = parse_reference_lines(images_text, config)
+    if not images:
+        raise ValueError("画像のURLを1つ以上入れてください")
+    return {"id": char_id or uuid.uuid4().hex[:10], "name": name, "images": images,
+            "updated_at": (now or datetime.now(JST)).isoformat(timespec="seconds")}
 
 
 def draft_api_key(config):
@@ -589,7 +652,7 @@ def parse_markdown(text, config):
         if m:
             current = {"no": int(m.group(1)), "start": float(m.group(2)), "end": float(m.group(3)),
                        "scene": "", "dialogue": "", "camera": "", "first_frame": "", "last_frame": "",
-                       "video_prompt": "", "text_overlay": "", "image_url": "", "references": []}
+                       "video_prompt": "", "text_overlay": "", "image_url": "", "references": [], "sets": []}
             cuts.append(current)
             continue
         if stripped.startswith("## ") or stripped.startswith("# "):
@@ -606,6 +669,8 @@ def parse_markdown(text, config):
             form["genre"] = next((g["id"] for g in config.get("genres", []) if g.get("name") == name), "")
         elif m := _TABLE_ROW.match(stripped):
             scenes[int(m.group(1))] = m.group(2)
+        elif current is not None and (m := re.match(r"^-\s*参照セット[：:]\s*([^（(]+?)\s*$", stripped)):
+            current["sets"].append(m.group(1))
         elif current is not None and (m := re.match(r"^-\s*参照画像[：:]\s*(https://\S+)\s*(.*)$", stripped)):
             url = _safe_https(direct_image_url(m.group(1)))
             if url:

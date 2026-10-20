@@ -311,6 +311,11 @@ AI導入支援の見込み客をXで探し、DMを送り、返信にエージェ
   `reference_to_video_model`（Seedance 2.5 reference-to-video、`image_urls` で複数渡す）で作る。最初の画像も入れていれば @Image1 として先頭に渡し、
   プロンプトの先頭に「@Image1: 説明…」を自動で書き足す。上限は `max_reference_images`（最初の画像込み）。
   指示書では「- 参照画像: https://… 説明」の行（何行でも）から自動で入る。Googleドライブの共有リンクは直接URLに変換して送る。
+- **キャラの参照画像セット**: `/video-brief/characters`（ログイン必須）で、キャラ名＋画像（1行1つ「URL 説明」・`max_reference_images` 枚まで）を
+  登録・編集・削除できる。下書きの各カットに「＋ キャラの参照画像セットを追加」プルダウンが出て、選ぶと参照画像欄に追記される（重複URLは足さない）。
+  指示書では「- 参照セット: キャラ名」の行で自動展開（未登録の名前は読み込み時に警告）。
+  保存先は `DATABASE_URL` の `video_characters` テーブル（未設定時は `posts/video_characters.json`。Render無料プランでは消える）。
+  ストアは `video_brief.JsonStore` を継承（`DraftStore` と共通）。
 
 ---
 
