@@ -186,6 +186,9 @@ draft:
   # 1回で作る秒数の範囲（カットの尺をこの範囲に丸める）
   min_seconds: 4
   max_seconds: 15
+  # 画面の縦横比 → モデルに送る値（モデルが受け付けない比率だけ書き換える）
+  aspect_map:
+    "2.39:1": "21:9"
   # duration を "5" のような文字列で送るか（モデルの仕様に合わせる）
   duration_as_string: true
   # モデルに追加で渡す入力（例: generate_audio: false）

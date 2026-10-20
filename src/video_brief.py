@@ -400,7 +400,7 @@ def start_draft(prompt, seconds, aspect, config, store, image_url="", http_post=
     model = d.get("image_to_video_model") if image_url else d.get("text_to_video_model")
     payload = {"prompt": prompt[:4000], "resolution": d.get("resolution", "480p"),
                "duration": str(sec) if d.get("duration_as_string", True) else sec,
-               "aspect_ratio": aspect}
+               "aspect_ratio": (d.get("aspect_map") or {}).get(aspect, aspect)}
     if image_url:
         payload["image_url"] = image_url
     payload.update(d.get("extra_input") or {})
