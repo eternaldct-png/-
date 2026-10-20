@@ -3,16 +3,25 @@
 ロジックは video_brief.py。web_app.py で Blueprint として登録している。
 """
 import hmac
+import json
 import os
 import secrets
 
-from flask import Blueprint, redirect, request, session
+from flask import Blueprint, jsonify, redirect, request, session
 from markupsafe import escape
 
 import video_brief as vb
 from sales_leads_web import _BASE_CSS
 
 bp = Blueprint("video_brief", __name__)
+_store = None
+
+
+def get_store():
+    global _store
+    if _store is None:
+        _store = vb.DraftStore()
+    return _store
 
 
 def _html(body, status=200):
@@ -48,6 +57,18 @@ def _form_page(config, error="", values=None):
         for g in genres
     )
     foundations = "".join(f"<li>{escape(f)}</li>" for f in config.get("foundations", []))
+    d = config.get("draft", {})
+    if d.get("enabled"):
+        key_ok = bool(vb.draft_api_key(config))
+        spent = vb.spent_this_month(get_store().all()) if key_ok else 0
+        draft_status = (
+            f'<p class="hint">🎬 下書きの自動生成（{escape(d.get("resolution", "480p"))}）: '
+            + (f'今月 約{spent:,}円 / 上限{int(d.get("monthly_budget_jpy", 0)):,}円' if key_ok
+               else f'⚠️ {escape(d.get("api_key_env", "FAL_KEY"))} 未設定（指示書だけ作れます）')
+            + "</p>"
+        )
+    else:
+        draft_status = ""
     v = lambda k: escape(values.get(k, ""))
     body = (
         FORM_HTML.replace("__TITLE__", str(escape(config.get("title", ""))))
@@ -56,6 +77,7 @@ def _form_page(config, error="", values=None):
         .replace("__ASPECTS__", aspect_options)
         .replace("__TIPS__", tips)
         .replace("__FOUNDATIONS__", foundations)
+        .replace("__DRAFT_STATUS__", draft_status)
         .replace("__ERROR__", f'<p class="error">{escape(error)}</p>' if error else "")
         .replace("__SECONDS__", v("seconds"))
     )
@@ -117,10 +139,76 @@ def video_brief_generate():
     filename = f"brief_{genre['id']}.md"
     body = (
         RESULT_HTML.replace("__STATUS__", status)
+        .replace("__DRAFTS__", _draft_section(brief, form, config))
         .replace("__MD__", str(escape(markdown)))
         .replace("__FILENAME__", str(escape(filename)))
+        .replace("__CSRF__", _csrf_token())
     )
     return _html(body)
+
+
+def _draft_section(brief, form, config):
+    d = config.get("draft", {})
+    if not d.get("enabled") or not vb.draft_api_key(config):
+        return ""
+    rows = []
+    for i, cut in enumerate(brief.get("cuts", []), 1):
+        sec = vb.draft_seconds(float(cut.get("end", 0)) - float(cut.get("start", 0)), config)
+        data = json.dumps({"prompt": cut.get("video_prompt", ""), "seconds": sec, "aspect": form.get("aspect", "")},
+                          ensure_ascii=False)
+        rows.append(
+            f'<div class="cut" data-cut="{escape(data)}"><b>カット{i}</b> {escape(cut.get("scene", ""))}'
+            f'<input class="img" placeholder="最初の画像のURL（任意・https://）">'
+            f'<button type="button" class="ghost" onclick="draft(this)">🎬 下書きを作る（{sec}秒・約{vb.draft_cost_jpy(sec, config):,}円）</button>'
+            f'<div class="out"></div></div>'
+        )
+    return (f'<h2>🎬 下書き動画（{escape(d.get("resolution", "480p"))}）</h2>'
+            '<p class="hint">OKが出たカットだけ、本番（1080p）を Higgsfield 等で手で作ってください。'
+            '画像URLを入れると、その画像から動かします（キャラの見た目を固定したいとき）。</p>' + "".join(rows))
+
+
+def _require_login_json():
+    if not session.get("video_brief_ok"):
+        return jsonify({"error": "ログインが切れました。再読み込みしてください"}), 401
+    return None
+
+
+@bp.route("/video-brief/draft", methods=["POST"])
+def video_brief_draft():
+    denied = _require_login_json()
+    if denied:
+        return denied
+    body = request.get_json(silent=True) or {}
+    if not hmac.compare_digest(str(session.get("video_brief_csrf", "")), str(body.get("csrf_token", ""))):
+        return jsonify({"error": "画面が古くなっています。再読み込みしてください"}), 400
+    config = vb.load_config()
+    aspect = str(body.get("aspect", ""))
+    if aspect not in config.get("aspects", []):
+        aspect = "16:9"
+    image_url = str(body.get("image_url", "")).strip()
+    if image_url and not vb._safe_https(image_url):
+        return jsonify({"error": "画像URLは https:// で始まるURLにしてください"}), 400
+    try:
+        draft = vb.start_draft(body.get("prompt", ""), body.get("seconds", 5), aspect, config, get_store(), image_url)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        print(f"[video_brief] draft failed: {e}")
+        return jsonify({"error": str(e)}), 502
+    return jsonify({"id": draft["id"], "status": draft["status"], "cost_jpy": draft["cost_jpy"]})
+
+
+@bp.route("/video-brief/draft/<draft_id>")
+def video_brief_draft_status(draft_id):
+    denied = _require_login_json()
+    if denied:
+        return denied
+    store = get_store()
+    draft = store.get(draft_id)
+    if not draft:
+        return jsonify({"error": "見つかりません"}), 404
+    draft = vb.refresh_draft(draft, vb.load_config(), store)
+    return jsonify({"status": draft["status"], "video_url": draft.get("video_url", ""), "error": draft.get("error", "")})
 
 
 LOGIN_HTML = (
@@ -160,6 +248,7 @@ button[type=submit] { width: 100%; margin-top: 18px; }
 </style></head><body><div class="box">
 <h1>🎬 __TITLE__</h1>
 <p class="hint">ジャンルと案件を入れると、秒割り台本・カットごとの生成プロンプト・チェックリストを作ります（30秒〜1分ほどかかります）。</p>
+__DRAFT_STATUS__
 __ERROR__
 <form method="POST" action="/video-brief/generate" onsubmit="this.querySelector('button').textContent='作成中…しばらくお待ちください';">
 <input type="hidden" name="csrf_token" value="__CSRF__">
@@ -200,6 +289,10 @@ RESULT_HTML = (
 .bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
 .badge { font-weight: 700; margin-bottom: 10px; } .badge.ng { color: var(--danger); } .badge.ok { color: var(--ok); }
 textarea { font-family: ui-monospace, Menlo, monospace; font-size: 12px; min-height: 70vh; }
+h2 { font-size: 15px; margin: 20px 0 4px; }
+.cut { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; margin-top: 10px; }
+.cut input { margin: 8px 0; } .cut video { width: 100%; max-height: 360px; margin-top: 8px; border-radius: 8px; background: #000; }
+.out { font-size: 12px; margin-top: 6px; }
 a.ghost { padding: 10px 14px; border-radius: 10px; background: var(--surface2); color: var(--accent); border: 1px solid var(--border); text-decoration: none; font-weight: 700; }
 </style></head><body><div class="box">
 __STATUS__
@@ -209,9 +302,36 @@ __STATUS__
 <a class="ghost" href="/video-brief">← もう1本作る</a>
 </div>
 <textarea id="md">__MD__</textarea>
+__DRAFTS__
 <p class="hint">案件フォルダ（Notion / Google ドライブ）に保存しておくと、次の案件で使い回せます。</p>
 </div>
 <script>
+const CSRF = '__CSRF__';
+async function draft(btn) {
+  const box = btn.closest('.cut'), out = box.querySelector('.out'), d = JSON.parse(box.dataset.cut);
+  if (!confirm(btn.textContent.replace('🎬 ', '') + 'で作ります。よろしいですか？')) return;
+  btn.disabled = true; out.textContent = '送信中…';
+  try {
+    const r = await fetch('/video-brief/draft', {method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({...d, image_url: box.querySelector('.img').value, csrf_token: CSRF})});
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.status);
+    poll(j.id, out, btn, 0);
+  } catch (e) { out.textContent = '❌ ' + e.message; btn.disabled = false; }
+}
+async function poll(id, out, btn, n) {
+  try {
+    const r = await fetch('/video-brief/draft/' + id), j = await r.json();
+    if (j.status === 'done') {
+      out.innerHTML = '✅ できました（URLは一定期間で消えるので、必要なら保存してください） <a target="_blank" rel="noopener">⬇ 開く</a><video controls loop muted playsinline></video>';
+      out.querySelector('a').href = j.video_url; out.querySelector('video').src = j.video_url; btn.disabled = false; return;
+    }
+    if (j.status === 'failed' || !r.ok) { out.textContent = '❌ ' + (j.error || '失敗しました'); btn.disabled = false; return; }
+    out.textContent = (j.status === 'running' ? '生成中' : '順番待ち') + '…（' + (n * 5) + '秒経過）';
+  } catch (e) { out.textContent = '確認中…（通信エラー、再試行します）'; }
+  if (n < 240) setTimeout(() => poll(id, out, btn, n + 1), 5000);
+  else { out.textContent = '時間がかかっています。あとでページを開き直して確認してください（id: ' + id + '）'; btn.disabled = false; }
+}
 function dl() {
   const blob = new Blob([document.getElementById('md').value], {type: 'text/markdown'});
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = '__FILENAME__'; a.click();
