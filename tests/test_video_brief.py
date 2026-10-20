@@ -195,6 +195,29 @@ class VideoDraftTest(unittest.TestCase):
             vb.start_draft("a", 5, "16:9", self.config, self.store, http_post=self._post)
         self.assertEqual(self.posts[0][2]["Authorization"], "Key fal_sk_abcdef")
 
+    def test_key_hint_shows_only_ends_and_length(self):
+        with patch.dict(os.environ, {"FAL_KEY": "fal_sk_0123456789abcdef\nWXYZ"}):
+            hint, warnings = vb.draft_key_hint(self.config)
+        self.assertEqual(hint, "fal_sk_…WXYZ（27文字）")
+        self.assertNotIn("0123456789", hint)
+        self.assertTrue(any("改行" in w for w in warnings))
+        with patch.dict(os.environ, {"FAL_KEY": '"fal_sk_0123456789abcdef"'}):
+            _, warnings = vb.draft_key_hint(self.config)
+        self.assertTrue(any("引用符" in w for w in warnings))
+        with patch.dict(os.environ, {"FAL_KEY": "FAL_KEY=fal_sk_0123456789abcdef"}):
+            _, warnings = vb.draft_key_hint(self.config)
+        self.assertTrue(any("余計な文字" in w for w in warnings))
+
+    def test_form_page_shows_key_hint(self):
+        client = web_app.app.test_client()
+        with client.session_transaction() as s:
+            s["video_brief_ok"] = True
+        with patch.dict(os.environ, {"FAL_KEY": "fal_sk_0123456789abcdefWXYZ"}), \
+                patch.object(video_brief_web, "get_store", return_value=self.store):
+            html = client.get("/video-brief").get_data(as_text=True)
+        self.assertIn("fal_sk_…WXYZ（27文字）", html)
+        self.assertNotIn("0123456789", html)
+
     def test_connection_error_never_shows_the_key(self):
         def boom(url, json=None, headers=None, timeout=None):
             raise ValueError(f"bad header value: {headers['Authorization']!r}")
