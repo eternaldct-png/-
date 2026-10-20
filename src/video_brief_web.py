@@ -181,8 +181,8 @@ def _draft_section(brief, form, config):
     for i, cut in enumerate(brief.get("cuts", []), 1):
         no = cut.get("no", i)
         sec = vb.draft_seconds(float(cut.get("end", 0)) - float(cut.get("start", 0)), config)
-        data = json.dumps({"prompt": cut.get("video_prompt", ""), "seconds": sec, "aspect": form.get("aspect", "")},
-                          ensure_ascii=False)
+        data = json.dumps({"prompt": cut.get("video_prompt", ""), "seconds": sec, "aspect": form.get("aspect", ""),
+                           "cut": no, "subject": form.get("subject", "")}, ensure_ascii=False)
         rows.append(
             f'<div class="cut" data-cut="{escape(data)}"><b>カット{no}</b> {escape(cut.get("scene", ""))}'
             f'<input class="img" value="{escape(cut.get("image_url", ""))}" placeholder="最初の画像のURL（任意・https://）">'
@@ -197,7 +197,8 @@ def _draft_section(brief, form, config):
             '<p class="hint">OKが出たカットだけ、本番（1080p）を Higgsfield 等で手で作ってください。'
             '画像URLを入れると、その画像から動かします。参照画像（三面図・商品・背景など）を入れると、複数の画像を参考に作ります（キャラや商品の見た目をそろえたいとき）。'
             '指示書の各カットの「- 最初の画像:」の行に https:// のURLを書いて保存しておくと、読み込んだときに自動で入ります。'
-            ' <a href="/video-brief/characters" target="_blank">🧑‍🎨 キャラの参照画像セットを登録・編集</a></p>'
+            ' <a href="/video-brief/characters" target="_blank">🧑‍🎨 キャラの参照画像セットを登録・編集</a>'
+            ' ／ <a href="/video-brief/drafts" target="_blank">🎞 できた下書きをつないで1本にする</a></p>'
             + f'<script>const CHARSETS = {set_json};</script>'
             + "".join(rows))
 
@@ -261,7 +262,7 @@ def video_brief_draft():
     try:
         refs = vb.parse_reference_lines(body.get("references", ""), config)
         draft = vb.start_draft(body.get("prompt", ""), body.get("seconds", 5), aspect, config, get_store(), image_url,
-                               references=refs)
+                               references=refs, meta={"cut": body.get("cut", ""), "subject": body.get("subject", "")})
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
@@ -339,6 +340,122 @@ def video_brief_characters():
         .replace("__STORAGE__", "データベースに保存" if os.environ.get("DATABASE_URL") else "⚠️ DATABASE_URL 未設定（再起動で消えます）")
     )
     return _html(body)
+
+
+def _default_order(drafts):
+    """いちばん新しい案件の、カットごとの最新の下書きに、カット番号を順番として入れておく"""
+    latest = next((d for d in drafts if d.get("subject") and d.get("cut")), None)
+    if not latest:
+        return {}
+    order, seen = {}, set()
+    for d in drafts:  # 新しい順
+        if d.get("subject") == latest["subject"] and d.get("cut") and d["cut"] not in seen:
+            seen.add(d["cut"])
+            order[d["id"]] = d["cut"]
+    return order
+
+
+@bp.route("/video-brief/drafts", methods=["GET", "POST"])
+def video_brief_drafts():
+    """完成した下書きを選んで、順番どおりにつないだ確認用の動画を作る"""
+    if not session.get("video_brief_ok"):
+        return redirect("/video-brief")
+    store = get_store()
+    drafts = vb.done_drafts(store.all())
+    error, result = "", ""
+    order = _default_order(drafts)
+    if request.method == "POST":
+        if not hmac.compare_digest(str(session.get("video_brief_csrf", "")), str(request.form.get("csrf_token", ""))):
+            return _html("<p>画面が古くなっています。戻って再読み込みしてください。</p>", 400)
+        by_id = {d["id"]: d for d in drafts}
+        order, picked = {}, []
+        for key, value in request.form.items():
+            if key.startswith("order_") and str(value).strip():
+                did = key[len("order_"):]
+                try:
+                    n = float(value)
+                except ValueError:
+                    error = "順番は数字で入れてください"
+                    continue
+                order[did] = str(value).strip()
+                if did in by_id:
+                    picked.append((n, by_id[did]))
+        if not error:
+            try:
+                job_id, _ = vb.make_concat([d for _, d in sorted(picked, key=lambda x: x[0])])
+                total = sum(int(d.get("seconds", 0)) for _, d in picked)
+                result = (f'<div class="box"><h2>✅ {len(picked)}本をつなぎました（約{total}秒・音なし）</h2>'
+                          f'<video controls playsinline src="/video-brief/concat/{job_id}.mp4"></video>'
+                          f'<p><a class="ghost" href="/video-brief/concat/{job_id}.mp4" download="connected.mp4">⬇ ダウンロード</a></p>'
+                          '<p class="hint">このファイルは2時間で消えます。必要なら今のうちに保存してください。</p></div>')
+            except ValueError as e:
+                error = str(e)
+            except Exception as e:
+                print(f"[video_brief] concat failed: {e}")
+                error = str(e)
+    csrf = _csrf_token()
+    rows = "".join(
+        f'<div class="draft"><video preload="metadata" muted playsinline controls src="{escape(d["video_url"])}#t=0.5"></video>'
+        f'<div class="meta"><label>順番 <input type="number" step="any" min="0" name="order_{escape(d["id"])}" '
+        f'value="{escape(order.get(d["id"], ""))}"></label>'
+        f'<b>{escape(d.get("subject") or "（案件名なし）")}</b> {("カット" + escape(d["cut"])) if d.get("cut") else ""}'
+        f'<br><span class="hint">{escape(str(d.get("created_at", ""))[:16].replace("T", " "))}・{escape(d.get("seconds", ""))}秒・'
+        f'{escape(d.get("aspect", ""))}</span><br><span class="hint">{escape(str(d.get("prompt", ""))[-120:])}</span></div></div>'
+        for d in drafts
+    ) or '<p class="hint">完成した下書きがまだありません。</p>'
+    body = (
+        DRAFTS_HTML.replace("__CSRF__", csrf)
+        .replace("__RESULT__", result)
+        .replace("__ERROR__", f'<p class="error">{escape(error)}</p>' if error else "")
+        .replace("__ROWS__", rows)
+    )
+    return _html(body)
+
+
+@bp.route("/video-brief/concat/<job_id>.mp4")
+def video_brief_concat_file(job_id):
+    if not session.get("video_brief_ok"):
+        return redirect("/video-brief")
+    path = vb.concat_path(job_id)
+    if not path:
+        return _html("<p>ファイルが見つかりません（2時間で消えます）。もう一度つないでください。</p>", 404)
+    from flask import send_file
+    return send_file(path, mimetype="video/mp4", conditional=True)
+
+
+DRAFTS_HTML = (
+    r"""<!DOCTYPE html>
+<html lang="ja"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>下書きをつなぐ</title><style>"""
+    + _BASE_CSS
+    + r"""
+.box { max-width: 760px; margin: 0 auto 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 20px; box-shadow: var(--shadow); }
+h1 { font-size: 18px; margin-bottom: 6px; } h2 { font-size: 15px; margin-bottom: 8px; }
+video { width: 100%; border-radius: 10px; background: #000; max-height: 420px; }
+.draft { display: flex; gap: 12px; border: 1px solid var(--border); border-radius: 12px; padding: 10px; margin-top: 10px; align-items: flex-start; }
+.draft video { width: 200px; flex: none; max-height: 200px; }
+.draft .meta { font-size: 13px; word-break: break-all; }
+.draft label { display: block; font-weight: 700; margin-bottom: 6px; } .draft input { width: 90px; margin-left: 6px; }
+button[type=submit] { width: 100%; margin-top: 14px; }
+a.ghost { display: inline-block; margin-top: 10px; padding: 10px 14px; border-radius: 10px; background: var(--surface2); color: var(--accent); border: 1px solid var(--border); text-decoration: none; font-weight: 700; }
+.error { text-align: left; }
+@media (max-width: 520px) { .draft { flex-direction: column; } .draft video { width: 100%; } }
+</style></head><body>
+<div class="box">
+<h1>🎞 下書きをつないで1本にする</h1>
+<p class="hint">つなぎたい下書きに「順番」（1, 2, 3…）を入れて「つなぐ」を押すと、確認用の動画を1本作ります。生成はしないので<b>追加の費用はかかりません</b>。
+音は入りません（下書きは音なしで作っているため）。縦横比は1本目に合わせます。<a href="/video-brief">← 指示書メーカーに戻る</a></p>
+__ERROR__
+</div>
+__RESULT__
+<form method="POST" action="/video-brief/drafts" onsubmit="this.querySelector('button').textContent='つないでいます…（1分ほどかかります）';">
+<input type="hidden" name="csrf_token" value="__CSRF__">
+<div class="box"><h2>完成した下書き（新しい順）</h2>__ROWS__
+<button type="submit">🎞 順番どおりにつなぐ</button></div>
+</form>
+</body></html>"""
+)
 
 
 CHARS_HTML = (
@@ -441,7 +558,8 @@ __TIPS__
 <textarea name="markdown" id="loadmd" rows="4" placeholder="ファイルを選ぶか、指示書のMarkdownをここに貼り付け" required></textarea>
 <button type="submit" class="ghost">読み込む</button>
 </form>
-<p class="hint" style="margin-top:16px"><a href="/video-brief/characters">🧑‍🎨 キャラの参照画像セットを登録・編集</a></p>
+<p class="hint" style="margin-top:16px"><a href="/video-brief/characters">🧑‍🎨 キャラの参照画像セットを登録・編集</a>
+ ／ <a href="/video-brief/drafts">🎞 できた下書きをつないで1本にする</a></p>
 <details><summary>全ジャンル共通のルール</summary><ul>__FOUNDATIONS__</ul></details>
 </div>
 <script>

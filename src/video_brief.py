@@ -7,6 +7,10 @@
 import json
 import os
 import re
+import shutil
+import subprocess
+import tempfile
+import time
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -507,7 +511,8 @@ def reference_prompt(prompt, refs):
     return "Reference images (keep appearance consistent with them):\n" + "\n".join(lines) + "\n\n" + prompt
 
 
-def start_draft(prompt, seconds, aspect, config, store, image_url="", http_post=None, now=None, references=None):
+def start_draft(prompt, seconds, aspect, config, store, image_url="", http_post=None, now=None, references=None,
+                meta=None):
     """下書きを1本キューに入れる。予算オーバー・未設定なら ValueError。"""
     d = config.get("draft", {})
     if not d.get("enabled", False):
@@ -564,7 +569,9 @@ def start_draft(prompt, seconds, aspect, config, store, image_url="", http_post=
         "id": uuid.uuid4().hex[:12], "created_at": (now or datetime.now(JST)).isoformat(timespec="seconds"),
         "status": "queued", "model": model, "seconds": sec, "aspect": aspect, "cost_jpy": cost,
         "prompt": prompt[:4000], "image_url": image_url,
-        "reference_urls": [r["url"] for r in refs], "request_id": body.get("request_id", ""),
+        "reference_urls": [r["url"] for r in refs],
+        "subject": str((meta or {}).get("subject", ""))[:100], "cut": str((meta or {}).get("cut", ""))[:10],
+        "request_id": body.get("request_id", ""),
         "status_url": body["status_url"], "response_url": body["response_url"], "video_url": "", "error": "",
     }
     store.save(draft)
@@ -693,3 +700,113 @@ def parse_markdown(text, config):
     if form["aspect"] not in config.get("aspects", []):
         form["aspect"] = "16:9"
     return form, {"cuts": cuts}
+
+
+# ── ⑥ できた下書きをつないで1本にする（確認用。ffmpeg は imageio-ffmpeg 同梱のものを使う） ──────
+
+CONCAT_DIR = Path(tempfile.gettempdir()) / "video_brief_concat"
+CONCAT_MAX_AGE = 2 * 60 * 60  # 2時間で消す
+CONCAT_MAX_BYTES = 80 * 1024 * 1024  # 1本あたりのダウンロード上限
+ASPECT_SIZES = {"16:9": (854, 480), "9:16": (480, 854), "1:1": (480, 480), "4:5": (480, 600),
+                "21:9": (1120, 480), "2.39:1": (1120, 480)}
+
+
+def ffmpeg_exe():
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return shutil.which("ffmpeg") or ""
+
+
+def done_drafts(drafts, limit=60):
+    """つなげる候補（完成した下書き）を新しい順に返す"""
+    items = [d for d in drafts.values() if d.get("status") == "done" and _safe_https(d.get("video_url"))]
+    return sorted(items, key=lambda d: str(d.get("created_at", "")), reverse=True)[:limit]
+
+
+def cleanup_concat_dir(now=None):
+    now = now or time.time()
+    if not CONCAT_DIR.exists():
+        return
+    for job in CONCAT_DIR.iterdir():
+        try:
+            if now - job.stat().st_mtime > CONCAT_MAX_AGE:
+                shutil.rmtree(job, ignore_errors=True)
+        except OSError:
+            pass
+
+
+def download_video(url, dest, http_get=None):
+    import requests
+    get = http_get or requests.get
+    r = get(url, stream=True, timeout=30)
+    if r.status_code != 200:
+        raise RuntimeError(f"動画を取得できませんでした（{r.status_code}）。URLの期限が切れた可能性があります")
+    size = 0
+    with open(dest, "wb") as f:
+        for chunk in r.iter_content(chunk_size=1024 * 256):
+            size += len(chunk)
+            if size > CONCAT_MAX_BYTES:
+                raise RuntimeError("動画が大きすぎます")
+            f.write(chunk)
+
+
+def concat_videos(paths, out_path, aspect="16:9", fps=24, timeout=90):
+    """縦横比をそろえて（はみ出さないよう縮小＋余白）、音なしの mp4 1本につなぐ"""
+    exe = ffmpeg_exe()
+    if not exe:
+        raise RuntimeError("ffmpeg が見つかりません（imageio-ffmpeg をインストールしてください）")
+    w, h = ASPECT_SIZES.get(aspect, ASPECT_SIZES["16:9"])
+    n = len(paths)
+    cmd = [exe, "-y", "-loglevel", "error"]
+    for p in paths:
+        cmd += ["-i", str(p)]
+    filters = "".join(
+        f"[{i}:v]scale={w}:{h}:force_original_aspect_ratio=decrease,"
+        f"pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps={fps}[v{i}];" for i in range(n)
+    ) + "".join(f"[v{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=0[out]"
+    cmd += ["-filter_complex", filters, "-map", "[out]", "-an", "-c:v", "libx264", "-preset", "veryfast",
+            "-crf", "26", "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(out_path)]
+    try:
+        r = subprocess.run(cmd, capture_output=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("つなぐのに時間がかかりすぎました。本数を減らして試してください")
+    if r.returncode != 0 or not Path(out_path).exists():
+        raise RuntimeError(f"動画をつなげませんでした: {r.stderr.decode('utf-8', 'replace')[-300:]}")
+
+
+def make_concat(drafts_in_order, http_get=None):
+    """下書き（順番どおり）をダウンロードしてつなぐ。(job_id, mp4のパス) を返す。"""
+    if len(drafts_in_order) < 2:
+        raise ValueError("つなぐ下書きを2本以上選んでください")
+    if len(drafts_in_order) > 12:
+        raise ValueError("一度につなげるのは12本までです")
+    for d in drafts_in_order:
+        if d.get("status") != "done" or not _safe_https(d.get("video_url")):
+            raise ValueError("完成していない下書きが含まれています")
+    cleanup_concat_dir()
+    job_id = uuid.uuid4().hex
+    job_dir = CONCAT_DIR / job_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        paths = []
+        for i, d in enumerate(drafts_in_order, 1):
+            path = job_dir / f"in{i:02d}.mp4"
+            download_video(d["video_url"], path, http_get)
+            paths.append(path)
+        out = job_dir / "connected.mp4"
+        concat_videos(paths, out, aspect=drafts_in_order[0].get("aspect", "16:9"))
+        for p in paths:
+            p.unlink(missing_ok=True)
+        return job_id, out
+    except Exception:
+        shutil.rmtree(job_dir, ignore_errors=True)
+        raise
+
+
+def concat_path(job_id):
+    if not re.fullmatch(r"[0-9a-f]{32}", str(job_id or "")):
+        return None
+    path = CONCAT_DIR / job_id / "connected.mp4"
+    return path if path.exists() else None

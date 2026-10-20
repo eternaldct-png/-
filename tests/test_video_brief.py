@@ -1,4 +1,5 @@
 import json
+import re
 import os
 import tempfile
 import unittest
@@ -480,6 +481,99 @@ class CharacterSetTest(unittest.TestCase):
         self.assertIn("＋ キャラの参照画像セットを追加", html)
         self.assertIn("しー（2枚）", html)
         self.assertIn("const CHARSETS = {", html)
+
+
+
+def _make_clip(path, size, seconds=1):
+    import subprocess
+    subprocess.run([vb.ffmpeg_exe(), "-y", "-loglevel", "error", "-f", "lavfi", "-i",
+                    f"testsrc=size={size}:rate=24:duration={seconds}", "-pix_fmt", "yuv420p", str(path)], check=True)
+
+
+class FileResp:
+    def __init__(self, path, status_code=200):
+        self.status_code = status_code
+        self.path = path
+
+    def iter_content(self, chunk_size=1024):
+        with open(self.path, "rb") as f:
+            while chunk := f.read(chunk_size):
+                yield chunk
+
+
+@unittest.skipUnless(vb.ffmpeg_exe(), "ffmpeg がない環境")
+class ConcatTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        root = Path(self.tmp.name)
+        self.clips = {"https://v.fal.media/a.mp4": root / "a.mp4", "https://v.fal.media/b.mp4": root / "b.mp4"}
+        _make_clip(self.clips["https://v.fal.media/a.mp4"], "320x240")
+        _make_clip(self.clips["https://v.fal.media/b.mp4"], "240x320")  # 向きが違っても余白でそろえる
+        self.get = lambda url, stream=True, timeout=None: FileResp(self.clips[url])
+        self.dir_patch = patch.object(vb, "CONCAT_DIR", root / "out")
+        self.dir_patch.start()
+        self.store = vb.DraftStore(database_url="", file_path=root / "drafts.json")
+        for i, (url, cut) in enumerate([("https://v.fal.media/a.mp4", "1"), ("https://v.fal.media/b.mp4", "2")]):
+            self.store.save({"id": f"d{i}", "status": "done", "video_url": url, "aspect": "16:9", "seconds": 1,
+                             "subject": "焼きいも", "cut": cut, "created_at": f"2026-10-20T10:0{i}:00+09:00"})
+        self.store.save({"id": "q", "status": "running", "video_url": "", "created_at": "2026-10-20T11:00:00+09:00"})
+
+    def tearDown(self):
+        self.dir_patch.stop()
+        self.tmp.cleanup()
+
+    def _duration(self, path):
+        import subprocess
+        r = subprocess.run([vb.ffmpeg_exe(), "-i", str(path)], capture_output=True, text=True)
+        m = re.search(r"Duration: (\d+):(\d+):([\d.]+)", r.stderr)
+        return int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
+
+    def test_make_concat_joins_in_order(self):
+        drafts = [self.store.get("d1"), self.store.get("d0")]
+        job_id, out = vb.make_concat(drafts, http_get=self.get)
+        self.assertEqual(vb.concat_path(job_id), out)
+        self.assertAlmostEqual(self._duration(out), 2.0, delta=0.2)
+        self.assertEqual(sorted(p.name for p in out.parent.iterdir()), ["connected.mp4"])
+
+    def test_make_concat_rejects_bad_input(self):
+        with self.assertRaises(ValueError):
+            vb.make_concat([self.store.get("d0")], http_get=self.get)
+        with self.assertRaises(ValueError):
+            vb.make_concat([self.store.get("d0"), self.store.get("q")], http_get=self.get)
+        expired = lambda url, stream=True, timeout=None: FileResp(None, status_code=403)
+        with self.assertRaises(RuntimeError):
+            vb.make_concat([self.store.get("d0"), self.store.get("d1")], http_get=expired)
+        self.assertIsNone(vb.concat_path("../etc"))
+
+    def test_web_drafts_page_and_concat(self):
+        client = web_app.app.test_client()
+        self.assertEqual(client.get("/video-brief/drafts").status_code, 302)
+        with client.session_transaction() as s:
+            s["video_brief_ok"] = True
+            s["video_brief_csrf"] = "tok"
+        with patch.object(video_brief_web, "get_store", return_value=self.store):
+            html = client.get("/video-brief/drafts").get_data(as_text=True)
+            self.assertIn('name="order_d0" value="1"', html)  # 最新案件のカット番号が順番に入る
+            self.assertIn('name="order_d1" value="2"', html)
+            self.assertNotIn("order_q", html)
+            self.assertEqual(client.post("/video-brief/drafts", data={"csrf_token": "x"}).status_code, 400)
+            with patch("requests.get", self.get):
+                html = client.post("/video-brief/drafts", data={"csrf_token": "tok", "order_d0": "2", "order_d1": "1"}
+                                   ).get_data(as_text=True)
+        self.assertIn("2本をつなぎました", html)
+        job_id = re.search(r"/video-brief/concat/([0-9a-f]{32})\.mp4", html).group(1)
+        r = client.get(f"/video-brief/concat/{job_id}.mp4")
+        self.assertEqual((r.status_code, r.mimetype), (200, "video/mp4"))
+        r.close()
+        self.assertEqual(client.get("/video-brief/concat/" + "0" * 32 + ".mp4").status_code, 404)
+
+    def test_draft_meta_is_recorded(self):
+        config = vb.load_config()
+        config["draft"].update(enabled=True)
+        post = lambda url, json=None, headers=None, timeout=None: Resp(200, {"status_url": "https://q/s", "response_url": "https://q/r"})
+        with patch.dict(os.environ, {"FAL_KEY": "k"}):
+            d = vb.start_draft("a", 4, "16:9", config, self.store, http_post=post, meta={"cut": 3, "subject": "焼きいも"})
+        self.assertEqual((d["cut"], d["subject"]), ("3", "焼きいも"))
 
 
 if __name__ == "__main__":
