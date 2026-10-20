@@ -190,6 +190,18 @@ class VideoDraftTest(unittest.TestCase):
         self.assertEqual(headers["Authorization"], "Key k")
         self.assertEqual(self.store.get(d["id"])["cost_jpy"], 100)
 
+    def test_google_drive_share_link_is_converted(self):
+        direct = "https://drive.google.com/uc?export=download&id=1n_Nef-bnV"
+        for link in ["https://drive.google.com/file/d/1n_Nef-bnV/view?usp=drive_link",
+                     "https://drive.google.com/file/d/1n_Nef-bnV/view",
+                     "https://drive.google.com/open?id=1n_Nef-bnV",
+                     direct]:
+            self.assertEqual(vb.direct_image_url(link), direct, link)
+        self.assertEqual(vb.direct_image_url("https://ex.com/a.png"), "https://ex.com/a.png")
+        vb.start_draft("a", 4, "16:9", self.config, self.store,
+                       image_url="https://drive.google.com/file/d/1n_Nef-bnV/view?usp=drive_link", http_post=self._post)
+        self.assertEqual(self.posts[0][1]["image_url"], direct)
+
     def test_key_with_pasted_newline_is_cleaned(self):
         with patch.dict(os.environ, {"FAL_KEY": " fal_sk_abc\ndef \n"}):
             vb.start_draft("a", 5, "16:9", self.config, self.store, http_post=self._post)

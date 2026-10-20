@@ -406,6 +406,19 @@ def _safe_https(url):
     return url if re.match(r"^https://[^\s\"'<>]+$", url) else ""
 
 
+_DRIVE_ID = re.compile(r"^https://drive\.google\.com/(?:file/d/([\w-]+)|(?:open|uc)\?(?:[^#]*&)?id=([\w-]+))")
+
+
+def direct_image_url(url):
+    """Googleドライブの共有リンク（…/file/d/ID/view など）を、画像そのものを取れるURLに直す。
+    それ以外のURLはそのまま返す。ドライブ側で「リンクを知っている全員」に共有しておく必要がある。"""
+    url = str(url or "").strip()
+    m = _DRIVE_ID.match(url)
+    if not m:
+        return url
+    return f"https://drive.google.com/uc?export=download&id={m.group(1) or m.group(2)}"
+
+
 def start_draft(prompt, seconds, aspect, config, store, image_url="", http_post=None, now=None):
     """下書きを1本キューに入れる。予算オーバー・未設定なら ValueError。"""
     d = config.get("draft", {})
@@ -417,7 +430,7 @@ def start_draft(prompt, seconds, aspect, config, store, image_url="", http_post=
     prompt = str(prompt or "").strip()
     if not prompt:
         raise ValueError("プロンプトが空です")
-    image_url = _safe_https(image_url) if image_url else ""
+    image_url = _safe_https(direct_image_url(image_url)) if image_url else ""
     sec = draft_seconds(seconds, config)
     cost = draft_cost_jpy(sec, config)
     budget = int(d.get("monthly_budget_jpy", 0))
