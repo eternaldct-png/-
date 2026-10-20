@@ -190,6 +190,14 @@ class VideoDraftTest(unittest.TestCase):
         self.assertEqual(headers["Authorization"], "Key k")
         self.assertEqual(self.store.get(d["id"])["cost_jpy"], 100)
 
+    def test_payload_matches_fal_seedance_input(self):
+        vb.start_draft("a cat", 5, "2.39:1", self.config, self.store, http_post=self._post)
+        _, payload, _ = self.posts[0]
+        self.assertEqual(payload["aspect_ratio"], "21:9")
+        self.assertEqual(payload["duration"], "5")
+        self.assertIs(payload["generate_audio"], False)
+        self.assertTrue({"prompt", "resolution", "duration", "aspect_ratio"} <= set(payload))
+
     def test_image_url_switches_to_image_to_video(self):
         vb.start_draft("a cat", 5, "16:9", self.config, self.store, image_url="https://ex.com/a.png", http_post=self._post)
         url, payload, _ = self.posts[0]

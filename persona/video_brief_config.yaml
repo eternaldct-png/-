@@ -169,13 +169,13 @@ genres:
 # ── 下書き動画の自動生成（480p・使った分だけ課金） ───────────────────
 # 指示書のカットごとに「🎬 下書きを作る」ボタンが出る。本番（1080p）は人が手で作る。
 # fal.ai のキュー型API（https://queue.fal.run）を使う。APIキーは Render の環境変数 FAL_KEY に入れる。
-# ⚠️ モデルIDと単価は 2026年10月の二次情報。最初に fal.ai のモデルページで確認して直すこと。
+# モデルIDと480pの単価（$0.2205/秒）は 2026年10月20日に fal.ai のモデルページで確認済み。
 draft:
   enabled: true
   api_key_env: "FAL_KEY"
   # 最初の画像URLなし → text_to_video、あり → image_to_video
-  text_to_video_model: "bytedance/seedance-2.5/text-to-video"
-  image_to_video_model: "bytedance/seedance-2.5/image-to-video"
+  text_to_video_model: "bytedance/seedance-2.5/us/text-to-video"
+  image_to_video_model: "bytedance/seedance-2.5/us/image-to-video"
   resolution: "480p"
   # 単価（ドル/秒）と為替（円/ドル）。表示する金額と予算の計算に使う
   usd_per_second: 0.2205
@@ -186,6 +186,9 @@ draft:
   # 1回で作る秒数の範囲（カットの尺をこの範囲に丸める）
   min_seconds: 4
   max_seconds: 15
+  # 画面の縦横比 → モデルに送る値（モデルが受け付けない比率だけ書き換える）
+  aspect_map:
+    "2.39:1": "21:9"
   # duration を "5" のような文字列で送るか（モデルの仕様に合わせる）
   duration_as_string: true
   # モデルに追加で渡す入力（例: generate_audio: false）
