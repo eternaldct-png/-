@@ -36,6 +36,14 @@ def _csrf_token():
     return token
 
 
+def _key_hint_html(config):
+    hint, warnings = vb.draft_key_hint(config)
+    html = f'<br>🔑 使っているキー: <code>{escape(hint)}</code>（fal.ai の Keys 画面と見比べてください）'
+    for w in warnings:
+        html += f'<br>⚠️ {escape(w)}'
+    return html
+
+
 def _form_page(config, error="", values=None):
     values = values or {}
     genres = config.get("genres", [])
@@ -63,7 +71,7 @@ def _form_page(config, error="", values=None):
         spent = vb.spent_this_month(get_store().all()) if key_ok else 0
         draft_status = (
             f'<p class="hint">🎬 下書きの自動生成（{escape(d.get("resolution", "480p"))}）: '
-            + (f'今月 約{spent:,}円 / 上限{int(d.get("monthly_budget_jpy", 0)):,}円' if key_ok
+            + (f'今月 約{spent:,}円 / 上限{int(d.get("monthly_budget_jpy", 0)):,}円' + _key_hint_html(config) if key_ok
                else f'⚠️ {escape(d.get("api_key_env", "FAL_KEY"))} 未設定（指示書だけ作れます）')
             + "</p>"
         )

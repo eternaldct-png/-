@@ -348,6 +348,23 @@ def draft_api_key(config):
     return "".join(os.environ.get(config.get("draft", {}).get("api_key_env", "FAL_KEY"), "").split())
 
 
+def draft_key_hint(config):
+    """画面でどのキーが入っているか見分けるための表示（先頭7文字と末尾4文字・文字数だけ）と注意点"""
+    raw = os.environ.get(config.get("draft", {}).get("api_key_env", "FAL_KEY"), "")
+    key = draft_api_key(config)
+    if not key:
+        return "", []
+    hint = f"{key[:7]}…{key[-4:]}（{len(key)}文字）" if len(key) > 16 else f"（{len(key)}文字・短すぎます）"
+    warnings = []
+    if raw != key:
+        warnings.append("改行・空白が混ざっていたので取り除いて使っています")
+    if re.search(r"[\"'`]", key):
+        warnings.append("引用符（\" や '）が入っています。値だけを貼り直してください")
+    if key.lower().startswith(("key", "fal_key=")) or "=" in key:
+        warnings.append("「Key」や「FAL_KEY=」などの余計な文字が付いています。値だけを貼り直してください")
+    return hint, warnings
+
+
 def _redact(text, key):
     """エラー文にAPIキーが混ざって画面・ログに出ないよう伏せる"""
     text = str(text)
