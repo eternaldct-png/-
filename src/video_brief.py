@@ -675,7 +675,11 @@ def parse_markdown(text, config):
             name = m.group(1).strip()
             form["genre"] = next((g["id"] for g in config.get("genres", []) if g.get("name") == name), "")
         elif m := _TABLE_ROW.match(stripped):
-            scenes[int(m.group(1))] = m.group(2)
+            cells = [c.strip() for c in stripped.strip("|").split("|")]
+            dialogue = re.sub(r"（\d+/\d+）$", "", cells[3]).strip() if len(cells) > 3 else ""
+            overlay = cells[5] if len(cells) > 5 else ""
+            scenes[int(m.group(1))] = {"scene": m.group(2), "dialogue": "" if dialogue == "—" else dialogue,
+                                       "text_overlay": "" if overlay == "—" else overlay}
         elif current is not None and (m := re.match(r"^-\s*参照セット[：:]\s*([^（(]+?)\s*$", stripped)):
             current["sets"].append(m.group(1))
         elif current is not None and (m := re.match(r"^-\s*参照画像[：:]\s*(https://\S+)\s*(.*)$", stripped)):
@@ -696,7 +700,10 @@ def parse_markdown(text, config):
         raise ValueError("カットが見つかりませんでした（このツールで保存した指示書のMarkdownを読み込んでください）")
     cuts.sort(key=lambda c: c["no"])
     for c in cuts:
-        c["scene"] = scenes.get(c["no"], "")
+        row = scenes.get(c["no"], {})
+        c["scene"] = row.get("scene", "")
+        c["dialogue"] = row.get("dialogue", "")
+        c["text_overlay"] = row.get("text_overlay", "")
     if form["aspect"] not in config.get("aspects", []):
         form["aspect"] = "16:9"
     return form, {"cuts": cuts}
@@ -810,3 +817,68 @@ def concat_path(job_id):
         return None
     path = CONCAT_DIR / job_id / "connected.mp4"
     return path if path.exists() else None
+
+
+# ── ⑦ テロップ一覧・字幕（SRT）を書き出す（CapCut などの編集用） ────────────────
+
+def _split_caption(text, max_chars=16):
+    """セリフを字幕1枚ずつに分ける（文の切れ目 → 読点 → 文字数の順で区切る）"""
+    pieces = []
+    for sentence in re.findall(r"[^。！？!?]+[。！？!?]*", str(text or "").strip()):
+        sentence = sentence.strip()
+        while count_chars(sentence) > max_chars:
+            cut = sentence.rfind("、", 0, max_chars + 1)
+            cut = cut + 1 if cut > 0 else max_chars
+            pieces.append(sentence[:cut].strip())
+            sentence = sentence[cut:].strip()
+        if sentence:
+            pieces.append(sentence)
+    return [p for p in pieces if count_chars(p)]
+
+
+def telops(brief, max_chars=16):
+    """カットのセリフと画面の文字から、テロップを [{start, end, cut, kind, text}] で返す（開始秒の順）"""
+    items = []
+    for i, cut in enumerate(brief.get("cuts", []), 1):
+        no = cut.get("no", i)
+        start, end = float(cut.get("start", 0)), float(cut.get("end", 0))
+        if end <= start:
+            continue
+        overlay = str(cut.get("text_overlay", "") or "").strip()
+        if overlay:
+            items.append({"start": start, "end": end, "cut": no, "kind": "画面の文字", "text": overlay})
+        pieces = _split_caption(cut.get("dialogue", ""), max_chars)
+        total = sum(count_chars(p) for p in pieces)
+        t = start
+        for j, piece in enumerate(pieces):
+            nxt = end if j == len(pieces) - 1 else t + (end - start) * count_chars(piece) / total
+            items.append({"start": round(t, 2), "end": round(nxt, 2), "cut": no, "kind": "セリフ", "text": piece})
+            t = nxt
+    return sorted(items, key=lambda x: (x["start"], x["kind"] != "画面の文字"))
+
+
+def _srt_time(sec):
+    ms = int(round(float(sec) * 1000))
+    return f"{ms // 3600000:02d}:{ms // 60000 % 60:02d}:{ms // 1000 % 60:02d},{ms % 1000:03d}"
+
+
+def to_srt(items, kind="セリフ"):
+    """字幕ファイル（SRT）。CapCut などで字幕として読み込む用"""
+    rows = [x for x in items if x["kind"] == kind]
+    return "".join(f"{n}\n{_srt_time(x['start'])} --> {_srt_time(x['end'])}\n{x['text']}\n\n"
+                   for n, x in enumerate(rows, 1))
+
+
+def to_telop_csv(items):
+    """テロップ一覧のCSV（Excel・スプレッドシートで開ける。先頭にBOM）"""
+    import csv
+    import io
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["開始(秒)", "終了(秒)", "カット", "種類", "文言"])
+    for x in items:
+        text = x["text"]
+        if text[:1] in ("=", "+", "-", "@"):  # 表計算ソフトで式として実行されないように
+            text = "'" + text
+        w.writerow([f"{x['start']:g}", f"{x['end']:g}", x["cut"], x["kind"], text])
+    return "\ufeff" + buf.getvalue()

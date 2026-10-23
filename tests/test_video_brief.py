@@ -576,5 +576,66 @@ class ConcatTest(unittest.TestCase):
         self.assertEqual((d["cut"], d["subject"]), ("3", "焼きいも"))
 
 
+
+class TelopTest(unittest.TestCase):
+    def setUp(self):
+        self.config = vb.load_config()
+        c1 = _cut(0, 4, "今日、冷えるね。")
+        c2 = _cut(4, 10, "ほくほくの焼きいも、ひとつください！あと温かいお茶もお願いします。")
+        c3 = _cut(10, 15)
+        c3["text_overlay"] = "=秋限定 焼きいも"
+        self.brief = _brief([c1, c2, c3])
+
+    def test_split_caption_keeps_each_piece_short(self):
+        pieces = vb._split_caption("ほくほくの焼きいも、ひとつください！あと温かいお茶もお願いします。")
+        self.assertEqual(pieces[0], "ほくほくの焼きいも、ひとつください！")
+        self.assertTrue(all(vb.count_chars(p) <= 16 for p in pieces))
+        self.assertEqual("".join(pieces), "ほくほくの焼きいも、ひとつください！あと温かいお茶もお願いします。")
+
+    def test_telops_timing_and_kinds(self):
+        items = vb.telops(self.brief)
+        self.assertEqual(items[0], {"start": 0.0, "end": 4.0, "cut": 1, "kind": "セリフ", "text": "今日、冷えるね。"})
+        cut2 = [x for x in items if x["cut"] == 2]
+        self.assertEqual((cut2[0]["start"], cut2[-1]["end"]), (4.0, 10.0))
+        self.assertTrue(all(a["end"] == b["start"] for a, b in zip(cut2, cut2[1:])))
+        self.assertEqual(items[-1]["kind"], "画面の文字")
+
+    def test_srt_and_csv(self):
+        items = vb.telops(self.brief)
+        srt = vb.to_srt(items)
+        self.assertTrue(srt.startswith("1\n00:00:00,000 --> 00:00:04,000\n今日、冷えるね。\n\n"))
+        self.assertNotIn("秋限定", srt)
+        csv_text = vb.to_telop_csv(items)
+        self.assertTrue(csv_text.startswith("\ufeff開始(秒),終了(秒),カット,種類,文言"))
+        self.assertIn("'=秋限定 焼きいも", csv_text)
+
+    def test_markdown_round_trip_keeps_dialogue_and_overlay(self):
+        md, _ = vb.to_markdown(self.brief, {"subject": "x", "seconds": 15, "aspect": "16:9"},
+                               vb.get_genre(self.config, "anime"), self.config)
+        _, loaded = vb.parse_markdown(md, self.config)
+        self.assertEqual(loaded["cuts"][0]["dialogue"], "今日、冷えるね。")
+        self.assertEqual(loaded["cuts"][2]["dialogue"], "")
+        self.assertEqual(loaded["cuts"][2]["text_overlay"], "=秋限定 焼きいも")
+        self.assertEqual(vb.telops(loaded), vb.telops(self.brief))
+
+    def test_result_pages_show_telop_buttons(self):
+        client = web_app.app.test_client()
+        with client.session_transaction() as s:
+            s["video_brief_ok"] = True
+            s["video_brief_csrf"] = "tok"
+        data = {"csrf_token": "tok", "genre": "anime", "subject": "x", "seconds": "15", "aspect": "16:9"}
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "x"}), patch.object(vb, "generate_brief", return_value=self.brief):
+            html = client.post("/video-brief/generate", data=data).get_data(as_text=True)
+        self.assertIn("📝 テロップ一覧（CSV）", html)
+        self.assertIn("💬 セリフ字幕（SRT）", html)
+        self.assertIn("<td>今日、冷えるね。</td>", html)
+        self.assertNotIn("</script>\\u003c", html)
+        md, _ = vb.to_markdown(self.brief, {"subject": "x", "seconds": 15, "aspect": "16:9"},
+                               vb.get_genre(self.config, "anime"), self.config)
+        html = client.post("/video-brief/load", data={"csrf_token": "tok", "markdown": md}).get_data(as_text=True)
+        self.assertIn("📝 テロップ一覧（CSV）", html)
+        self.assertIn("<td>=秋限定 焼きいも</td>", html)
+
+
 if __name__ == "__main__":
     unittest.main()

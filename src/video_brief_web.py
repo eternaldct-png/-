@@ -162,11 +162,36 @@ def video_brief_generate():
     body = (
         RESULT_HTML.replace("__STATUS__", status)
         .replace("__DRAFTS__", _draft_section(brief, form, config))
+        .replace("__TELOPS__", _telop_section(brief))
         .replace("__MD__", str(escape(markdown)))
         .replace("__FILENAME__", str(escape(filename)))
         .replace("__CSRF__", _csrf_token())
     )
     return _html(body)
+
+
+def _telop_section(brief):
+    """テロップ一覧（表）と、CSV・SRT のダウンロードボタン"""
+    items = vb.telops(brief)
+    if not items:
+        return '<h2>📝 テロップ</h2><p class="hint">セリフも画面の文字もないため、テロップはありません。</p>'
+    rows = "".join(
+        f'<tr><td>{x["start"]:g}–{x["end"]:g}</td><td>{escape(x["cut"])}</td><td>{escape(x["kind"])}</td>'
+        f'<td>{escape(x["text"])}</td></tr>' for x in items
+    )
+    data = json.dumps({"csv": vb.to_telop_csv(items), "srt": vb.to_srt(items)}, ensure_ascii=False).replace("<", "\\u003c")
+    has_srt = any(x["kind"] == "セリフ" for x in items)
+    return (
+        '<h2>📝 テロップ一覧</h2>'
+        '<p class="hint">CapCut などで編集するときの手元資料です。セリフは字幕1枚16文字までに分け、時間はそのカットの中で文字数に合わせて割り振っています。'
+        '実際の声の長さに合わせて、編集画面で微調整してください。</p>'
+        '<div class="bar"><button type="button" class="ghost" onclick="dlText(\'csv\', \'telops.csv\', \'text/csv\')">📝 テロップ一覧（CSV）</button>'
+        + ('<button type="button" class="ghost" onclick="dlText(\'srt\', \'subtitles.srt\', \'application/x-subrip\')">💬 セリフ字幕（SRT）</button>'
+           if has_srt else '')
+        + '</div>'
+        f'<table class="telops"><tr><th>秒</th><th>カット</th><th>種類</th><th>文言</th></tr>{rows}</table>'
+        f'<script>const TELOPS = {data};</script>'
+    )
 
 
 def _draft_section(brief, form, config):
@@ -231,6 +256,7 @@ def video_brief_load():
     body = (
         RESULT_HTML.replace("__STATUS__", status)
         .replace("__DRAFTS__", _draft_section(brief, form, config))
+        .replace("__TELOPS__", _telop_section(brief))
         .replace("__MD__", str(escape(text)))
         .replace("__FILENAME__", "brief.md")
         .replace("__CSRF__", _csrf_token())
@@ -591,6 +617,9 @@ RESULT_HTML = (
 .badge { font-weight: 700; margin-bottom: 10px; } .badge.ng { color: var(--danger); } .badge.ok { color: var(--ok); }
 textarea { font-family: ui-monospace, Menlo, monospace; font-size: 12px; min-height: 70vh; }
 h2 { font-size: 15px; margin: 20px 0 4px; }
+table.telops { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+table.telops th, table.telops td { border-bottom: 1px solid var(--border); padding: 6px; text-align: left; vertical-align: top; }
+table.telops td:first-child { white-space: nowrap; }
 .cut { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; margin-top: 10px; }
 .cut input, .cut textarea.refs, .cut select.charset { margin: 8px 0 0; } .cut button { margin-top: 8px; } .cut video { width: 100%; max-height: 360px; margin-top: 8px; border-radius: 8px; background: #000; }
 .out { font-size: 12px; margin-top: 6px; }
@@ -603,6 +632,7 @@ __STATUS__
 <a class="ghost" href="/video-brief">← もう1本作る</a>
 </div>
 <textarea id="md">__MD__</textarea>
+__TELOPS__
 __DRAFTS__
 <p class="hint">案件フォルダ（Notion / Google ドライブ）に保存しておくと、次の案件で使い回せます。</p>
 </div>
@@ -641,6 +671,10 @@ async function poll(id, out, btn, n) {
   } catch (e) { out.textContent = '確認中…（通信エラー、再試行します）'; }
   if (n < 240) setTimeout(() => poll(id, out, btn, n + 1), 5000);
   else { out.textContent = '時間がかかっています。あとでページを開き直して確認してください（id: ' + id + '）'; btn.disabled = false; }
+}
+function dlText(key, name, type) {
+  const blob = new Blob([TELOPS[key]], {type: type + ';charset=utf-8'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
 }
 function dl() {
   const blob = new Blob([document.getElementById('md').value], {type: 'text/markdown'});
