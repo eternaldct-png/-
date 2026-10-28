@@ -43,10 +43,10 @@ class VideoBriefLogicTest(unittest.TestCase):
     def setUp(self):
         self.config = vb.load_config()
 
-    def test_config_has_seven_genres_with_references(self):
+    def test_config_has_eight_genres_with_references(self):
         genres = self.config["genres"]
-        self.assertEqual(len(genres), 7)
-        self.assertEqual(len({g["id"] for g in genres}), 7)
+        self.assertEqual(len(genres), 8)
+        self.assertEqual(len({g["id"] for g in genres}), 8)
         for g in genres:
             self.assertTrue(g.get("references"), g["id"])
             self.assertTrue(g.get("rules"), g["id"])
