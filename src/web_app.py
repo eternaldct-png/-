@@ -4660,6 +4660,14 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
 .rec small { color: var(--muted); font-size: .74rem; flex: 1; }
 .del { border: none; background: transparent; color: var(--faint); font-size: 1rem; line-height: 1; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; flex-shrink: 0; margin-left: auto; }
 .del:hover { background: var(--ng-bg); color: var(--ng); }
+.edit { border: none; background: transparent; color: var(--accent-2); font-size: .9rem; line-height: 1; width: 30px; height: 30px; border-radius: 50%; cursor: pointer; flex-shrink: 0; margin-left: auto; }
+.edit + .del { margin-left: 0; }
+.edit:hover { background: var(--line); }
+.rec.editing { border-color: var(--warn); }
+.edit-banner { background: #2a1f05; border: 1px solid rgba(251,191,36,.5); color: var(--warn); border-radius: 10px; padding: 8px 12px; font-size: .82rem; font-weight: 700; margin-bottom: 12px; }
+.form-actions { display: flex; gap: 8px; }
+.form-actions .primary { flex: 1; }
+.form-actions .btn { justify-content: center; padding: 14px; }
 .backup-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .btn { display: inline-flex; align-items: center; gap: 4px; margin: 0; padding: 9px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface2); color: var(--accent-3); font-size: .82rem; font-weight: 700; cursor: pointer; }
 .footer { color: var(--faint); font-size: .72rem; text-align: center; margin: 20px 0 8px; }
@@ -4682,6 +4690,7 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
   <section id="tab-entry" class="section active">
     <div class="entry-layout">
       <form id="entry-form" class="card" autocomplete="off" novalidate>
+        <div id="edit-banner" class="edit-banner" hidden></div>
         <label>日付<input type="date" id="f-date" required></label>
         <div id="f-jun" class="jun-hint"></div>
         <label>どっち？
@@ -4709,7 +4718,10 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
             <input type="number" id="f-coins-other" min="0" step="1" inputmode="numeric" placeholder="例: 1200">
           </label>
         </div>
-        <button type="submit" class="primary">記録する</button>
+        <div class="form-actions">
+          <button type="submit" class="primary" id="f-submit">記録する</button>
+          <button type="button" class="btn" id="f-cancel" hidden>やめる</button>
+        </div>
         <p id="form-msg" class="form-msg" role="status"></p>
       </form>
       <div>
@@ -4929,6 +4941,7 @@ const state = {
   sort: ['close', 'count', 'name'].includes(settings.sort) ? settings.sort : 'close',
   lastName: '',
   targetOpen: false,
+  editingId: null,  // 修正中の記録の id（新規のときは null）
 };
 function currentTarget() { return TIERS.get(state.target) || TIERS.get(CONFIG.default_target) || TIERS_ASC[0]; }
 function allNames() { return uniq(state.records.map(r => r.name)).sort(byName); }
@@ -5077,8 +5090,10 @@ function recRow(r) {
     r.coins ? '🪙' + fmtCoins(r.coins) : '',
     r.sl ? '💙' : '',
   ].filter(Boolean).join(' ');
-  return `<div class="rec"><span class="type ${r.type}">${t.icon} ${t.label}</span><span class="name">${esc(r.name)}</span>`
-    + `<small>${detail}</small><button type="button" class="del" data-id="${esc(r.id)}" title="この記録を削除" aria-label="削除">×</button></div>`;
+  return `<div class="rec${r.id === state.editingId ? ' editing' : ''}"><span class="type ${r.type}">${t.icon} ${t.label}</span><span class="name">${esc(r.name)}</span>`
+    + `<small>${detail}</small>`
+    + `<button type="button" class="edit" data-id="${esc(r.id)}" title="この記録を修正" aria-label="修正">✏️</button>`
+    + `<button type="button" class="del" data-id="${esc(r.id)}" title="この記録を削除" aria-label="削除">×</button></div>`;
 }
 
 function fillSelect(sel, values, allLabel) {
@@ -5137,28 +5152,80 @@ function submitEntry(e) {
   if (!Number.isInteger(coins) || coins < 0 || coins > 100000000) return fail('コインは0以上の整数で入れてください');
   if (!storageOk) return fail('このブラウザでは保存できません（シークレットモードなど）');
 
+  const editIndex = state.editingId ? state.records.findIndex(x => x.id === state.editingId) : -1;
+  if (state.editingId && editIndex < 0) {
+    resetEntryForm();
+    return fail('修正しようとした記録が見つかりません（削除された可能性があります）');
+  }
+  const old = editIndex >= 0 ? state.records[editIndex] : null;
   const record = cleanRecord({
-    id: (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2)),
+    // 修正のときは id と最初に記録した日時をそのまま残す（バックアップの重複判定・並び順が変わらないように）
+    id: old ? old.id : (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2)),
     date, type, name, coins,
     minutes: Number($('f-viewing').value),
     sl: $('f-superlike').value === '1',
-    created: new Date().toISOString(),
+    created: old ? old.created : new Date().toISOString(),
   });
-  state.records.push(record);
+  if (old) state.records[editIndex] = record;
+  else state.records.push(record);
   if (!saveRecords()) {
-    state.records.pop();
+    if (old) state.records[editIndex] = old;
+    else state.records.pop();
     return fail('保存できませんでした（空き容量・シークレットモードを確認してください）');
   }
   state.lastName = record.name;
   renderNameList();
+  resetEntryForm();
   msg.className = 'form-msg ok';
-  msg.textContent = `✅ 記録しました：${TYPES[type].icon} ${record.name}（${fmtDate(date)}・${TYPES[type].label}）`;
+  msg.textContent = `✅ ${old ? '修正しました' : '記録しました'}：${TYPES[type].icon} ${record.name}（${fmtDate(date)}・${TYPES[type].label}）`;
+  if (old) $('f-date').value = date;
+  renderEntry();
+}
+
+// 入力欄を空に戻して、修正モードを終える（日付はそのまま）
+function resetEntryForm() {
+  state.editingId = null;
   $('f-name').value = '';
   $('f-viewing').value = '0';
   $('f-coins').value = '0';
   $('f-coins-other').value = '';
   $('f-superlike').value = '0';
-  renderEntry();
+  $('f-submit').textContent = '記録する';
+  $('f-cancel').hidden = true;
+  $('edit-banner').hidden = true;
+}
+
+// 記録を入力欄に読み込んで修正モードにする
+function startEdit(id) {
+  const r = state.records.find(x => x.id === id);
+  if (!r) return;
+  state.editingId = r.id;
+  $('f-date').value = r.date;
+  $('f-type').value = r.type;
+  $('f-name').value = r.name;
+  // 設定の選択肢にない値（設定を変えた後の古い記録など）は、その値の選択肢を足して選べるようにする
+  const viewing = $('f-viewing');
+  if (![...viewing.options].some(o => o.value === String(r.minutes))) {
+    viewing.insertAdjacentHTML('beforeend', `<option value="${r.minutes}">${fmtMinutes(r.minutes)}</option>`);
+  }
+  viewing.value = String(r.minutes);
+  const coinSel = $('f-coins');
+  if ([...coinSel.options].some(o => o.value === String(r.coins))) {
+    coinSel.value = String(r.coins);
+    $('f-coins-other').value = '';
+  } else {
+    coinSel.value = 'other';
+    $('f-coins-other').value = String(r.coins);
+  }
+  $('f-superlike').value = r.sl ? '1' : '0';
+  $('f-submit').textContent = '修正を保存する';
+  $('f-cancel').hidden = false;
+  $('edit-banner').hidden = false;
+  $('edit-banner').textContent = `✏️ 記録を修正中：${fmtDate(r.date)} ${TYPES[r.type].icon} ${r.name}（直したら「修正を保存する」）`;
+  $('form-msg').textContent = '';
+  if (state.tab !== 'entry') switchTab('entry');
+  else renderEntry();
+  $('entry-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // ── 歌推しタブ ────────────────────────────────
@@ -5386,7 +5453,15 @@ document.addEventListener('change', e => {
 document.addEventListener('toggle', e => {
   if (e.target.classList && e.target.classList.contains('target-card')) state.targetOpen = e.target.open;
 }, true);
+$('f-cancel').addEventListener('click', () => {
+  resetEntryForm();
+  $('form-msg').className = 'form-msg';
+  $('form-msg').textContent = '修正をやめました';
+  renderEntry();
+});
 document.addEventListener('click', e => {
+  const edit = e.target.closest('.edit');
+  if (edit) return startEdit(edit.dataset.id);
   const del = e.target.closest('.del');
   if (!del) return;
   const r = state.records.find(x => x.id === del.dataset.id);
@@ -5398,6 +5473,7 @@ document.addEventListener('click', e => {
     alert('削除を保存できませんでした');
     return;
   }
+  if (state.editingId === r.id) resetEntryForm();
   renderNameList();
   render();
 });
