@@ -80,6 +80,14 @@ class WakuPageTest(unittest.TestCase):
         self.assertEqual(self.client.post("/waku").status_code, 405)
         self.assertEqual(self.client.get("/api/waku/records").status_code, 404)
 
+    def test_records_can_be_edited(self):
+        html = self.client.get("/waku").get_data(as_text=True)
+        # 各記録に✏️（修正）ボタンがあり、入力欄に読み込んで同じ id のまま上書きする
+        self.assertIn('class="edit"', html)
+        self.assertIn("function startEdit(", html)
+        self.assertIn('id="f-cancel"', html)
+        self.assertIn("state.records[editIndex] = record", html)
+
 
 if __name__ == "__main__":
     unittest.main()
