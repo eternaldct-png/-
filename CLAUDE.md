@@ -1,5 +1,10 @@
 # CLAUDE.md — プロジェクト概要と定型作業
 
+> **全体の棚卸し・途中のブランチ・新しいセッションの準備（パッケージが入っていない／つながらないとき）は
+> `docs/PROJECT_STATUS.md` を先に見る。**
+> クラウドのセッションでテストを動かす前に、パッケージが無ければ
+> `pip install --ignore-installed blinker -r requirements.txt pytest` を実行する（テストは `python3 -m pytest -q`）。
+
 ## このリポジトリの概要
 eternaldct-png/- は ETERNAL d.c.t の投稿自動化 & グッズ販売サイト。
 - Flask アプリ（`src/web_app.py`）を Render でホスト
@@ -69,7 +74,7 @@ eternaldct-png/- は ETERNAL d.c.t の投稿自動化 & グッズ販売サイト
 ```bash
 git add persona/goods_config.yaml src/static/goods/
 git commit -m "商品名を追加"
-git push -u origin claude/homepage-payment-spreadsheet-DD1ly
+git push -u origin <このセッションの作業ブランチ>
 # → GitHub MCP で PR作成 → マージ → Render が自動デプロイ
 ```
 
