@@ -7,6 +7,9 @@ description: 「リールを1本作って」「リール作って」と頼まれ
 
 メインの Claude が「進行役」になり、Agent ツールで AI社員を順番に呼ぶ（サブエージェントは他の社員を呼べないため）。
 **担当どうしの受け渡しはファイルで行う。** 次の担当には「読むファイル」と「書くファイル」を必ず渡す。
+**同時に呼ぶ担当（＋）は、上書き事故を防ぐため別々のファイルに書かせる。**
+**台本・構成・フック担当はコードを実行できないので、字数は進行役がコードで数え直し、`03_script.md` の末尾に結果を書く。**
+差し戻しの修正後は、レビュー担当に「前回の要修正の行だけ」を再チェックさせる（`04_review.md` に「## 再レビュー」を追記）。
 
 ## 0. 準備
 1. 頼まれた内容からテーマ（無ければ「おまかせ」）と、主に狙う数字（保存数／シェア数／フォロー数のどれか）を決める。指定が無ければ、フォロワーを増やすならフォロー数、問い合わせを増やすなら保存数を狙う。
@@ -18,11 +21,11 @@ description: 「リールを1本作って」「リール作って」と頼まれ
 
 | 段階 | 呼ぶ社員（→は順番、＋は同時に呼んでよい） | 読む | 書く |
 |---|---|---|---|
-| 1 リサーチ | `ig-trend-researcher` ＋ `ig-viral-collector` | 00 | `01_research.md`（各自の節に分けて追記） |
+| 1 リサーチ | `ig-trend-researcher` ＋ `ig-viral-collector` | 00 | `01_research_trend.md` / `01_research_viral.md` |
 | 2 企画 | `ig-idea-generator`（3案→1案に絞る）→ `ig-structure-designer` → `ig-hook-writer` | 00〜01 | `02_plan.md`（採用ネタ・構成・フック案と採用フック） |
-| 3 台本 | `ig-script-writer` → `ig-title-writer` ＋ `ig-caption-writer` | 00〜02 | `03_script.md`（台本・タイトル・キャプション） |
+| 3 台本 | `ig-script-writer` → `ig-title-writer` ＋ `ig-caption-writer` | 00〜02 | `03_script.md` / `03_script_title.md` / `03_script_caption.md` |
 | 4 レビュー | `ig-fact-checker` → `ig-content-reviewer` | 00〜03 | `04_review.md`（確認表とOK／要修正／NG） |
-| 5 編集 | `ig-video-editor` → `ig-bgm-selector` ＋ `ig-sfx-designer` ＋ `ig-thumbnail-designer` | 00〜04 | `05_edit.md`（編集指示・BGM・効果音・サムネ指示） |
+| 5 編集 | `ig-video-editor` → `ig-bgm-selector` ＋ `ig-sfx-designer` ＋ `ig-thumbnail-designer` | 00〜04 | `05_edit.md` / `05_edit_bgm.md` / `05_edit_sfx.md` / `05_edit_thumbnail.md` |
 
 ### 社員に渡す依頼文の型
 ```
