@@ -363,3 +363,10 @@ kazuto / あまりん / さな / しー / かぴのすけ の5人それぞれに
 ### データ
 - `posts/booking_availability.json` — 各人の空き時間（`DATABASE_URL` 設定時は Postgres の `booking_availability` テーブル）
 - `posts/booking_reservations.json` — 確定した予約（同テーブル構成時は `interview_bookings` テーブル。予約の一意制約は `(member, slot)` の組み合わせ単位）
+
+---
+
+## インスタ運用 AI社員チーム（.claude/agents/ig-*.md）
+
+Claude Code のサブエージェント20人（5部署×4人）。共通の前提は `docs/instagram_team.md`。
+成果物は `instagram/` 配下に置く。投稿・コメント返信・DM送信は人が行う（AI社員は下書きまで）。
