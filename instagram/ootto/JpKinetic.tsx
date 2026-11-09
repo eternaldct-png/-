@@ -2,7 +2,7 @@
 // a small lead line over a big key line revealed on the voice, a list card, 2-frame flashes at beat starts, a CTA end card.
 // Used in the Ootto workspace (/work/project/src/JpKinetic.tsx). Data per reel: src/reels/rN.ts (ReelData).
 import React from "react";
-import {AbsoluteFill, Audio, Easing, Img, OffthreadVideo, interpolate, staticFile, useCurrentFrame, useVideoConfig} from "remotion";
+import {AbsoluteFill, Audio, Easing, Img, OffthreadVideo, Sequence, interpolate, staticFile, useCurrentFrame, useVideoConfig} from "remotion";
 import {loadFont} from "@remotion/google-fonts/NotoSansJP";
 
 const {fontFamily} = loadFont("normal", {weights: ["700", "900"], ignoreTooManyRequestsWarning: true});
@@ -15,7 +15,7 @@ export type Chunk = {t: string; at: number}; // text and the second it is spoken
 export type Beat = {
   from: number; to: number; // seconds
   bg: "light" | "dark" | "photo";
-  photo?: string; video?: string; videoFit?: "cover" | "contain"; icon?: string; icon2?: string;
+  photo?: string; video?: string; videoFit?: "cover" | "contain"; videoH?: number; textTop?: number; icon?: string; icon2?: string;
   lead?: Chunk[]; key?: Chunk[]; key2?: Chunk[]; keyPx?: number;
   card?: {title: string; items: {t: string; at: number; icon?: string}[]};
   cta?: {handle: string; line: string};
@@ -65,8 +65,10 @@ const BeatView: React.FC<{b: Beat; s: number}> = ({b, s}) => {
       ) : null}
       {b.video ? (
         <AbsoluteFill>
-          <OffthreadVideo src={staticFile(b.video)} muted style={{position: "absolute", width: "100%", height: b.videoFit === "contain" ? "62%" : "100%", top: 0, objectFit: b.videoFit ?? "cover"}} />
-          <AbsoluteFill style={{background: "linear-gradient(180deg, rgba(12,21,23,0) 0%, rgba(12,21,23,0) 38%, rgba(12,21,23,.85) 55%, rgba(12,21,23,.95) 100%)"}} />
+          <Sequence from={Math.round(b.from * 30)} layout="none">
+            <OffthreadVideo src={staticFile(b.video)} muted style={{position: "absolute", width: "100%", height: b.videoH ? `${b.videoH * 100}%` : b.videoFit === "contain" ? "62%" : "100%", top: 0, objectFit: b.videoFit ?? "cover"}} />
+          </Sequence>
+          <AbsoluteFill style={{background: b.videoH ? `linear-gradient(180deg, rgba(12,21,23,0) 0%, rgba(12,21,23,0) ${b.videoH * 100 - 4}%, rgba(12,21,23,1) ${b.videoH * 100 + 2}%)` : "linear-gradient(180deg, rgba(12,21,23,0) 0%, rgba(12,21,23,0) 38%, rgba(12,21,23,.85) 55%, rgba(12,21,23,.95) 100%)"}} />
         </AbsoluteFill>
       ) : null}
       {b.icon ? <>
@@ -92,7 +94,7 @@ const BeatView: React.FC<{b: Beat; s: number}> = ({b, s}) => {
           })}
         </div>
       ) : null}
-      <div style={{position: "absolute", left: 0, width: W, top: b.card ? 1060 : b.photo ? 560 : b.video ? 900 : 820, display: "flex", flexDirection: "column", alignItems: "center", gap: 18}}>
+      <div style={{position: "absolute", left: 0, width: W, top: b.textTop ?? (b.card ? 1060 : b.photo ? 560 : b.video ? 900 : 820), display: "flex", flexDirection: "column", alignItems: "center", gap: 18}}>
         {b.lead?.length ? <Line chunks={b.lead} t={t} px={fit(b.lead, 76)} color={ink} dark={dark} /> : null}
         {b.key?.length ? <Line chunks={b.key} t={t} px={fit(b.key, b.keyPx ?? 150)} color={keyCol} key2 dark={dark} /> : null}
         {b.key2?.length ? <Line chunks={b.key2} t={t} px={fit(b.key2, b.keyPx ?? 150)} color={keyCol} key2 dark={dark} /> : null}
