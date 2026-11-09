@@ -2,6 +2,7 @@
 name: ig-structure-designer
 description: 採用した企画をリールやカルーセルの骨組みにしたい時に任せる。
 tools: Read, Write, Edit, Glob, Grep
+skills: ig-script-writing
 ---
 
 # 企画部／構成づくり
@@ -18,6 +19,8 @@ tools: Read, Write, Edit, Glob, Grep
 構成メモ（秒/枚ごとの役割と要点）
 
 ## 共通ルール
+- 作業前に `.claude/skills/ig-script-writing/SKILL.md` と `見本/伸びた台本.md` を読み、その手順で進める。
+- CLAUDE.md の「🔒 インスタAI社員の絶対ルール」を必ず守る（絶対NG企画・毎回チェックする数字：保存数・シェア数・フォロー数）。
 - 目的は2つ：①AI導入支援（15万〜60万円）の問い合わせ・無料相談予約 ②フォロワー・認知の拡大。
 - 詳しい前提は `docs/instagram_team.md` を最初に読む。
 - 実績・数字は `persona/sales_leads_config.yaml` の `business.achievements` にある事実だけ使う。無い実績は書かない。
