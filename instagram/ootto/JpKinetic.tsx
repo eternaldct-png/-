@@ -15,7 +15,7 @@ export type Chunk = {t: string; at: number}; // text and the second it is spoken
 export type Beat = {
   from: number; to: number; // seconds
   bg: "light" | "dark" | "photo";
-  photo?: string; video?: string; videoFit?: "cover" | "contain"; videoH?: number; textTop?: number; icon?: string; icon2?: string;
+  photo?: string; video?: string; videoFit?: "cover" | "contain"; videoH?: number; textTop?: number; photoY?: number; icon?: string; icon2?: string;
   lead?: Chunk[]; key?: Chunk[]; key2?: Chunk[]; keyPx?: number;
   card?: {title: string; items: {t: string; at: number; icon?: string}[]};
   cta?: {handle: string; line: string};
@@ -59,7 +59,7 @@ const BeatView: React.FC<{b: Beat; s: number}> = ({b, s}) => {
       {b.photo ? (
         <AbsoluteFill>
           <Img src={staticFile(b.photo)} style={{position: "absolute", width: "100%", height: "100%", objectFit: "cover", objectPosition: "38% 50%",
-            transform: `scale(${interpolate(lt, [0, b.to - b.from], [1.18, 1.3], cl)}) translateX(${interpolate(lt, [0, b.to - b.from], [0, -30], cl)}px)`}} />
+            transform: `scale(${interpolate(lt, [0, b.to - b.from], [1.18, 1.3], cl)}) translateX(${interpolate(lt, [0, b.to - b.from], [0, -30], cl)}px) translateY(${b.photoY ?? 0}px)`, transformOrigin: "50% 0%"}} />
           <AbsoluteFill style={{background: "linear-gradient(180deg, rgba(12,21,23,.15) 0%, rgba(12,21,23,.55) 35%, rgba(12,21,23,.92) 62%, rgba(12,21,23,.95) 100%)"}} />
         </AbsoluteFill>
       ) : null}
@@ -88,7 +88,7 @@ const BeatView: React.FC<{b: Beat; s: number}> = ({b, s}) => {
             return (
               <div key={i} style={{display: "flex", alignItems: "center", gap: 22, marginBottom: 34, opacity: t < it.at ? 0 : q, transform: `translateX(${(1 - q) * 40}px)`}}>
                 {it.icon ? <Img src={staticFile(it.icon)} style={{width: 120, height: 120}} /> : null}
-                <div style={{fontSize: fit([{t: it.t, at: 0}], 66, 600), fontWeight: 700, color: ink, whiteSpace: "nowrap"}}>{it.t}</div>
+                <div style={{fontSize: fit([{t: it.t, at: 0}], 76, 640), fontWeight: 700, color: ink, whiteSpace: "nowrap"}}>{it.t}</div>
               </div>
             );
           })}
