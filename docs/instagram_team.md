@@ -20,6 +20,8 @@
 | 4 | 編集部 | `instagram/edit/`（編集指示・BGM・効果音・サムネ指示） |
 | 5 | 分析部 | `instagram/reports/`（数値・改善提案）、コメント/DMの返信下書き |
 
+リール1本を作るときの受け渡し（担当の順番・ファイル名・差し戻し）は `.claude/skills/ig-reel-pipeline/SKILL.md`。
+
 ## 守ること
 - **投稿・コメント返信・DM送信はすべて人が行う。** AI社員は下書きまで（自動送信はインスタの規約違反・凍結のリスク）。
 - 実績は `persona/sales_leads_config.yaml` の `business.achievements` の事実だけ。顧客の数字・成果を作らない。
