@@ -45,3 +45,12 @@ python3 tools/motion_render/export_homepage.py <eternaldct-new-site のパス>
 python3 tools/motion_render/make_eyecatch.py <eternaldct-new-site のパス>/assets/motion/ogp.jpg
 ```
 その後、サイトの管理画面からいつもどおりサーバーに反映する。
+
+## /motion に載せない動画（紹介動画など）
+`OUT_DIR` を指定すると、書き出し先を `src/static/motion/` 以外に変えられます（サイトには公開されません）。
+```bash
+OUT_DIR=out node render.mjs fable-intro video   # tools/motion_render/out/fable-intro.mp4 と .jpg
+```
+- `scenes/fable-intro.js` … Claude Fable 5.2 の紹介動画（16:9・20秒・音なし）。非公式の紹介動画で、性能の数値は入れていません。
+- `node render.mjs all video` は `scenes/` の全ファイルを `src/static/motion/` に書き出すので、
+  `fable-intro` を載せたくないときは作例idを個別に指定してください。

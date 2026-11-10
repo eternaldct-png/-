@@ -6,7 +6,8 @@
 //   node render.mjs all video                … scenes/ の全作例を書き出す
 //
 // 必要なもの: Node.js / playwright（Chromium）/ ffmpeg / fonts/（python3 fetch_fonts.py で取得）
-// 環境変数: CHROMIUM_PATH（任意の Chromium を使う場合）, CRF（画質。既定 26。小さいほど高画質・大容量）
+// 環境変数: CHROMIUM_PATH（任意の Chromium を使う場合）, CRF（画質。既定 26。小さいほど高画質・大容量）,
+//           OUT_DIR（書き出し先。既定は ../../src/static/motion）
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -22,7 +23,8 @@ async function loadPlaywright() {
 }
 
 const ROOT = path.dirname(new URL(import.meta.url).pathname);
-const OUT = path.resolve(ROOT, '../../src/static/motion');
+// OUT_DIR を指定すると書き出し先を変えられる（/motion に載せない動画用）
+const OUT = process.env.OUT_DIR ? path.resolve(process.env.OUT_DIR) : path.resolve(ROOT, '../../src/static/motion');
 const [sceneArg, mode = 'stills', arg = '0'] = process.argv.slice(2);
 if (!sceneArg) { console.error('usage: node render.mjs <scene|all> <stills|video> [times]'); process.exit(1); }
 if (!fs.existsSync(path.join(ROOT, 'fonts', 'fonts.css'))) { console.error('fonts/ がありません。先に python3 fetch_fonts.py を実行してください'); process.exit(1); }
