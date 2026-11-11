@@ -1,4 +1,4 @@
-// 会議ノートの E2E テスト（Playwright。偽の Claude / Whisper を使う fake_server.py に対して動かす）
+// キキトメの E2E テスト（Playwright。偽の Claude / Whisper を使う fake_server.py に対して動かす）
 //
 //   python3 tools/meeting_notes/e2e/fake_server.py --port 5099 --data /tmp/mn-e2e &
 //   NODE_PATH=$(npm root -g) node tools/meeting_notes/e2e/flows.e2e.cjs http://127.0.0.1:5099 [スクショの保存先]
@@ -39,7 +39,7 @@ async function fromText(page, text, opts) {
   await newMeeting(page, opts);
   await page.getByRole("tab", { name: "📄 文字起こしを入れる" }).click();
   await page.getByLabel("または貼り付け").fill(text);
-  await page.getByRole("button", { name: "取り込んでノートを作る" }).last().click();
+  await page.getByRole("button", { name: "取り込んで書き留める" }).last().click();
   await page.waitForURL(/\/m\/[0-9a-f]{32}/);
   await waitDone(page);
 }
@@ -68,7 +68,7 @@ const tests = {
   async "F03-E1 空の文字起こしはエラーを出して進まない"(page) {
     await newMeeting(page);
     await page.getByRole("tab", { name: "📄 文字起こしを入れる" }).click();
-    await page.getByRole("button", { name: "取り込んでノートを作る" }).last().click();
+    await page.getByRole("button", { name: "取り込んで書き留める" }).last().click();
     await page.getByRole("alert").waitFor();
     assert(page.url().endsWith("/new"), "空なのに画面が進んだ");
   },
@@ -80,7 +80,7 @@ const tests = {
     await newMeeting(page);
     await page.getByRole("tab", { name: "📄 文字起こしを入れる" }).click();
     await page.getByLabel(/文字起こしファイル/).setInputFiles(file);
-    await page.getByRole("button", { name: "取り込んでノートを作る" }).last().click();
+    await page.getByRole("button", { name: "取り込んで書き留める" }).last().click();
     await page.waitForURL(/\/m\//);
     await waitDone(page);
     await page.getByRole("tab", { name: "文字起こし" }).click();
@@ -103,9 +103,9 @@ const tests = {
     assert(!(await page.getByRole("button", { name: "● 録音を開始" }).isVisible()), "録音中なのに「録音を開始」が見えている（B1）");
     await shot(page, "S02-recording");
     await page.getByRole("button", { name: "■ 停止" }).click();
-    await page.getByRole("button", { name: "保存してノートを作る" }).click();
+    await page.getByRole("button", { name: "保存して書き留める" }).click();
     await page.waitForURL(/\/m\//);
-    assert(await page.getByRole("status").filter({ hasText: /順番待ち|文字起こし中|ノートを書いています/ }).count() >= 1, "処理中の表示が出ていない");
+    assert(await page.getByRole("status").filter({ hasText: /順番待ち|文字起こし中|書き留めています/ }).count() >= 1, "処理中の表示が出ていない");
     await shot(page, "S03-processing");
     await waitDone(page);
     assert(await page.getByRole("heading", { name: "録音テスト" }).isVisible(), "自分で付けたタイトルが上書きされた");
@@ -127,7 +127,7 @@ const tests = {
     await newMeeting(page);
     await page.getByRole("tab", { name: "📁 録音ファイルを入れる" }).click();
     await page.getByLabel("録音・録画ファイル").setInputFiles(file);
-    await page.getByRole("button", { name: "取り込んでノートを作る" }).first().click();
+    await page.getByRole("button", { name: "取り込んで書き留める" }).first().click();
     await page.waitForURL(/\/m\//);
     await waitDone(page);
     assert(await page.getByText("渋谷の会場で決定").isVisible(), "ノートができていない");
@@ -139,13 +139,13 @@ const tests = {
     await newMeeting(page);
     await page.getByRole("tab", { name: "📁 録音ファイルを入れる" }).click();
     await page.getByLabel("録音・録画ファイル").setInputFiles(file);
-    await page.getByRole("button", { name: "取り込んでノートを作る" }).first().click();
+    await page.getByRole("button", { name: "取り込んで書き留める" }).first().click();
     await page.getByRole("alert").filter({ hasText: "対応していません" }).waitFor();
   },
 
   async "F01-N1 AIが失敗したら理由とやり直すボタンが出る"(page) {
     await fromText(page, "FAIL_AI これは失敗させるテスト");
-    await page.getByText("うまく処理できませんでした").waitFor();
+    await page.getByText("書き留められませんでした").waitFor();
     assert(await page.getByRole("button", { name: "やり直す" }).isVisible(), "やり直すボタンが無い");
     await shot(page, "S03-failed");
     await page.goto(BASE + "/");
@@ -311,12 +311,12 @@ const tests = {
     await newMeeting(page);
     await page.getByRole("tab", { name: "📄 文字起こしを入れる" }).click();
     await page.getByLabel("または貼り付け").fill("一つ目の会議");
-    await page.getByRole("button", { name: "取り込んでノートを作る" }).last().click();
+    await page.getByRole("button", { name: "取り込んで書き留める" }).last().click();
     await page.waitForURL(/\/m\//);
     await newMeeting(page);
     await page.getByRole("tab", { name: "📄 文字起こしを入れる" }).click();
     await page.getByLabel("または貼り付け").fill("二つ目の会議");
-    await page.getByRole("button", { name: "取り込んでノートを作る" }).last().click();
+    await page.getByRole("button", { name: "取り込んで書き留める" }).last().click();
     await page.waitForURL(/\/m\//);
     await waitDone(page);
   },

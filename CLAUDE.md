@@ -366,9 +366,11 @@ kazuto / あまりん / さな / しー / かぴのすけ の5人それぞれに
 
 ---
 
-## 会議ノート（tools/meeting_notes、自分のPCで動かす）
+## キキトメ — 会議ノート（tools/meeting_notes、自分のPCで動かす）
 
-Circleback（AI会議ノート）のコア機能を Replica スキル（recon → architect → design → build → test）で自分用に作り直したもの。
+既存のAI会議ノートサービスのコア機能を Replica スキル（recon → architect → design → build → test → entrepreneur → brand）で
+自分用に作り直したもの（元のサービス名・調査は `replica/` にだけ書く。アプリ本体・README には出さない。`replica/brand.json` の sweep で確認）。
+名前は「キキトメ」（聞き留め）。ブランド・配色・言葉づかいは `replica/brand.md`。
 **Render にはデプロイしない**。代表の Mac で `tools/meeting_notes/start.command` をダブルクリックして使う（`http://127.0.0.1:5055`）。
 使い方・準備は `tools/meeting_notes/README.md`、設計の記録は `replica/`（recon.md / architecture.md / features.csv / design/ / test-plan.md / bugs.md / build-log.md）。
 
@@ -376,7 +378,7 @@ Circleback（AI会議ノート）のコア機能を Replica スキル（recon �
 - データは `~/MeetingNotes/`（SQLite と録音）。リポジトリには入れない。APIキーは `~/MeetingNotes/.env`
 - ログインなしの代わりに、`127.0.0.1` だけで待ち受け、Host ヘッダーを確認し、書き換えAPIは独自ヘッダー `X-Meeting-Notes: 1` 必須
 - faster-whisper が無くても録音は必ず保存する（処理は「失敗」になり、導入後に「やり直す」）。録り直せない会議を失わないため
-- Circleback の口コミ（22件・検索経由で原文未確認）から不満を順位付けし、8項目を直した（`replica/fixes.md`）:
+- 元のサービスの口コミ（22件・検索経由で原文未確認）から不満を順位付けし、8項目を直した（`replica/fixes.md`）:
   AI費用の表示と月の上限 / 動作チェック / 話者の1行ずつ修正とAI推定 / 録音前の同意・操作の記録・録音の保存日数 /
   10秒ごとの途中保存と復旧・無音警告・通知 / やることの根拠照合（要確認）・よく出る言葉・小さい声モード / マイク選択・会議室モード
 - テスト: `python3 -m pytest tests/test_meeting_notes.py`、E2E は `bash tools/meeting_notes/e2e/run.sh`（偽の Claude/Whisper、Playwright）

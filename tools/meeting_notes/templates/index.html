@@ -45,8 +45,8 @@
   <div class="empty"><p>「{{ q or tag }}」に当てはまる会議はありませんでした。</p><a class="btn" href="{{ url_for('index') }}">すべての会議を見る</a></div>
 {% else %}
   <div class="empty">
-    <p>まだ会議がありません。<br>録音するか、録音ファイル・文字起こしを入れると、ノートとやることを自動で作ります。</p>
-    <a class="btn btn-primary" href="{{ url_for('new') }}">＋ 最初の会議を入れる</a>
+    <p>まだ何も書き留めていません。<br>会議を録音するか、録音ファイル・文字起こしを入れてください。要点とやることを書き留めます。<br>録音はこのPCの外に出ません。</p>
+    <a class="btn btn-primary" href="{{ url_for('new') }}">＋ 最初の会議を書き留める</a>
   </div>
 {% endif %}
 {% endblock %}

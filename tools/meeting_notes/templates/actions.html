@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}やること - 会議ノート{% endblock %}
+{% block title %}やること - キキトメ{% endblock %}
 {% block main %}
 <h1>やること</h1>
 <form class="row" method="get" style="margin-bottom: var(--sp-4)">
@@ -25,7 +25,7 @@
   </ul>
 {% else %}
   <div class="empty">
-    {% if state == 'open' and not owner %}<p>まだ終わっていないやることはありません 🎉</p>
+    {% if state == 'open' and not owner %}<p>残っているやることはありません。</p>
     {% else %}<p>条件に当てはまるやることはありません。</p>{% endif %}
     <a class="btn" href="{{ url_for('actions', state='all') }}">すべて表示</a>
   </div>
