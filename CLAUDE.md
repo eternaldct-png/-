@@ -374,8 +374,12 @@ kazuto / あまりん / さな / しー / かぴのすけ の5人それぞれに
 **Render にはデプロイしない**。代表の Mac で `tools/meeting_notes/start.command` をダブルクリックして使う（`http://127.0.0.1:5055`）。
 使い方・準備は `tools/meeting_notes/README.md`、設計の記録は `replica/`（recon.md / architecture.md / features.csv / design/ / test-plan.md / bugs.md / build-log.md）。
 
-- 録音（ブラウザ）・録音ファイル・文字起こし（Zoom/Meet の .vtt 等）→ faster-whisper（ローカル）で文字起こし → Claude（`claude-opus-5-5`、構造化出力）で要約・話題別ノート・担当者つきのやること
-- データは `~/MeetingNotes/`（SQLite と録音）。リポジトリには入れない。APIキーは `~/MeetingNotes/.env`
+- 録音（ブラウザ）・録音ファイル・文字起こし（Zoom/Meet の .vtt 等）→ faster-whisper（ローカル）で文字起こし → 要約・話題別ノート・担当者つきのやること
+- **APIキー不要・端末保存が既定。** ノートの作り方は「設定」の `ai_engine`（`ai.resolve_engine`）:
+  `auto`（既定。Ollama が動いていて設定のモデルがあれば端末内AI、無ければAIなし）/ `ollama`（`local_ai.py`、127.0.0.1 の Ollama だけに接続・プロキシを通さない）/
+  `simple`（AIなし。発言の抜き出しで決まりごと・やること・担当・期限を拾う）/ `claude`（Claude API。**明示して選んだときだけ**。`auto` では選ばない）
+- 端末内AI は長い会議を 12,000 文字ずつに分けて読み、最後に要約をまとめる（`ai.OLLAMA_CHUNK_CHARS`）
+- データは `~/MeetingNotes/`（SQLite と録音）。リポジトリには入れない。Claude を使うときだけ APIキーを `~/MeetingNotes/.env` に置く
 - ログインなしの代わりに、`127.0.0.1` だけで待ち受け、Host ヘッダーを確認し、書き換えAPIは独自ヘッダー `X-Meeting-Notes: 1` 必須
 - faster-whisper が無くても録音は必ず保存する（処理は「失敗」になり、導入後に「やり直す」）。録り直せない会議を失わないため
 - 元のサービスの口コミ（22件・検索経由で原文未確認）から不満を順位付けし、8項目を直した（`replica/fixes.md`）:

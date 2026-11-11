@@ -292,7 +292,7 @@ const tests = {
   async "FIX1-2-4 設定に動作チェック・AI費用・操作の記録が出て、上限を保存できる"(page) {
     await page.goto(`${BASE}/settings`);
     await page.getByRole("heading", { name: "動作チェック" }).waitFor();
-    assert(await page.getByText("Claude の APIキー").isVisible(), "動作チェックが出ていない");
+    assert(await page.locator(".check-list strong", { hasText: "ノートの作り方" }).isVisible(), "動作チェックが出ていない");
     assert((await page.locator("#month-cost").textContent()).match(/約\d+円/), "今月の費用が出ていない");
     assert(await page.locator(".log-table td", { hasText: "AIへ送信" }).count() >= 1, "AIへの送信が操作の記録に無い");
     await page.getByLabel("AI費用の月の上限（円）").fill("abc");

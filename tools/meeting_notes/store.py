@@ -28,6 +28,9 @@ DEFAULT_SETTINGS = {
     "monthly_budget_jpy": "0",   # 月の AI 費用の上限（0 = 上限なし）
     "usd_jpy": "150",            # 費用の円換算
     "audio_retention_days": "0", # 録音を自動で消すまでの日数（0 = 消さない）
+    # 端末保存・API なしで使う（AI の選び方は ai.resolve_engine）
+    "ai_engine": "auto",           # auto | ollama | simple | claude（claude は明示して選んだときだけ）
+    "ollama_model": "qwen2.5:7b",  # 端末内AI のモデル名
 }
 
 # あとから足した列（古い DB にも足す）

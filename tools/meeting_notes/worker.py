@@ -127,9 +127,13 @@ class Worker:
             self.store.update_meeting(mid, status="summarizing", error="")
             meter = ai.Meter(self.store, settings, mid, "notes")
             notes = ai.generate_notes(m, settings, client=self.ai_client, meter=meter)
-            self.store.log("ai_notes", mid, f"ノート作成のため文字起こし（{len(m['transcript'])}行）を Claude に送信")
+            engine = notes.pop("engine", "")
+            if engine == "claude":
+                self.store.log("ai_notes", mid, f"ノート作成のため文字起こし（{len(m['transcript'])}行）を Claude（外部）に送信")
+            else:
+                self.store.log("local_notes", mid, f"{ai.ENGINE_LABELS.get(engine, engine)}でノートを作成（外部への送信なし）")
             actions = notes.pop("action_items", [])
-            fields = {"notes": notes, "notes_model": settings.get("model", ""), "status": "done", "error": ""}
+            fields = {"notes": notes, "notes_model": settings.get("model", "") if engine == "claude" else engine, "status": "done", "error": ""}
             if not m["title"].strip() and notes.get("title"):
                 fields["title"] = notes["title"][:60]
             self.store.replace_ai_actions(mid, actions)

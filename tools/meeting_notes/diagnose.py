@@ -31,12 +31,32 @@ def run_checks(data_dir: Path, store, worker, testing: bool = False) -> list[dic
     def add(name, ok, detail, fix=""):
         out.append({"name": name, "ok": ok, "detail": detail, "fix": fix})
 
+    from . import ai, local_ai
+    engine = ai.resolve_engine(settings, None if not testing else object())
+    choice = settings.get("ai_engine") or "auto"
+    add("ノートの作り方", True if engine != "simple" or choice == "simple" else None,
+        f"{ai.ENGINE_LABELS[engine]}" + ("（自動で選択）" if choice == "auto" else ""),
+        "" if engine != "simple" or choice == "simple" else
+        "端末内AIを入れると要約として書き留められます: Ollama（https://ollama.com）を入れて起動 → ターミナルで "
+        f"ollama pull {settings.get('ollama_model') or local_ai.DEFAULT_OLLAMA_MODEL}")
+    if choice in ("auto", "ollama"):
+        models = local_ai.ollama_models()
+        name = settings.get("ollama_model") or local_ai.DEFAULT_OLLAMA_MODEL
+        if models is None:
+            add("端末内AI（Ollama）", None if choice == "auto" else False, "動いていません（入っていないか、アプリが起動していない）",
+                "https://ollama.com から入れて起動する（入れたくなければ「AIなし」のままでも使えます）")
+        elif not local_ai.has_model(models, name):
+            add("端末内AI（Ollama）", None if choice == "auto" else False, f"動いていますが、モデル {name} がありません",
+                f"ターミナルで ollama pull {name}（数GBのダウンロード）")
+        else:
+            add("端末内AI（Ollama）", True, f"動いています（モデル {name}）")
     key = os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")
-    if key or testing:
-        add("Claude の APIキー", True, "設定されています" + (f"（…{key[-4:]}）" if key else ""))
-    else:
-        add("Claude の APIキー", False, "設定されていません。ノート作成とAIへの質問が動きません。",
-            "~/MeetingNotes/.env に ANTHROPIC_API_KEY=… を書いて、アプリを起動し直す（README「準備」）")
+    if choice == "claude":
+        if key or testing:
+            add("Claude の APIキー", True, "設定されています" + (f"（…{key[-4:]}）" if key else ""))
+        else:
+            add("Claude の APIキー", False, "Claude API を選んでいますが、キーがありません。",
+                "「端末内AI」か「AIなし」に切り替える。または ~/MeetingNotes/.env に ANTHROPIC_API_KEY=… を書いて起動し直す")
 
     py = sys.version_info
     add("Python", py >= (3, 10), f"{py.major}.{py.minor}.{py.micro}",
