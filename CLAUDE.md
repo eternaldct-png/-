@@ -1,4 +1,8 @@
-# CLAUDE.md — プロジェクト概要と定型作業
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+（プロジェクト概要と定型作業。説明は日本語で書く）
 
 ## このリポジトリの概要
 eternaldct-png/- は ETERNAL d.c.t の投稿自動化 & グッズ販売サイト。
@@ -6,6 +10,39 @@ eternaldct-png/- は ETERNAL d.c.t の投稿自動化 & グッズ販売サイト
 - 本番URL: `https://kazuto-post-generator.onrender.com`
 - ホームページ: `https://eternaldct.net`（静的サイト。`eternaldct-png/ETERNAL-` リポジトリの `eternaldct-new-site/`。
   Mac の `ETERNALライバー事務所/` フォルダで管理し、管理ツールから FTPS で Xserver に反映する）
+
+## 開発コマンド
+
+```bash
+pip install -r requirements.txt pytest   # テストは unittest 形式だが pytest で実行する
+python -m pytest -q                       # 全テスト（数秒。外部APIは呼ばない）
+python -m pytest -q tests/test_waku.py    # 1ファイル
+python -m pytest -q tests/test_waku.py::WakuConfigTest::test_tiers_match_the_uta_oshi_calculator  # 1件
+```
+- ローカル起動（本番と同じ）: `gunicorn src.web_app:app --bind 0.0.0.0:5000 --workers 1 --timeout 120`
+  （`src.booking_app:app` / `src.schedule_app:app` も同様）
+- 投稿の自動化（CLI）: `python src/main.py --dry-run` など。オプションは `src/main.py` 冒頭の docstring
+- lint・ビルドの設定はない
+
+## 全体構成（複数ファイルを読まないと分からない点）
+
+- **3つの Flask アプリが同じ `src/` と `requirements.txt` を共有**し、`render.yaml` で Render の別サービスになっている:
+  `src/web_app.py`（`kazuto-post-generator`。/goods /motion /stickers /audition /waku ほか）、
+  `src/booking_app.py`（`eternal-interview-booking`）、`src/schedule_app.py`（`eternal-schedule`）。
+  どれも gunicorn `--workers 1 --timeout 120`、無料プラン（スリープ・ディスク揮発）。
+- **import の作法**: 各エントリーは `sys.path.insert(0, src/)` してから `import waku_tracker` のように**パッケージ名なしで** import する。
+  テストは `from src import web_app` を先に読み込み、その後に同じ素の名前で import する（`src.xxx` で import すると別モジュール扱いになり、状態がずれる）。
+- **`web_app.py` は約5,500行の単一ファイル**。ページの HTML は `XXX_HTML` という文字列定数で埋め込み（テンプレートファイルは無い）。
+  新しめの機能は `xxx.py`（ロジック）＋ `xxx_web.py`（Blueprint）に分け、`web_app.py` 末尾で `register_blueprint` する（/leads, /video-brief）。
+- **設定は `persona/*.yaml`** に寄せ、運用上の変更はコードではなく YAML で行う方針（各ページの節を参照）。
+- **データ保存の共通パターン**: `DATABASE_URL`（Supabase/Postgres、`psycopg2` を関数内で import）があれば DB、
+  無ければ `posts/*.json` にフォールバック。Render ではファイルが消えるので、残すべきデータは DB 前提で設計する。
+- **管理画面のログイン**は `WEB_PASSWORD`（各機能で共通）、セッション維持は `FLASK_SECRET_KEY`。フォーム POST は CSRF トークン必須
+  （例: `sales_leads_web._csrf_token`）。
+- **X/Instagram/note/TikTok の自動投稿**は Render ではなく GitHub Actions（`.github/workflows/`、cron は UTC 表記）から
+  `src/main.py` 等を実行し、履歴を `posts/` にコミットして残す。プラットフォーム差分は `src/platforms/`（`PlatformAdapter` を継承）。
+  X API の読み取り系は現プランで 401 になるため、`analyze_engagement.yml` の schedule は無効化中。
+- **Render 外で動くもの**: `tools/meeting_notes`（代表の Mac で起動）、`tools/motion_render`（Node + Playwright + ffmpeg で作例動画を書き出し）。
 
 ---
 
@@ -69,7 +106,7 @@ eternaldct-png/- は ETERNAL d.c.t の投稿自動化 & グッズ販売サイト
 ```bash
 git add persona/goods_config.yaml src/static/goods/
 git commit -m "商品名を追加"
-git push -u origin claude/homepage-payment-spreadsheet-DD1ly
+git push -u origin <作業ブランチ>
 # → GitHub MCP で PR作成 → マージ → Render が自動デプロイ
 ```
 
