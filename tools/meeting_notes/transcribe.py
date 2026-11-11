@@ -97,9 +97,8 @@ def parse_plain(text: str) -> list[dict]:
         if m and not re.match(r"^https?$", m.group("who").strip()):
             t = _clock(m.group("ts") or m.group("ts2"))
             segs.append({"speaker": m.group("who").strip(), "start": t, "end": t, "text": m.group("text").strip()})
-        elif segs and not segs[-1]["speaker"]:
-            segs[-1]["text"] += "\n" + line
         else:
+            # 話者の無い行も1行ずつ分けておく（あとで行ごとに話者を付けられるように）
             segs.append({"speaker": "", "start": None, "end": None, "text": line})
     return segs
 
@@ -148,8 +147,13 @@ def whisper_available() -> bool:
         return False
 
 
-def transcribe_audio(path: str, *, model_size: str = "small", language: str = "ja", progress=None):
-    """音声ファイルを文字にする。progress(処理済み秒, 全体秒) を時々呼ぶ。戻り値は (segments, 長さ秒)。"""
+def transcribe_audio(path: str, *, model_size: str = "small", language: str = "ja", progress=None,
+                     vocabulary: list[str] | None = None, quiet: bool = False):
+    """音声ファイルを文字にする。progress(処理済み秒, 全体秒) を時々呼ぶ。戻り値は (segments, 長さ秒)。
+
+    vocabulary: よく出る言葉・固有名詞。Whisper に「前置き」として渡すと、その表記で聞き取られやすくなる。
+    quiet: 小さい声を拾うモード。無音カット（VAD）を切り、聞き取れない区間の判定も緩める。
+    """
     try:
         from faster_whisper import WhisperModel
     except Exception as e:  # ImportError のほか、依存ライブラリの読み込み失敗もある
@@ -169,7 +173,13 @@ def transcribe_audio(path: str, *, model_size: str = "small", language: str = "j
                 f"インターネットにつながっているか確認して「やり直す」を押してください。（詳細: {type(e).__name__}: {e}）"
             ) from e
         _MODELS[model_size] = model
-    segments, info = model.transcribe(path, language=language or None, vad_filter=True, beam_size=5)
+    kwargs = {"language": language or None, "beam_size": 5, "vad_filter": not quiet}
+    if vocabulary:
+        kwargs["initial_prompt"] = "、".join(vocabulary)[:400]
+    if quiet:
+        kwargs["no_speech_threshold"] = 0.8   # 既定 0.6。小さい声を「無音」と判定しにくくする
+        kwargs["log_prob_threshold"] = -1.5   # 既定 -1.0
+    segments, info = model.transcribe(path, **kwargs)
     total = float(getattr(info, "duration", 0) or 0)
     out = []
     for seg in segments:

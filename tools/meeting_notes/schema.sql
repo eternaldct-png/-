@@ -57,3 +57,42 @@ CREATE TABLE IF NOT EXISTS settings (
   key    TEXT PRIMARY KEY,
   value  TEXT NOT NULL
 );
+
+-- ── 口コミの不満への対応で足したもの（replica/fixes.md） ──
+
+-- AI の使用量と費用（不満: 高い・いくらかかるか分からない）
+CREATE TABLE IF NOT EXISTS ai_usage (
+  id             TEXT PRIMARY KEY,
+  meeting_id     TEXT,                -- 会議を消しても費用の記録は残す（外部キーにしない）
+  kind           TEXT NOT NULL,       -- notes | ask | ask_all | speakers
+  model          TEXT NOT NULL,
+  input_tokens   INTEGER NOT NULL DEFAULT 0,
+  output_tokens  INTEGER NOT NULL DEFAULT 0,
+  cost_usd       REAL NOT NULL DEFAULT 0,
+  created_at     TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ai_usage_created ON ai_usage (created_at);
+CREATE INDEX IF NOT EXISTS ai_usage_meeting ON ai_usage (meeting_id);
+
+-- 操作の記録（不満: 記録の透明性・監査ログが無い）
+CREATE TABLE IF NOT EXISTS activity (
+  id          TEXT PRIMARY KEY,
+  at          TEXT NOT NULL,
+  action      TEXT NOT NULL,
+  meeting_id  TEXT,
+  detail      TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS activity_at ON activity (at DESC);
+
+-- 録音中の途中保存（不満: 録音が消えた・取れていなかった）
+CREATE TABLE IF NOT EXISTS recordings (
+  id          TEXT PRIMARY KEY,
+  path        TEXT NOT NULL,           -- audio/ からの相対パス
+  ext         TEXT NOT NULL,
+  bytes       INTEGER NOT NULL DEFAULT 0,
+  chunks      INTEGER NOT NULL DEFAULT 0,
+  meta        TEXT NOT NULL DEFAULT '{}',
+  status      TEXT NOT NULL DEFAULT 'recording' CHECK (status IN ('recording','finished','discarded')),
+  started_at  TEXT NOT NULL,
+  updated_at  TEXT NOT NULL
+);

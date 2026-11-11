@@ -180,3 +180,22 @@ details > summary { cursor: pointer; font-weight: 600; }
 dl.kv { display: grid; grid-template-columns: 6em 1fr; gap: var(--sp-2) var(--sp-3); margin: 0; }
 dl.kv dt { color: var(--text-muted); font-size: var(--fs-sm); }
 dl.kv dd { margin: 0; }
+
+/* ── 口コミの不満への対応で足した部品 ── */
+.evidence { font-size: var(--fs-xs); line-height: var(--lh-xs); color: var(--text-muted); margin-top: var(--sp-1); }
+.evidence.unverified { color: var(--warning); background: var(--warning-soft); border-radius: var(--radius-sm); padding: var(--sp-1) var(--sp-2); }
+.badge-guess { background: var(--surface); color: var(--text-muted); border: 1px dashed var(--border-input); }
+.tline .who-btn { background: none; border: 0; padding: 0; font: inherit; font-weight: 700; font-size: var(--fs-sm); color: var(--text); cursor: pointer; text-align: left; }
+.tline .who-btn.empty { color: var(--text-muted); font-weight: 400; }
+.tline .who-btn:hover { text-decoration: underline; }
+.check-list { list-style: none; padding: 0; margin: 0; }
+.check-list li { display: grid; grid-template-columns: 28px 1fr; gap: var(--sp-2); padding: var(--sp-2) 0; border-bottom: 1px solid var(--border); }
+.check-list .fix { color: var(--text-muted); font-size: var(--fs-xs); line-height: var(--lh-xs); }
+.log-table { width: 100%; border-collapse: collapse; font-size: var(--fs-xs); line-height: var(--lh-xs); }
+.log-table th, .log-table td { text-align: left; padding: var(--sp-1) var(--sp-2); border-bottom: 1px solid var(--border); vertical-align: top; overflow-wrap: anywhere; }
+.log-scroll { max-height: 360px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-md); }
+.warn-live { color: var(--danger); font-weight: 700; margin: var(--sp-2) 0; }
+fieldset.consent { border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--sp-3) var(--sp-4); margin: 0 auto var(--sp-4); max-width: 560px; text-align: left; }
+fieldset.consent legend { font-weight: 700; font-size: var(--fs-sm); padding: 0 var(--sp-1); }
+fieldset.consent label { display: flex; gap: var(--sp-2); align-items: flex-start; margin: var(--sp-1) 0; }
+.rec-options { display: grid; gap: var(--sp-2); max-width: 560px; margin: 0 auto var(--sp-4); text-align: left; }

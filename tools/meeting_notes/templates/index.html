@@ -2,7 +2,9 @@
 {% block main %}
 <div class="row row-between">
   <h1>会議</h1>
+  {% if busy_count %}<span class="badge badge-warn" role="status">処理中・処理待ち {{ busy_count }}件（その間も次の会議を入れられます）</span>{% endif %}
 </div>
+{% include "_stale.html" %}
 <form class="row" role="search" method="get" action="{{ url_for('index') }}" style="margin-bottom: var(--sp-4)">
   <label class="sr-only" for="q">会議を検索</label>
   <input type="search" id="q" name="q" value="{{ q }}" placeholder="キーワードで検索（タイトル・ノート・文字起こし・やること）" style="flex:1; min-width: 200px">

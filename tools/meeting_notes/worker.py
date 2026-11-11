@@ -48,9 +48,35 @@ class Worker:
         with self._lock:
             return mid in self._pending
 
+    def purge_old_audio(self) -> int:
+        """設定した日数より古い会議の録音ファイルを消す（ノート・文字起こしは残す）。"""
+        days = int(float(self.store.settings().get("audio_retention_days") or 0))
+        if days <= 0:
+            return 0
+        from datetime import datetime, timedelta, timezone
+        before = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
+        n = 0
+        for m in self.store.meetings_with_old_audio(before):
+            (self.audio_dir / m["audio_path"]).unlink(missing_ok=True)
+            self.store.update_meeting(m["id"], audio_path="")
+            self.store.log("audio_purged", m["id"], f"保存期間（{days}日）を過ぎたので録音ファイルを削除")
+            n += 1
+        return n
+
     def _loop(self) -> None:
+        import time
+        last_purge = 0.0
         while True:
-            mid = self.q.get()
+            if time.time() - last_purge > 3600:  # 1時間に1回、古い録音を消す
+                try:
+                    self.purge_old_audio()
+                except Exception:
+                    log.exception("録音の自動削除に失敗しました")
+                last_purge = time.time()
+            try:
+                mid = self.q.get(timeout=600)
+            except queue.Empty:
+                continue
             try:
                 self.process(mid)
             finally:
@@ -88,6 +114,8 @@ class Worker:
                     model_size=settings.get("whisper_model") or "small",
                     language=m.get("language") or settings.get("language") or "ja",
                     progress=lambda done, total: self.progress.__setitem__(mid, (done, total)),
+                    vocabulary=ai.vocabulary(settings),
+                    quiet=settings.get("quiet_mode") == "1",
                 )
                 if not segs:
                     raise ai.AIError("音声から言葉を聞き取れませんでした（無音・音量が小さい可能性があります）。")
@@ -97,7 +125,9 @@ class Worker:
                 self.store.update_meeting(mid, **fields)
                 m = self.store.get_meeting(mid)
             self.store.update_meeting(mid, status="summarizing", error="")
-            notes = ai.generate_notes(m, settings, client=self.ai_client)
+            meter = ai.Meter(self.store, settings, mid, "notes")
+            notes = ai.generate_notes(m, settings, client=self.ai_client, meter=meter)
+            self.store.log("ai_notes", mid, f"ノート作成のため文字起こし（{len(m['transcript'])}行）を Claude に送信")
             actions = notes.pop("action_items", [])
             fields = {"notes": notes, "notes_model": settings.get("model", ""), "status": "done", "error": ""}
             if not m["title"].strip() and notes.get("title"):
@@ -106,6 +136,8 @@ class Worker:
             self.store.update_meeting(mid, **fields)
         except (ai.AIError, transcribe.TranscriptionUnavailable) as e:
             self.store.update_meeting(mid, status="failed", error=str(e))
+            self.store.log("failed", mid, str(e))
         except Exception as e:  # 想定外のエラーも画面に理由を出す
             log.exception("処理に失敗しました: %s", mid)
             self.store.update_meeting(mid, status="failed", error=f"予期しないエラー: {type(e).__name__}: {e}")
+            self.store.log("failed", mid, f"{type(e).__name__}: {e}")

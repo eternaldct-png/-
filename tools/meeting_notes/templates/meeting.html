@@ -19,6 +19,8 @@
   {% if m.duration_sec %}<span>{{ fmt_clock(m.duration_sec) }}</span>{% endif %}
   {% if m.participants %}<span>👥 {{ m.participants|join('、') }}</span>{% endif %}
   {% if m.tags %}<span class="chips">{% for t in m.tags %}<a class="chip" href="{{ url_for('index', tag=t) }}">{{ t }}</a>{% endfor %}</span>{% endif %}
+  {% if m.consent == 1 %}<span>🤝 録音は相手に伝えた</span>{% elif m.consent == 2 %}<span>📝 自分だけのメモ</span>{% endif %}
+  {% if cost_jpy %}<span title="この会議でAIに使った金額（目安）">💴 AI費用 約{{ cost_jpy }}円</span>{% endif %}
 </div>
 
 <form id="edit-form" class="card card-surface stack" hidden onsubmit="return false" style="margin-bottom: var(--sp-4)">
@@ -104,6 +106,11 @@
       <input type="search" id="t-find" placeholder="文字起こし内を検索" style="flex:1; min-width: 180px">
       <span class="muted small" id="t-count" aria-live="polite"></span>
     </div>
+    <div class="row" style="margin-bottom: var(--sp-3)">
+      <button class="btn btn-sm" type="button" id="guess-btn" {% if m.participants|length < 2 %}disabled aria-describedby="guess-help"{% endif %}>🤖 話者をAIで推定</button>
+      <span class="muted xs" id="guess-help">{% if m.participants|length < 2 %}参加者を2人以上入れると使えます（「編集」から）。{% else %}話者が空の行だけに付けます。付いた行には「推定」と出ます。{% endif %}</span>
+      {% if guessed %}<span class="badge badge-guess">推定 {{ guessed }}行 — 名前を押して直せます</span>{% endif %}
+    </div>
     {% if speakers %}
     <details style="margin-bottom: var(--sp-3)">
       <summary>話者の名前を直す</summary>
@@ -117,12 +124,18 @@
       </form>
     </details>
     {% endif %}
+    <datalist id="people-all">{% for p in people %}<option value="{{ p }}">{% endfor %}</datalist>
     <ol class="transcript" id="transcript">
       {% for s in m.transcript %}
       <li class="tline">
         <button class="t" type="button" data-t="{{ s.start if s.start is not none else '' }}" {% if s.start is none or not m.audio_path %}disabled{% endif %}
           aria-label="{{ fmt_clock(s.start) or '時刻なし' }}から再生">{{ fmt_clock(s.start) or '—' }}</button>
-        <div>{% if s.speaker %}<div class="who">{{ s.speaker }}</div>{% endif %}<div class="txt">{{ s.text }}</div></div>
+        <div>
+          <div class="who"><button class="who-btn{% if not s.speaker %} empty{% endif %}" type="button" data-i="{{ loop.index0 }}" data-speaker="{{ s.speaker }}"
+            aria-label="この行の話者を変える（今: {{ s.speaker or 'なし' }}）">{{ s.speaker or '＋ 話者を付ける' }}</button>
+            {% if s.guessed %}<span class="badge badge-guess">推定</span>{% endif %}</div>
+          <div class="txt">{{ s.text }}</div>
+        </div>
       </li>
       {% endfor %}
     </ol>

@@ -21,6 +21,11 @@ class FakeClaude:
     def create(self, **kw):
         time.sleep(0.3)
         user = kw["messages"][0]["content"]
+        usage = SimpleNamespace(input_tokens=20_000, output_tokens=3_000)
+        fmt = kw["output_config"].get("format")
+        if fmt and "assignments" in fmt["schema"]["properties"]:
+            text = json.dumps({"assignments": [{"line": 0, "speaker": "山田"}]}, ensure_ascii=False)
+            return SimpleNamespace(stop_reason="end_turn", content=[SimpleNamespace(type="text", text=text)], usage=usage)
         if "format" in kw["output_config"]:
             if "FAIL_AI" in user:
                 return SimpleNamespace(stop_reason="refusal", content=[])
@@ -31,15 +36,16 @@ class FakeClaude:
                 "sections": [{"heading": "会場", "bullets": ["渋谷の会場で決定", "定員は50人"]},
                              {"heading": "予算", "bullets": ["上限30万円"]}],
                 "decisions": ["12月5日に開催する"],
-                "action_items": [{"text": "見積もりを送る", "owner": owner, "due": "金曜"},
-                                 {"text": "告知文を書く", "owner": "", "due": ""}],
+                "action_items": [{"text": "見積もりを送る", "owner": owner, "due": "金曜",
+                                  "evidence": "見積もりは金曜までに送ります"},
+                                 {"text": "告知文を書く", "owner": "", "due": "", "evidence": "告知は来週出しましょう"}],
             }, ensure_ascii=False)
         else:
             text = "記録では、会場は渋谷です。[00:05]"
-        return SimpleNamespace(stop_reason="end_turn", content=[SimpleNamespace(type="text", text=text)])
+        return SimpleNamespace(stop_reason="end_turn", content=[SimpleNamespace(type="text", text=text)], usage=usage)
 
 
-def fake_transcriber(path, *, model_size="small", language="ja", progress=None):
+def fake_transcriber(path, *, model_size="small", language="ja", progress=None, **_):
     for i in range(3):
         time.sleep(0.3)
         if progress:
@@ -54,4 +60,5 @@ if __name__ == "__main__":
     p.add_argument("--data", required=True)
     a = p.parse_args()
     app = create_app(a.data, transcriber=fake_transcriber, ai_client=FakeClaude())
+    app.config["MN_STALE_SEC"] = 3  # 「途中で止まった録音」を3秒で出す（本番は2分）
     app.run(host="127.0.0.1", port=a.port, threaded=True)

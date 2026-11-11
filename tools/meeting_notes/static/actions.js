@@ -22,6 +22,18 @@
     }
   });
   document.addEventListener("click", async (e) => {
+    const v = e.target.closest('[data-action="verify"]');
+    if (v) {
+      const row = v.closest(".action-row");
+      try {
+        await api("PATCH", `/api/actions/${row.dataset.id}`, { verified: true });
+        const box = row.querySelector(".evidence");
+        box.classList.remove("unverified");
+        box.querySelectorAll(".warn-text").forEach((n) => n.remove());
+        toast("確認済みにしました");
+      } catch (err) { toast(err.message, "error"); }
+      return;
+    }
     const btn = e.target.closest('[data-action="delete"]');
     if (!btn) return;
     const row = btn.closest(".action-row");

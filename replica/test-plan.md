@@ -1,8 +1,8 @@
 # Test plan: 会議ノート（tools/meeting_notes）
 
 自動テスト:
-- 単体・API: `python3 -m pytest tests/test_meeting_notes.py`（27件。偽の Claude / Whisper）
-- E2E: `bash tools/meeting_notes/e2e/run.sh replica/clone-screens`（Playwright / Chromium、偽のマイク入力、15件）
+- 単体・API: `python3 -m pytest tests/test_meeting_notes.py`（39件。偽の Claude / Whisper）
+- E2E: `bash tools/meeting_notes/e2e/run.sh replica/clone-screens`（Playwright / Chromium、偽のマイク入力、20件）
   - 全ケース共通: ブラウザのコンソールエラーと 5xx 応答があれば失敗
 
 | ID | 内容 | 自動 | 結果 |
@@ -35,6 +35,21 @@
 | SEC-2 | 127.0.0.1 / localhost 以外の Host を断る（DNS リバインディング対策） | pytest | ✅ |
 | REAL-1 | 本物の faster-whisper で日本語の会議音声を文字起こし | 手動 | 未（この環境ではモデルのダウンロードが遮断された） |
 | REAL-2 | 本物の Claude API でノートを作る（日本語の質・費用） | 手動 | 未（API キーなしで実行したため） |
+
+## 口コミの不満への対応（replica/fixes.md）
+
+| ID | 内容 | 自動 | 結果 |
+| --- | --- | --- | --- |
+| FIX1 | AI費用の記録・会議ごとの表示・月の上限で API を呼ばずに止める・数字以外を拒否 | pytest + E2E | ✅ |
+| FIX2 | 動作チェックの表示、APIキー/Whisper が無いときに直し方を出す | pytest + E2E | ✅ |
+| FIX3 | AIの話者推定（空の行だけ・参加者以外は付けない・推定の印）、1行ずつの変更で印が消える、参加者2人未満は使えない | pytest + E2E | ✅ |
+| FIX4 | 同意を選ばないと録音できない・会議に記録、操作の記録、保存日数を過ぎた録音の自動削除（ノートは残る） | pytest + E2E | ✅ |
+| FIX5 | 10秒ごとの途中保存（重複は無視・飛ばしは拒否）、タブを閉じても復旧、空の録音・捨てる | pytest + E2E | ✅ |
+| FIX5-M | 20秒無音の警告、デスクトップ通知 | 手動 | 未（Playwright の偽マイクは常に音が出るため） |
+| FIX6 | 根拠の発言の照合（要確認・時刻）、確認済みにする、よく出る言葉と小さい声モードが Whisper と AI に届く | pytest + E2E | ✅ |
+| FIX7 | マイク選択・会議室モードで録音できる | E2E（偽マイク） | ✅（実機の外付けマイクは未確認） |
+| FIX8 | 処理中に次の会議を入れられる・件数表示 | pytest + E2E | ✅ |
+| MIG | 前の版のデータベースに新しい列を足す | pytest | ✅ |
 
 対象外（この版に無い機能）: ログイン、他人のデータ、支払い、メール。
 axe による自動アクセシビリティ検査は未導入（ラベル・ロール・キーボード操作は E2E のセレクタと UI-E2 で確認）。

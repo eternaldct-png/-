@@ -13,7 +13,7 @@
     const poll = async () => {
       try {
         const s = await api("GET", `/api/meetings/${id}/status`);
-        if (!labels[s.status]) { location.reload(); return; }
+        if (!labels[s.status]) { notifyDone(s.status); setTimeout(() => location.reload(), 300); return; }
         $("progress-label").textContent = labels[s.status];
         $("progress-detail").textContent = s.status === "transcribing" && s.total_sec
           ? `（${Math.floor(s.done_sec / 60)}分 / ${Math.ceil(s.total_sec / 60)}分）` : "";
@@ -21,6 +21,13 @@
       setTimeout(poll, 2000);
     };
     setTimeout(poll, 1500);
+  }
+
+  // 終わったら・失敗したらデスクトップ通知（不満: 失敗に会議の後で気づく）
+  function notifyDone(status) {
+    if (!("Notification" in window) || Notification.permission !== "granted" || !document.hidden) return;
+    const title = document.getElementById("title-view").textContent.trim();
+    new Notification(status === "failed" ? "⚠ 会議ノート: 処理に失敗しました" : "✅ 会議ノートができました", { body: title });
   }
 
   // ── 編集・削除 ──
@@ -71,11 +78,51 @@
 
   // ── 文字起こし: 時刻で再生・検索・話者名 ──
   const player = $("player");
-  document.querySelectorAll(".tline .t[data-t]").forEach((b) => b.addEventListener("click", () => {
-    if (!player || b.dataset.t === "") return;
+  document.querySelectorAll(".tline .t[data-t], .t-jump[data-t]").forEach((b) => b.addEventListener("click", () => {
+    if (!player || b.dataset.t === "") { if (!player) toast("録音が無いので再生できません", "error"); return; }
     player.currentTime = Math.max(0, parseFloat(b.dataset.t) - 1);
     player.play();
   }));
+
+  // ── 1行ずつ話者を直す（不満: 話者の取り違え） ──
+  document.querySelectorAll(".who-btn").forEach((b) => b.addEventListener("click", () => {
+    if (b.parentElement.querySelector("input")) return;
+    const input = Object.assign(document.createElement("input"), { type: "text", value: b.dataset.speaker, maxLength: 40 });
+    input.setAttribute("list", "people-all");
+    input.setAttribute("aria-label", "話者の名前（Enter で保存、Esc でやめる）");
+    input.style.maxWidth = "14em";
+    b.hidden = true;
+    b.after(input);
+    input.focus(); input.select();
+    let done = false;
+    const close = () => { done = true; input.remove(); b.hidden = false; b.focus(); };
+    const save = async () => {
+      if (done) return;
+      const v = input.value.trim();
+      if (v === b.dataset.speaker) { close(); return; }
+      done = true;
+      try {
+        await api("POST", `/api/meetings/${id}/segments/${b.dataset.i}`, { speaker: v });
+        b.dataset.speaker = v; b.textContent = v || "＋ 話者を付ける"; b.classList.toggle("empty", !v);
+        const g = b.parentElement.querySelector(".badge-guess"); if (g) g.remove();
+        input.remove(); b.hidden = false; b.focus();
+        toast("話者を直しました");
+      } catch (e) { done = false; toast(e.message, "error"); }
+    };
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); save(); }
+      if (e.key === "Escape") close();
+    });
+    input.addEventListener("blur", () => { if (!done) save(); });
+  }));
+  on("guess-btn", "click", (e) => {
+    if (!confirm("参加者の名前から、話者が空の行に話者を推定して付けます（文字起こしを Claude に送ります）。よろしいですか？")) return;
+    withLoading(e.currentTarget, async () => {
+      const r = await api("POST", `/api/meetings/${id}/guess-speakers`);
+      toast(`${r.guessed}行に推定の話者を付けました`);
+      location.hash = "tab-transcript"; setTimeout(() => location.reload(), 600);
+    });
+  });
   const lines = [...document.querySelectorAll("#transcript .txt")];
   const originals = lines.map((l) => l.textContent);
   on("t-find", "input", (e) => {

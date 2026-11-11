@@ -92,6 +92,11 @@ const tests = {
   async "F01-H1 ブラウザで録音して保存するとノートができる"(page) {
     await newMeeting(page, { title: "録音テスト", participants: "自分、山田" });
     await page.getByRole("tab", { name: "🎙 録音する" }).click();
+    // 同意を選ばないと始まらない（不満への対応 #4）
+    await page.getByRole("button", { name: "● 録音を開始" }).click();
+    await page.getByRole("alert").filter({ hasText: "相手に伝えた" }).waitFor();
+    await page.getByLabel("相手に「録音してノートを取る」と伝えた").check();
+    await page.getByLabel(/会議室モード/).check();
     await page.getByRole("button", { name: "● 録音を開始" }).click();
     await page.waitForTimeout(2200);
     assert((await page.locator("#rec-time").textContent()) !== "00:00", "録音時間が進んでいない");
@@ -104,6 +109,8 @@ const tests = {
     await shot(page, "S03-processing");
     await waitDone(page);
     assert(await page.getByRole("heading", { name: "録音テスト" }).isVisible(), "自分で付けたタイトルが上書きされた");
+    assert(await page.getByText("録音は相手に伝えた").isVisible(), "同意の記録が出ていない");
+    assert(await page.getByText(/AI費用 約\d+円/).isVisible(), "AI費用が出ていない");
     assert(await page.locator("audio#player").count() === 1, "録音の再生バーが無い");
     await page.getByRole("tab", { name: "文字起こし" }).click();
     await page.getByRole("button", { name: "00:05から再生" }).click();
@@ -199,7 +206,7 @@ const tests = {
     await page.getByRole("tab", { name: "文字起こし" }).click();
     await page.getByText("話者の名前を直す").click();
     await page.getByLabel("新しい名前").fill("田中部長");
-    await Promise.all([page.waitForEvent("load"), page.getByRole("button", { name: "変える" }).click()]);
+    await Promise.all([page.waitForEvent("load"), page.getByRole("button", { name: "変える", exact: true }).click()]);
     await page.locator(".tline .who", { hasText: "田中部長" }).waitFor();
     await page.getByRole("tab", { name: /やること/ }).click();
     await page.getByLabel("やること", { exact: true }).fill("議事録を共有する");
@@ -223,6 +230,95 @@ const tests = {
     await page.waitForURL(BASE + "/");
     const res = await page.goto(url);
     assert(res.status() === 404, "削除したのに開ける");
+  },
+
+
+  async "FIX5-H1 録音中にブラウザが落ちても、次に開いたとき復旧できる"(page) {
+    await newMeeting(page, { title: "途中で落ちた会議" });
+    await page.getByRole("tab", { name: "🎙 録音する" }).click();
+    await page.getByLabel("相手はいない（自分だけのメモ・独り言）").check();
+    await page.getByRole("button", { name: "● 録音を開始" }).click();
+    await page.getByText(/PCに保存済み/).waitFor({ timeout: 20000 });
+    // 保存を押さずにタブを閉じる（＝ブラウザが落ちた）
+    const ctx = page.context();
+    await page.close({ runBeforeUnload: false });
+    await new Promise((r) => setTimeout(r, 4000));
+    const p2 = await ctx.newPage();
+    await p2.goto(`${BASE}/`);
+    await p2.getByText("途中で止まった録音があります").waitFor();
+    await shot(p2, "FIX5-recover");
+    await p2.getByRole("button", { name: "会議として保存" }).first().click();
+    await p2.waitForURL(/\/m\//);
+    await waitDone(p2);
+    assert(await p2.getByRole("heading", { name: "途中で落ちた会議" }).isVisible(), "復旧した録音から会議ができていない");
+    assert(await p2.getByText("自分だけのメモ").isVisible(), "同意の記録が引き継がれていない");
+    return p2;
+  },
+
+  async "FIX6-H1 根拠が文字起こしに無いやることは「要確認」になり、確認できる"(page) {
+    await fromText(page, "山田: 見積もりは金曜までに送ります\n自分: 了解です");
+    await page.getByRole("tab", { name: /やること/ }).click();
+    const bad = page.locator(".action-row", { hasText: "告知文を書く" });
+    const good = page.locator(".action-row", { hasText: "見積もりを送る" });
+    assert(await bad.getByText("⚠ 要確認").isVisible(), "根拠の無いやることに要確認が出ていない");
+    assert(await good.getByText("根拠: 「見積もりは金曜までに送ります」").isVisible(), "根拠の発言が出ていない");
+    assert(!(await good.getByText("要確認").isVisible()), "根拠のあるやることに要確認が出ている");
+    await shot(page, "FIX6-evidence");
+    await bad.getByRole("button", { name: "確認した" }).click();
+    await page.getByRole("status").filter({ hasText: "確認済み" }).waitFor();
+    await page.reload();
+    await page.getByRole("tab", { name: /やること/ }).click();
+    assert(!(await page.locator(".action-row", { hasText: "告知文を書く" }).getByText("要確認").isVisible()), "確認済みが保存されていない");
+  },
+
+  async "FIX3-H1 話者をAIで推定し、1行ずつ直せる"(page) {
+    await fromText(page, "会場は渋谷にしましょう\n了解です", { participants: "山田、自分" });
+    page.on("dialog", (d) => d.accept());
+    await page.getByRole("tab", { name: "文字起こし" }).click();
+    await page.getByRole("button", { name: "🤖 話者をAIで推定" }).click();
+    await page.getByText("推定 1行").waitFor();
+    await page.getByRole("tab", { name: "文字起こし" }).click();
+    await shot(page, "FIX3-speakers");
+    await page.getByRole("button", { name: /この行の話者を変える（今: なし）/ }).click();
+    const input = page.getByLabel(/話者の名前/);
+    await input.fill("自分");
+    await input.press("Enter");
+    await page.getByRole("status").filter({ hasText: "話者を直しました" }).waitFor();
+    await page.reload();
+    await page.getByRole("tab", { name: "文字起こし" }).click();
+    assert(await page.getByRole("button", { name: /今: 自分/ }).count() === 1, "1行ずつの話者の変更が保存されていない");
+  },
+
+  async "FIX1-2-4 設定に動作チェック・AI費用・操作の記録が出て、上限を保存できる"(page) {
+    await page.goto(`${BASE}/settings`);
+    await page.getByRole("heading", { name: "動作チェック" }).waitFor();
+    assert(await page.getByText("Claude の APIキー").isVisible(), "動作チェックが出ていない");
+    assert((await page.locator("#month-cost").textContent()).match(/約\d+円/), "今月の費用が出ていない");
+    assert(await page.locator(".log-table td", { hasText: "AIへ送信" }).count() >= 1, "AIへの送信が操作の記録に無い");
+    await page.getByLabel("AI費用の月の上限（円）").fill("abc");
+    await page.getByRole("button", { name: "保存" }).click();
+    await page.getByRole("alert").filter({ hasText: "数字" }).waitFor();
+    await page.getByLabel("AI費用の月の上限（円）").fill("3000");
+    await page.getByLabel("よく出る言葉・固有名詞（カンマか改行で区切る）").fill("カラーシング、歌推し");
+    await page.getByRole("button", { name: "保存" }).click();
+    await page.getByRole("status").filter({ hasText: "保存しました" }).waitFor();
+    await page.reload();
+    assert((await page.getByLabel("AI費用の月の上限（円）").inputValue()) === "3000", "上限が保存されていない");
+    await shot(page, "FIX-settings");
+  },
+
+  async "FIX8-H1 処理中でも次の会議を入れられる"(page) {
+    await newMeeting(page);
+    await page.getByRole("tab", { name: "📄 文字起こしを入れる" }).click();
+    await page.getByLabel("または貼り付け").fill("一つ目の会議");
+    await page.getByRole("button", { name: "取り込んでノートを作る" }).last().click();
+    await page.waitForURL(/\/m\//);
+    await newMeeting(page);
+    await page.getByRole("tab", { name: "📄 文字起こしを入れる" }).click();
+    await page.getByLabel("または貼り付け").fill("二つ目の会議");
+    await page.getByRole("button", { name: "取り込んでノートを作る" }).last().click();
+    await page.waitForURL(/\/m\//);
+    await waitDone(page);
   },
 
   async "UI-E1 スマホ幅(390px)で横にはみ出さない"(page) {
@@ -277,7 +373,10 @@ const tests = {
     page.on("response", (r) => { if (r.status() >= 500) problems.push(`5xx: ${r.status()} ${r.url()}`); });
     const t0 = Date.now();
     try {
-      await fn(page);
+      const replaced = await fn(page);
+      if (replaced && replaced !== page) {
+        replaced.on("console", (m) => { if (m.type() === "error" && !/status of (400|404|409|413|502)/.test(m.text())) problems.push("console: " + m.text()); });
+      }
       if (problems.length) throw new Error(problems.join("\n"));
       results.push({ name, ok: true, ms: Date.now() - t0 });
       console.log(`✓ ${name} (${Date.now() - t0}ms)`);
