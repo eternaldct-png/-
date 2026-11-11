@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block main %}
+<div class="row row-between">
+  <h1>会議</h1>
+  {% if busy_count %}<span class="badge badge-warn" role="status">処理中・処理待ち {{ busy_count }}件（その間も次の会議を入れられます）</span>{% endif %}
+</div>
+{% include "_stale.html" %}
+<form class="row" role="search" method="get" action="{{ url_for('index') }}" style="margin-bottom: var(--sp-4)">
+  <label class="sr-only" for="q">会議を検索</label>
+  <input type="search" id="q" name="q" value="{{ q }}" placeholder="キーワードで検索（タイトル・ノート・文字起こし・やること）" style="flex:1; min-width: 200px">
+  {% if tags %}
+  <label class="sr-only" for="tag">タグ</label>
+  <select id="tag" name="tag" style="width:auto">
+    <option value="">すべてのタグ</option>
+    {% for t in tags %}<option value="{{ t }}" {% if t == tag %}selected{% endif %}>{{ t }}</option>{% endfor %}
+  </select>
+  {% endif %}
+  <button class="btn" type="submit">検索</button>
+  {% if q or tag %}<a class="btn btn-ghost" href="{{ url_for('index') }}">クリア</a>{% endif %}
+</form>
+
+{% if meetings %}
+  {% if q or tag %}<p class="muted small">{{ meetings|length }}件見つかりました</p>{% endif %}
+  <ul class="meeting-list">
+  {% for m in meetings %}
+    <li>
+      <a class="card meeting-card" href="{{ url_for('meeting', mid=m.id) }}">
+        <div class="row row-between" style="gap: var(--sp-2)">
+          <span class="title">{{ m.title or '（タイトル未設定）' }}</span>
+          {% if m.status in ('queued', 'transcribing', 'summarizing') %}<span class="badge badge-warn">処理中</span>
+          {% elif m.status == 'failed' %}<span class="badge badge-danger">失敗</span>{% endif %}
+        </div>
+        <div class="meta" style="margin-top: var(--sp-1)">
+          <time data-utc="{{ m.started_at }}">{{ m.started_at }}</time>
+          {% if m.duration_sec %}<span>{{ (m.duration_sec / 60)|round(0, 'ceil')|int }}分</span>{% endif %}
+          {% if m.participants %}<span>👥 {{ m.participants|join('、') }}</span>{% endif %}
+          {% if m.tags %}<span class="chips">{% for t in m.tags %}<span class="chip">{{ t }}</span>{% endfor %}</span>{% endif %}
+        </div>
+        {% if m.snippet %}<div class="snippet">{{ m.snippet }}</div>{% endif %}
+      </a>
+    </li>
+  {% endfor %}
+  </ul>
+{% elif q or tag %}
+  <div class="empty"><p>「{{ q or tag }}」に当てはまる会議はありませんでした。</p><a class="btn" href="{{ url_for('index') }}">すべての会議を見る</a></div>
+{% else %}
+  <div class="empty">
+    <p>まだ会議がありません。<br>録音するか、録音ファイル・文字起こしを入れると、ノートとやることを自動で作ります。</p>
+    <a class="btn btn-primary" href="{{ url_for('new') }}">＋ 最初の会議を入れる</a>
+  </div>
+{% endif %}
+{% endblock %}

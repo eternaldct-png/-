@@ -1,0 +1,26 @@
+{
+  "_about": "会議ノートアプリ用のテーマ（replica-entrepreneur の themes.json を元に、会議ノート特有の言葉を足した）",
+  "request_patterns": ["\\bi wish\\b", "\\bno way to\\b", "\\bonly available\\b", "\\bneeds? (work|improvement)\\b", "\\bsuggest improvements\\b", "\\broom for improvement\\b"],
+  "themes": [
+    {"id": "lost", "label": "録音・ノートが取れていない／消えた", "kind": "complaint",
+     "patterns": ["fails to take notes", "was lost", "lost after", "recovering the recording", "unreliable", "not working"]},
+    {"id": "speakers", "label": "話者の取り違え・会話が重なると崩れる", "kind": "complaint",
+     "patterns": ["speaker", "talk over each other", "multiple people talking", "boardroom"]},
+    {"id": "support", "label": "サポートに人がいない・返事が遅い", "kind": "complaint",
+     "patterns": ["support", "human", "chatbot", "ticket"]},
+    {"id": "pricing", "label": "高い・無料プランが無い・上位プラン限定", "kind": "complaint",
+     "patterns": ["\\bexpensive\\b", "\\bprice", "\\bpricier\\b", "\\bcosts? money\\b", "free (tier|plan)", "\\$\\d+", "higher-tier", "trial"]},
+    {"id": "accuracy", "label": "聞き取り・要約の精度（小さい声・作り話のタスク）", "kind": "complaint",
+     "patterns": ["softer audio", "not accurately", "hallucinat", "weren't actually agreed"]},
+    {"id": "inperson", "label": "対面の会議に弱い", "kind": "complaint",
+     "patterns": ["in-person", "conference rooms", "boardroom"]},
+    {"id": "concurrency", "label": "処理中は次の会議を始められない・操作がもたつく", "kind": "complaint",
+     "patterns": ["can't start a new meeting", "while another", "navigation issues"]},
+    {"id": "privacy", "label": "権限・同意・記録の透明性", "kind": "complaint",
+     "patterns": ["access to calendars", "consent", "audit log", "data retention", "privacy"]},
+    {"id": "platforms", "label": "機能がPC版にしか無い", "kind": "request",
+     "patterns": ["only available on desktop", "android app", "fine desktop"]},
+    {"id": "value", "label": "他社と比べて決め手が無い", "kind": "complaint",
+     "patterns": ["doesn't do anything", "already do better"]}
+  ]
+}

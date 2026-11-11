@@ -1,0 +1,53 @@
+feature,area,priority,original,clone,notes
+ブラウザでマイク録音して保存,capture,must,yes,yes,原典はボット参加・デスクトップアプリ
+音声・動画ファイルを入れてノート化,capture,must,yes,yes,
+文字起こしテキスト(.txt/.vtt/.srt)を貼ってノート化,capture,must,partial,yes,原典はファイル取り込みのみ／vttの<v>と「名前:」の話者・時刻を取り込む
+音声を文字起こし（日本語）,transcription,must,yes,partial,ローカル faster-whisper／faster-whisperの呼び出しは実装済み。この環境ではモデルDLが遮断され本物の音声で未検証
+会議後にAIノート（要約＋トピック別）を自動生成,notes,must,yes,yes,Claude API
+担当者付きアクションアイテムを自動抽出,action items,must,yes,yes,
+会議一覧（新しい順）,meetings,must,yes,yes,
+会議の詳細（ノート・アクション・文字起こしのタブ）,meetings,must,yes,yes,
+処理中・失敗の状態表示と再試行,meetings,must,yes,yes,
+タイトル・日時・参加者・タグの編集,meetings,must,yes,yes,
+会議の削除,meetings,must,yes,yes,録音ファイルも消す
+アクションアイテムを完了にする,action items,must,yes,yes,
+アクションアイテム横断一覧（担当者・状態で絞る）,action items,must,yes,yes,
+キーワードで全会議を検索,search,must,yes,yes,LIKE検索。数千件までは十分（推測）
+録音の再生,meetings,must,yes,yes,
+1つの会議にAIで追加質問,ask,must,yes,yes,
+全会議に横断でAI質問,ask,should,yes,yes,ノート全件＋キーワードが当たった5件の文字起こし
+ノートの書き方の指示（自分の文脈）,settings,should,yes,yes,
+ノートの再生成,notes,should,yes,yes,手入力のやること・完了状態は残す
+Markdownでコピー・保存（Notion/Slack貼り付け用）,export,should,partial,yes,原典は連携で送信
+話者名の付け替え,transcript,should,yes,yes,
+タブの音声（オンライン会議の相手の声）も一緒に録音,capture,should,yes,partial,原典はデスクトップアプリで取得／Chrome/Edgeのタブ共有のみ。Zoomデスクトップアプリの音は録れない
+タグで絞り込み,meetings,should,yes,yes,
+アクションアイテムの手動追加・編集,action items,should,yes,partial,追加・削除・完了はできる。文言の編集画面は無い（APIはある）
+文字起こし内の時刻をクリックで再生位置へ,transcript,should,yes,yes,
+話者分離（誰が話したか自動判定）,transcription,could,yes,no,Whisper単体では不可。vttの話者名は取り込む／録音からは話者が付かない。vttの話者名のみ
+100以上の言語,transcription,could,yes,partial,Whisperは多言語対応。UIは日本語／Whisperは多言語。設定で日本語/英語/自動
+会議ノートのテンプレート（商談・面談など）,notes,could,yes,partial,設定の「ノートの書き方の指示」で代用
+データのバックアップ（書き出し）,settings,could,no,yes,自分専用版の追加／JSON書き出し
+ダークモード,ui,could,unknown,no,
+会議ボットがZoom/Meet/Teamsに参加,capture,skip,yes,skip,会議ボット基盤と各社審査が必要。自分専用には過剰
+カレンダー連携で自動参加,capture,skip,yes,skip,ボット前提のため
+チーム共有・権限,team,skip,yes,skip,自分専用のためログインなし
+Workflows（Slack・Linear・HubSpot等へ自動送信）,integrations,skip,yes,skip,Markdown書き出しで代替
+Webhook,integrations,skip,yes,skip,同上
+公開共有リンク,sharing,skip,yes,skip,ローカル専用
+モバイルアプリ,capture,skip,yes,skip,PCブラウザ録音で代替
+AI費用を会議ごと・月ごとに円で表示し、月の上限で止める,cost,should,no,yes,口コミ不満1（高い・分からない）
+動作チェック（直し方つき）,support,should,no,yes,口コミ不満2（サポートがいない）
+文字起こしの1行ずつ話者を直す,transcript,should,no,yes,口コミ不満3（話者の取り違え）
+参加者名からAIで話者を推定（推定の印つき）,transcript,should,no,yes,口コミ不満3
+録音前の同意の選択と記録,privacy,should,no,yes,口コミ不満5（同意・透明性）
+操作の記録（AIへの送信を含む）,privacy,should,no,yes,口コミ不満5（監査ログが無い）
+録音ファイルの保存日数と自動削除,privacy,should,no,yes,口コミ不満5（保存期間）
+録音を10秒ごとにPCへ途中保存し、落ちても復旧,capture,must,no,yes,口コミ不満4（録音が消えた）
+無音が続いたら警告・処理の完了/失敗を通知,capture,should,no,yes,口コミ不満4（後で気づく）
+やることに根拠の発言をつけ、文字起こしに無ければ要確認,notes,must,no,yes,口コミ不満6（作り話のタスク）
+よく出る言葉・固有名詞をWhisperとAIに渡す,transcription,should,no,yes,口コミ不満6（聞き取り精度）
+小さい声を拾うモード,transcription,should,no,yes,口コミ不満6（小さい声）
+マイク選択と会議室モード,capture,should,no,yes,口コミ不満7（対面に弱い）
+処理中・処理待ちの件数表示（処理中も次を入れられる）,meetings,could,no,yes,口コミ不満8
+スマホから録音・閲覧,capture,could,no,no,口コミ要望1。HTTPSと認証が要るので見送り（fixes.md）
