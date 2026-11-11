@@ -51,3 +51,4 @@ AI費用を会議ごと・月ごとに円で表示し、月の上限で止める
 マイク選択と会議室モード,capture,should,no,yes,口コミ不満7（対面に弱い）
 処理中・処理待ちの件数表示（処理中も次を入れられる）,meetings,could,no,yes,口コミ不満8
 スマホから録音・閲覧,capture,could,no,no,口コミ要望1。HTTPSと認証が要るので見送り（fixes.md）
+APIキー不要で使う（端末内AI Ollama / AIなしの簡易まとめ、自動選択）,privacy,must,no,yes,利用者の要望: 端末保存・API を使わない。Claude は明示して選んだときだけ

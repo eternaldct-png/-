@@ -116,7 +116,7 @@
     input.addEventListener("blur", () => { if (!done) save(); });
   }));
   on("guess-btn", "click", (e) => {
-    if (!confirm("参加者の名前から、話者が空の行に話者を推定して付けます（文字起こしを Claude に送ります）。よろしいですか？")) return;
+    if (!confirm("参加者の名前から、話者が空の行に話者を推定して付けます。よろしいですか？")) return;
     withLoading(e.currentTarget, async () => {
       const r = await api("POST", `/api/meetings/${id}/guess-speakers`);
       toast(`${r.guessed}行に推定の話者を付けました`);

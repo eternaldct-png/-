@@ -25,7 +25,7 @@
 </header>
 <main id="main">
 {% if not api_key_ok %}
-  <p class="notice notice-danger" role="alert">ANTHROPIC_API_KEY が設定されていないため、ノートの自動作成とAIへの質問は動きません。いったんアプリを止め、README の手順でキーを設定してから起動し直してください。</p>
+  <p class="notice notice-danger" role="alert">「設定」で Claude API を選んでいますが、ANTHROPIC_API_KEY がありません。「設定」で「端末内AI」か「AIなし」に切り替えると、APIなしで使えます。</p>
 {% endif %}
 {% block main %}{% endblock %}
 </main>

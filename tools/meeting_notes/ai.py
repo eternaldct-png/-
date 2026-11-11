@@ -11,6 +11,7 @@ import re
 import unicodedata
 from datetime import datetime
 
+from . import local_ai
 from .transcribe import transcript_to_text
 
 # 1M トークンあたりのドル（2026-11 時点の公表価格。変わったらここを直す）
@@ -159,6 +160,40 @@ def _call(client, *, model, system, user, max_tokens, schema=None, effort="mediu
     return next((b.text for b in response.content if b.type == "text"), "")
 
 
+# ── どのAIで書くか ────────────────────────────────────────
+# claude: Claude API（外部に文字起こしを送る。お金がかかる）
+# ollama: 端末内AI（Ollama。このPCの中だけで動く。無料）
+# simple: AIなし（発言の抜き出し。何も入れなくても動く）
+# auto  : Ollama が動いていれば ollama、無ければ simple。**Claude は自動では選ばない**（明示して選んだときだけ使う）
+
+ENGINE_LABELS = {"claude": "Claude API", "ollama": "端末内AI（Ollama）", "simple": "AIなし（簡易まとめ）"}
+
+
+def resolve_engine(settings: dict, client=None) -> str:
+    choice = (settings.get("ai_engine") or "auto").strip()
+    if choice in ("claude", "ollama", "simple"):
+        return choice
+    if client is not None:  # テストで Claude の代わりを渡したとき
+        return "claude"
+    models = local_ai.ollama_models()
+    if models is not None and local_ai.has_model(models, settings.get("ollama_model") or local_ai.DEFAULT_OLLAMA_MODEL):
+        return "ollama"
+    return "simple"
+
+
+def _llm(settings, client, *, system, user, max_tokens, schema=None, effort="medium", meter=None, engine=None) -> str:
+    engine = engine or resolve_engine(settings, client)
+    if engine == "ollama":
+        try:
+            return local_ai.ollama_chat(settings.get("ollama_model") or local_ai.DEFAULT_OLLAMA_MODEL, system, user, schema=schema)
+        except local_ai.LocalAIError as e:
+            raise AIError(str(e)) from e
+    if engine == "claude":
+        return _call(client or _client(), model=settings.get("model") or "claude-opus-5-5", system=system, user=user,
+                     max_tokens=max_tokens, schema=schema, effort=effort, meter=meter)
+    raise AIError("AIなしモードでは使えません。「設定」で端末内AI（Ollama）を選ぶと使えます。")
+
+
 def meeting_header(meeting: dict) -> str:
     parts = [f"会議名: {meeting.get('title') or '（未設定）'}", f"日時(UTC): {meeting.get('started_at', '')}"]
     if meeting.get("participants"):
@@ -214,18 +249,24 @@ def generate_notes(meeting: dict, settings: dict, client=None, meter=None) -> di
     text = transcript_to_text(segs)
     if not text.strip():
         raise AIError("文字起こしが空です。音声に声が入っているか確認してください。")
+    engine = resolve_engine(settings, client)
+    if engine == "simple":
+        try:
+            return local_ai.simple_notes(meeting)
+        except local_ai.LocalAIError as e:
+            raise AIError(str(e)) from e
     system = NOTES_SYSTEM + _system_extra(settings)
-    user = (
-        f"{meeting_header(meeting)}\n\n"
-        f"<transcript>\n{text}\n</transcript>\n\n"
-        "この会議のノートを書いてください。"
-    )
-    raw = _call(client or _client(), model=settings.get("model") or "claude-opus-5-5",
-                system=system, user=user, max_tokens=16000, schema=NOTES_SCHEMA, meter=meter)
-    try:
-        notes = json.loads(raw)
-    except json.JSONDecodeError as e:
-        raise AIError("AIの出力を読み取れませんでした。もう一度お試しください。") from e
+    if engine == "ollama" and len(text) > OLLAMA_CHUNK_CHARS:
+        notes = _notes_in_chunks(meeting, segs, system, settings)
+    else:
+        user = (
+            f"{meeting_header(meeting)}\n\n"
+            f"<transcript>\n{text}\n</transcript>\n\n"
+            "この会議のノートを書いてください。"
+        )
+        notes = _parse_json(_llm(settings, client, system=system, user=user, max_tokens=16000,
+                                 schema=NOTES_SCHEMA, meter=meter, engine=engine))
+    notes["engine"] = engine
     notes.setdefault("sections", [])
     notes.setdefault("decisions", [])
     notes.setdefault("action_items", [])
@@ -237,7 +278,58 @@ def generate_notes(meeting: dict, settings: dict, client=None, meter=None) -> di
     return notes
 
 
+OLLAMA_CHUNK_CHARS = 12_000  # 端末内AIは一度に読める量が少ないので、長い会議は分けて読む
+
+
+def _parse_json(raw: str) -> dict:
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        m = re.search(r"\{.*\}", raw, re.S)  # 端末内AIが前後に文を付けたとき
+        try:
+            data = json.loads(m.group(0)) if m else None
+        except json.JSONDecodeError:
+            data = None
+    if not isinstance(data, dict):
+        raise AIError("AIの出力を読み取れませんでした。もう一度お試しください。")
+    return data
+
+
+def _notes_in_chunks(meeting, segs, system, settings) -> dict:
+    """長い会議を区切って端末内AIに読ませ、あとで1つにまとめる。"""
+    chunks, cur, size = [], [], 0
+    for s in segs:
+        line = transcript_to_text([s])
+        if cur and size + len(line) > OLLAMA_CHUNK_CHARS:
+            chunks.append(cur)
+            cur, size = [], 0
+        cur.append(s)
+        size += len(line) + 1
+    if cur:
+        chunks.append(cur)
+    parts = []
+    for i, part in enumerate(chunks, 1):
+        user = (f"{meeting_header(meeting)}\n（長い会議の {i}/{len(chunks)} 番目の部分です）\n\n"
+                f"<transcript>\n{transcript_to_text(part)}\n</transcript>\n\nこの部分のノートを書いてください。")
+        parts.append(_parse_json(_llm(settings, None, system=system, user=user, max_tokens=8000,
+                                      schema=NOTES_SCHEMA, engine="ollama")))
+    summaries = "\n".join(f"{i}. {p.get('summary', '')}" for i, p in enumerate(parts, 1))
+    summary = _llm(settings, None, engine="ollama", max_tokens=2000,
+                   system="会議の部分ごとの要約を、1つの要約（3〜5文、日本語）にまとめます。書かれていないことは足しません。要約だけを返します。",
+                   user=summaries).strip()
+    out = {"title": parts[0].get("title", ""), "summary": summary, "sections": [], "decisions": [], "action_items": []}
+    for p in parts:
+        out["sections"] += p.get("sections", [])
+        for key in ("decisions", "action_items"):
+            for item in p.get(key, []):
+                if item not in out[key]:
+                    out[key].append(item)
+    return out
+
+
 def answer_about_meeting(meeting: dict, history: list[dict], question: str, settings: dict, client=None, meter=None) -> str:
+    if resolve_engine(settings, client) == "simple":
+        return local_ai.simple_answer([meeting], question)
     notes = meeting.get("notes") or {}
     user = (
         f"{meeting_header(meeting)}\n\n"
@@ -246,13 +338,18 @@ def answer_about_meeting(meeting: dict, history: list[dict], question: str, sett
         + _history_text(history)
         + f"質問: {question}"
     )
-    return _call(client or _client(), model=settings.get("model") or "claude-opus-5-5",
-                 system=ASK_SYSTEM + _system_extra(settings), user=user, max_tokens=4000, effort="low", meter=meter).strip()
+    return _llm(settings, client, system=ASK_SYSTEM + _system_extra(settings), user=user, max_tokens=4000,
+                effort="low", meter=meter).strip()
 
 
 def answer_across(meetings: list[dict], hits: set[str], history: list[dict], question: str,
                   settings: dict, client=None, max_chars: int = 400_000, meter=None) -> str:
     """全会議への質問。全会議の要約＋ノートを渡し、キーワードが当たった会議は文字起こしも足す（上限あり）。"""
+    engine = resolve_engine(settings, client)
+    if engine == "simple":
+        return local_ai.simple_answer([m for m in meetings if m.get("status") == "done"], question)
+    if engine == "ollama":
+        max_chars = min(max_chars, 40_000)  # 端末内AIが一度に読める量に合わせる
     blocks, used = [], 0
     for m in meetings:
         if m.get("status") != "done":
@@ -270,8 +367,8 @@ def answer_across(meetings: list[dict], hits: set[str], history: list[dict], que
     if not blocks:
         raise AIError("ノートが出来上がっている会議がまだありません。")
     user = "<meetings>\n" + "\n\n".join(blocks) + "\n</meetings>\n\n" + _history_text(history) + f"質問: {question}"
-    return _call(client or _client(), model=settings.get("model") or "claude-opus-5-5",
-                 system=ASK_SYSTEM + _system_extra(settings), user=user, max_tokens=6000, effort="low", meter=meter).strip()
+    return _llm(settings, client, system=ASK_SYSTEM + _system_extra(settings), user=user, max_tokens=6000,
+                effort="low", meter=meter, engine=engine).strip()
 
 
 def _history_text(history: list[dict]) -> str:
@@ -317,12 +414,8 @@ def guess_speakers(meeting: dict, settings: dict, client=None, meter=None) -> li
     segs = meeting.get("transcript") or []
     lines = "\n".join(f"{i}: {s.get('text', '')}" for i, s in enumerate(segs))
     user = (f"参加者: {'、'.join(people)}\n\n<lines>\n{lines}\n</lines>\n\n各行の話者を推定してください。")
-    raw = _call(client or _client(), model=settings.get("model") or "claude-opus-5-5", system=SPEAKERS_SYSTEM,
-                user=user, max_tokens=16000, schema=SPEAKERS_SCHEMA, effort="low", meter=meter)
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError as e:
-        raise AIError("AIの出力を読み取れませんでした。") from e
+    data = _parse_json(_llm(settings, client, system=SPEAKERS_SYSTEM, user=user, max_tokens=16000,
+                            schema=SPEAKERS_SCHEMA, effort="low", meter=meter))
     out = [dict(s) for s in segs]
     for a in data.get("assignments", []):
         i, name = a.get("line"), str(a.get("speaker", "")).strip()

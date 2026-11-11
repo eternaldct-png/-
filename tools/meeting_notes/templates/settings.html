@@ -30,6 +30,20 @@
 
 <h2>設定</h2>
 <form id="settings" class="stack" onsubmit="return false">
+  <fieldset class="consent" style="max-width:none; margin:0">
+    <legend>ノートの作り方（今: {{ engine_labels[engine] }}）</legend>
+    {% for v, label, help in [
+      ('auto', '自動（おすすめ）', '端末内AIが使えれば端末内AI、無ければAIなし。外部のAPIは使いません'),
+      ('ollama', '端末内AI（Ollama）', 'このPCの中で動くAI。無料・外部に送らない。Ollama のアプリとモデルが必要（README）'),
+      ('simple', 'AIなし（簡易まとめ）', '何も入れなくても動く。発言をそのまま抜き出すだけなので、要約の質は低い'),
+      ('claude', 'Claude API', '文字起こしを Anthropic に送る。いちばん高精度。APIキーと費用が必要')] %}
+    <label><input type="radio" name="ai_engine" value="{{ v }}" {% if (s.ai_engine or 'auto') == v %}checked{% endif %}>
+      <span><strong>{{ label }}</strong><br><small class="muted">{{ help }}</small></span></label>
+    {% endfor %}
+  </fieldset>
+  <label class="field"><span>端末内AIのモデル名（Ollama）</span>
+    <input type="text" name="ollama_model" value="{{ s.ollama_model }}" style="max-width: 16em">
+    <small>おすすめ: qwen2.5:7b（日本語に強く、メモリ16GBのMacで動く）。メモリ8GBなら qwen2.5:3b。</small></label>
   <label class="field"><span>ノートの書き方の指示・自分の前提</span>
     <textarea name="custom_context" maxlength="4000" placeholder="例: 私は ETERNAL d.c.t の代表。ライバー事務所の面談では、配信経験・希望ジャンル・配信できる時間帯を必ず項目にする。金額は税込で書く。">{{ s.custom_context }}</textarea>
     <small>ここに書いたことを毎回AIに伝えます。会社のこと・ノートに必ず入れてほしい項目など。</small></label>
@@ -72,7 +86,7 @@
 <h2>データ</h2>
 <dl class="kv">
   <dt>保存先</dt><dd><code>{{ data_dir }}</code></dd>
-  <dt>外に送るもの</dt><dd class="small">音声は送りません（文字起こしはこのPCの中）。ノート作成・質問・話者の推定のときだけ、文字起こしの文字を Claude（Anthropic）に送ります。送った記録は下の「操作の記録」に残ります。</dd>
+  <dt>外に送るもの</dt><dd class="small">{% if engine == 'claude' %}音声は送りません（文字起こしはこのPCの中）。ノート作成・質問・話者の推定のときだけ、文字起こしの文字を Claude（Anthropic）に送ります。{% else %}<strong>何も送りません。</strong>録音・文字起こし・ノートはすべてこのPCの中で作り、このPCの中に保存します（今のノートの作り方: {{ engine_labels[engine] }}）。{% endif %}送ったかどうかは下の「操作の記録」に残ります。</dd>
 </dl>
 <p class="small muted" style="margin-top: var(--sp-3)">このフォルダごとコピーすればバックアップになります。JSON でも書き出せます。</p>
 <a class="btn" href="{{ url_for('backup') }}">JSON で書き出す</a>
@@ -86,7 +100,7 @@
   <tbody>
   {% for a in activity %}
     <tr><td><time data-utc="{{ a.at }}">{{ a.at }}</time></td>
-      <td>{{ {'created': '作成', 'edited': '編集', 'deleted': '削除', 'regenerate': 'ノート作り直し', 'retry': 'やり直し', 'speaker': '話者名', 'exported': '書き出し', 'ai_notes': 'AIへ送信', 'ai_ask': 'AIへ送信', 'ai_ask_all': 'AIへ送信', 'ai_speakers': 'AIへ送信', 'failed': '失敗', 'settings': '設定', 'audio_purged': '録音の自動削除', 'recording_started': '録音開始', 'recording_discarded': '録音を捨てた'}.get(a.action, a.action) }}</td>
+      <td>{{ {'local_notes': '端末内で作成', 'local_ask': '端末内で処理', 'local_ask_all': '端末内で処理', 'local_speakers': '端末内で処理', 'created': '作成', 'edited': '編集', 'deleted': '削除', 'regenerate': 'ノート作り直し', 'retry': 'やり直し', 'speaker': '話者名', 'exported': '書き出し', 'ai_notes': 'AIへ送信', 'ai_ask': 'AIへ送信', 'ai_ask_all': 'AIへ送信', 'ai_speakers': 'AIへ送信', 'failed': '失敗', 'settings': '設定', 'audio_purged': '録音の自動削除', 'recording_started': '録音開始', 'recording_discarded': '録音を捨てた'}.get(a.action, a.action) }}</td>
       <td>{% if a.meeting_id %}<a href="{{ url_for('meeting', mid=a.meeting_id) }}">{{ a.detail }}</a>{% else %}{{ a.detail }}{% endif %}</td></tr>
   {% endfor %}
   </tbody>
@@ -103,7 +117,8 @@ document.getElementById("save").addEventListener("click", (e) => {
   MN.withLoading(e.currentTarget, async () => {
     await MN.api("POST", "/api/settings", {
       custom_context: f.custom_context.value, vocabulary: f.vocabulary.value, language: f.language.value,
-      whisper_model: f.whisper_model.value, model: f.model.value, quiet_mode: f.quiet_mode.checked ? "1" : "0",
+      whisper_model: f.whisper_model.value, model: f.model.value,
+      ai_engine: (f.ai_engine.value || "auto"), ollama_model: f.ollama_model.value, quiet_mode: f.quiet_mode.checked ? "1" : "0",
       monthly_budget_jpy: f.monthly_budget_jpy.value, usd_jpy: f.usd_jpy.value, audio_retention_days: f.audio_retention_days.value,
     });
     MN.toast("保存しました");

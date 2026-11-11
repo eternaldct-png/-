@@ -65,7 +65,10 @@ def create_app(data_dir: str | Path | None = None, *, transcriber=None, ai_clien
     def globals_():
         return {"nav": request.endpoint, "fmt_clock": transcribe.fmt_clock,
                 "whisper_ok": transcribe.whisper_available(),
-                "api_key_ok": bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN") or ai_client)}
+                "api_key_ok": bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN") or ai_client)
+                              or ai.resolve_engine(store.settings(), ai_client) != "claude",
+                "engine": ai.resolve_engine(store.settings(), ai_client),
+                "engine_labels": ai.ENGINE_LABELS}
 
     def get_or_404(mid):
         m = store.get_meeting(mid)
@@ -131,6 +134,13 @@ def create_app(data_dir: str | Path | None = None, *, transcriber=None, ai_clien
         wait = app.config.get("MN_STALE_SEC", 120)
         before = (datetime.now(timezone.utc) - timedelta(seconds=wait)).isoformat(timespec="seconds")
         return store.open_recordings(before)
+
+    def sent_log(action, mid, what):
+        """操作の記録: 外部（Claude）に送ったのか、端末の中で済んだのかを書き分ける。"""
+        engine = ai.resolve_engine(store.settings(), ai_client)
+        if engine == "claude":
+            return action, mid, f"{what}のため文字起こしを Claude（外部）に送信"
+        return "local_" + action.removeprefix("ai_"), mid, f"{what}を{ai.ENGINE_LABELS[engine]}で処理（外部への送信なし）"
 
     def meter(mid, kind):
         return ai.Meter(store, store.settings(), mid, kind)
@@ -331,10 +341,10 @@ def create_app(data_dir: str | Path | None = None, *, transcriber=None, ai_clien
             segs = ai.guess_speakers(m, store.settings(), client=app.extensions["mn_ai_client"],
                                      meter=meter(mid, "speakers"))
         except ai.AIError as e:
-            return err(str(e), 502 if "参加者" not in str(e) else 400)
+            return err(str(e), 400 if ("参加者" in str(e) or "AIなし" in str(e)) else 502)
         n = sum(1 for a, b in zip(m["transcript"], segs) if a.get("speaker") != b.get("speaker"))
         store.update_meeting(mid, transcript=segs)
-        store.log("ai_speakers", mid, f"話者の推定のため文字起こしを Claude に送信（{n}行に推定を付けた）")
+        store.log(*sent_log("ai_speakers", mid, f"話者の推定（{n}行に推定を付けた）"))
         return jsonify({"ok": True, "guessed": n})
 
     @app.delete("/api/meetings/<mid>")
@@ -384,7 +394,7 @@ def create_app(data_dir: str | Path | None = None, *, transcriber=None, ai_clien
             return err(str(e), 502)
         store.add_chat(mid, "user", question)
         store.add_chat(mid, "assistant", answer)
-        store.log("ai_ask", mid, "質問のためノートと文字起こしを Claude に送信")
+        store.log(*sent_log("ai_ask", mid, "この会議への質問"))
         return jsonify({"answer": answer})
 
     @app.delete("/api/meetings/<mid>/chat")
@@ -440,7 +450,7 @@ def create_app(data_dir: str | Path | None = None, *, transcriber=None, ai_clien
             return err(str(e), 502)
         store.add_chat(None, "user", question)
         store.add_chat(None, "assistant", answer)
-        store.log("ai_ask_all", None, f"全会議への質問のためノート（{sum(1 for m in meetings if m['status'] == 'done')}件）を Claude に送信")
+        store.log(*sent_log("ai_ask_all", None, f"全会議への質問（ノート{sum(1 for m in meetings if m['status'] == 'done')}件）"))
         sources = [{"id": m["id"], "title": m["title"] or "（無題）", "url": url_for("meeting", mid=m["id"])}
                    for m in meetings if m["id"] in hits][:8]
         return jsonify({"answer": answer, "sources": sources})
@@ -468,12 +478,18 @@ def create_app(data_dir: str | Path | None = None, *, transcriber=None, ai_clien
                 if not lo <= v <= hi:
                     return err(f"{lo}〜{hi:,} の範囲で入れてください。")
                 data[key] = str(int(v))
+        if "ai_engine" in data and data["ai_engine"] not in ("auto", "ollama", "simple", "claude"):
+            return err("ノートの作り方の選び方が正しくありません。")
+        if "ollama_model" in data:
+            data["ollama_model"] = str(data["ollama_model"]).strip() or "qwen2.5:7b"
+            if not re.fullmatch(r"[A-Za-z0-9._:/-]{1,80}", data["ollama_model"]):
+                return err("端末内AIのモデル名に使えない文字が入っています。")
         if "quiet_mode" in data:
             data["quiet_mode"] = "1" if data["quiet_mode"] in (True, "1", "true") else "0"
         before = store.settings()
         changed = {k: v for k, v in data.items() if isinstance(v, str) and k in before and before[k] != v}
         store.save_settings(**changed)
-        labels = {"custom_context": "ノートの指示", "vocabulary": "よく出る言葉", "language": "言語", "whisper_model": "Whisperのモデル",
+        labels = {"ai_engine": "ノートの作り方", "ollama_model": "端末内AIのモデル", "custom_context": "ノートの指示", "vocabulary": "よく出る言葉", "language": "言語", "whisper_model": "Whisperのモデル",
                   "model": "AIのモデル", "quiet_mode": "小さい声モード", "monthly_budget_jpy": "月の上限",
                   "usd_jpy": "為替", "audio_retention_days": "録音の保存日数"}
         if changed:

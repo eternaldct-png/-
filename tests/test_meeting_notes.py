@@ -7,7 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from tools.meeting_notes import transcribe
+from tools.meeting_notes import ai as ai_mod, local_ai, transcribe
 from tools.meeting_notes.app import create_app, keyword_hits, to_utc
 from tools.meeting_notes.store import Store
 
@@ -322,17 +322,25 @@ class ReviewFixes(Base):
 
     def test_fix2_diagnostics_page(self):
         body = self.c.get("/settings").get_data(as_text=True)
-        for name in ("Claude の APIキー", "文字起こし（faster-whisper）", "空き容量", "データベース", "失敗した会議"):
+        for name in ("ノートの作り方", "文字起こし（faster-whisper）", "空き容量", "データベース", "失敗した会議"):
             self.assertIn(name, body)
 
     def test_fix2_diagnostics_without_key_and_whisper(self):
         from tools.meeting_notes.diagnose import run_checks
+        self.store.save_settings(ai_engine="claude")
         with patch.dict("os.environ", {}, clear=True), patch.object(transcribe, "whisper_available", return_value=False):
             checks = {c["name"]: c for c in run_checks(self.dir, self.store, self.worker, testing=False)}
         self.assertFalse(checks["Claude の APIキー"]["ok"])
+        self.assertIn("端末内AI", checks["Claude の APIキー"]["fix"])  # APIなしへの切り替えを案内する
         self.assertIn(".env", checks["Claude の APIキー"]["fix"])
-        self.assertFalse(checks["文字起こし（faster-whisper）"]["ok"])
-        self.assertIn("pip install faster-whisper", checks["文字起こし（faster-whisper）"]["fix"])
+        first = checks
+        self.store.save_settings(ai_engine="auto")
+        with patch.object(local_ai, "ollama_models", return_value=None):
+            checks = {c["name"]: c for c in run_checks(self.dir, self.store, self.worker, testing=False)}
+        self.assertNotIn("Claude の APIキー", checks)  # API を使わないときはキーを求めない
+        self.assertIn("ollama.com", checks["端末内AI（Ollama）"]["fix"])
+        self.assertFalse(first["文字起こし（faster-whisper）"]["ok"])
+        self.assertIn("pip install faster-whisper", first["文字起こし（faster-whisper）"]["fix"])
 
     def test_fix3_speakers_per_line_and_ai_guess(self):
         mid = self.from_text("会場は渋谷にしましょう\n了解です", participants="山田、自分")
@@ -461,6 +469,122 @@ class ReviewFixes(Base):
             self.assertEqual((s.get_meeting(mid)["consent"], s.actions_for(mid)[0]["verified"]), (2, 0))
         finally:
             shutil.rmtree(d, ignore_errors=True)
+
+
+class NoApi(Base):
+    """端末保存・API なしで使う（外部の API を呼ばない）。"""
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp())
+        self.app = create_app(self.dir, transcriber=fake_transcriber, ai_client=None, start_worker=False)
+        self.c = self.app.test_client()
+        self.store = self.app.extensions["mn_store"]
+        self.worker = self.app.extensions["mn_worker"]
+        self.no_ollama = patch.object(local_ai, "ollama_models", return_value=None)
+        self.no_ollama.start()
+        self.addCleanup(self.no_ollama.stop)
+        # 外部の Claude を呼んだら失敗させる
+        self.no_claude = patch.object(ai_mod, "_client", side_effect=AssertionError("Claude API を呼んではいけない"))
+        self.no_claude.start()
+        self.addCleanup(self.no_claude.stop)
+
+    MEETING = ("山田: 今日はイベントの件です。\n"
+               "自分: 会場は渋谷にしましょう。\n"
+               "山田: 了解です。見積もりは金曜までに送ります。\n"
+               "自分: 佐藤さん、告知文の準備をお願いします。\n"
+               "佐藤: わかりました、来週月曜までにやっておきます。")
+
+    def test_auto_never_picks_claude_even_with_api_key(self):
+        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-ant-test"}):
+            self.assertEqual(ai_mod.resolve_engine(self.store.settings(), None), "simple")
+        with patch.object(local_ai, "ollama_models", return_value=["qwen2.5:7b"]):
+            self.assertEqual(ai_mod.resolve_engine(self.store.settings(), None), "ollama")
+        with patch.object(local_ai, "ollama_models", return_value=["llama3:8b"]):  # 設定のモデルが無い
+            self.assertEqual(ai_mod.resolve_engine(self.store.settings(), None), "simple")
+
+    def test_simple_mode_makes_notes_without_any_ai(self):
+        mid = self.from_text(self.MEETING)
+        m = self.store.get_meeting(mid)
+        self.assertEqual((m["status"], m["notes_model"]), ("done", "simple"))
+        self.assertIn("渋谷にしましょう", " ".join(m["notes"]["decisions"]))
+        acts = {a["text"]: a for a in self.store.actions_for(mid)}
+        self.assertEqual(acts["見積もりは金曜までに送ります。"]["owner"], "山田")     # 「〜します」は本人
+        self.assertEqual(acts["見積もりは金曜までに送ります。"]["due"], "金曜")
+        ask = next(a for t, a in acts.items() if "告知文" in t)
+        self.assertEqual(ask["owner"], "佐藤")                                   # 「〇〇さん、お願いします」
+        self.assertEqual(acts["わかりました、来週月曜までにやっておきます。"]["owner"], "佐藤")  # 「やっておきます」も本人
+        self.assertEqual(acts["わかりました、来週月曜までにやっておきます。"]["due"], "来週月曜")
+        self.assertTrue(all(a["verified"] for a in acts.values()))               # 発言そのままなので作り話は無い
+        self.assertEqual(self.store.usage_for_meeting(mid), 0)                   # 費用ゼロ
+        logs = self.store.activity()
+        self.assertIn("local_notes", [a["action"] for a in logs])
+        self.assertTrue(all("Claude" not in a["detail"] for a in logs))
+        body = self.c.get(f"/m/{mid}").get_data(as_text=True)
+        self.assertIn("AIなしの簡易まとめ", body)
+        self.assertNotIn("ANTHROPIC_API_KEY が", body)  # APIキーの警告を出さない
+
+    def test_simple_mode_ask_and_speakers(self):
+        mid = self.from_text(self.MEETING)
+        r = self.c.post(f"/api/meetings/{mid}/ask", json={"question": "見積もりはいつ？"}, headers=H)
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("見積もりは金曜までに送ります", r.get_json()["answer"])
+        r = self.c.post("/api/ask", json={"question": "渋谷の会場"}, headers=H)
+        self.assertIn("会場は渋谷にしましょう", r.get_json()["answer"])
+        r = self.c.post(f"/api/meetings/{mid}/guess-speakers", headers=H)
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("AIなし", r.get_json()["error"])
+        self.assertIn("何も送りません", self.c.get("/settings").get_data(as_text=True))
+
+    def test_ollama_mode_stays_on_this_pc(self):
+        calls = []
+
+        def fake_chat(model, system, user, schema=None, **kw):
+            calls.append((model, schema is not None, len(user)))
+            if schema:
+                return "はい、ノートです。" + json.dumps({**NOTES, "action_items": [
+                    {"text": "見積もりを送る", "owner": "山田", "due": "金曜", "evidence": "見積もりは金曜までに送ります"}]},
+                    ensure_ascii=False)  # 前置きが付いても読める
+            return "全体の要約です。"
+
+        self.store.save_settings(ai_engine="ollama", ollama_model="qwen2.5:3b")
+        with patch.object(local_ai, "ollama_chat", side_effect=fake_chat):
+            mid = self.from_text(self.MEETING)
+            long_text = "\n".join(f"山田: これは長い会議の{i}番目の発言で、見積もりは金曜までに送ります。" for i in range(600))
+            mid2 = self.from_text(long_text)
+        m = self.store.get_meeting(mid)
+        self.assertEqual((m["status"], m["notes_model"]), ("done", "ollama"))
+        self.assertEqual(calls[0][0], "qwen2.5:3b")
+        self.assertTrue(self.store.actions_for(mid)[0]["verified"])
+        # 長い会議は分けて読み、最後に要約をまとめる
+        m2 = self.store.get_meeting(mid2)
+        self.assertEqual(m2["notes"]["summary"], "全体の要約です。")
+        self.assertGreater(sum(1 for c in calls[1:] if c[1]), 1)
+        self.assertTrue(all(c[2] < 20_000 for c in calls))
+
+    def test_ollama_refuses_non_local_host(self):
+        with patch.object(local_ai, "OLLAMA_HOST", "http://example.com:11434"):
+            with self.assertRaises(local_ai.LocalAIError):
+                local_ai.ollama_chat("qwen2.5:7b", "s", "u")
+            self.no_ollama.stop()
+            try:
+                local_ai._cache.clear()
+                self.assertIsNone(local_ai.ollama_models())  # 外のホストには問い合わせない
+            finally:
+                self.no_ollama.start()
+
+    def test_ollama_not_running_fails_with_instructions(self):
+        self.store.save_settings(ai_engine="ollama")
+        with patch.object(local_ai, "ollama_chat", side_effect=local_ai.LocalAIError("端末内AI（Ollama）につながりません。")):
+            mid = self.from_text(self.MEETING)
+        m = self.store.get_meeting(mid)
+        self.assertEqual(m["status"], "failed")
+        self.assertIn("Ollama", m["error"])
+
+    def test_settings_validation(self):
+        self.assertEqual(self.c.post("/api/settings", json={"ai_engine": "gpt"}, headers=H).status_code, 400)
+        self.assertEqual(self.c.post("/api/settings", json={"ollama_model": "a b;rm"}, headers=H).status_code, 400)
+        self.assertEqual(self.c.post("/api/settings", json={"ai_engine": "simple", "ollama_model": "gemma3:4b"}, headers=H).status_code, 200)
+        self.assertEqual(self.store.settings()["ollama_model"], "gemma3:4b")
 
 
 class StoreDirect(unittest.TestCase):
