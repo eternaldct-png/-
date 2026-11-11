@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ m.title or '会議' }} - 会議ノート{% endblock %}
+{% block title %}{{ m.title or '会議' }} - キキトメ{% endblock %}
 {% block main %}
 {% set busy = m.status in ('queued', 'transcribing', 'summarizing') %}
 <div id="meeting" data-id="{{ m.id }}" data-status="{{ m.status }}" data-has-audio="{{ '1' if m.audio_path else '' }}">
@@ -42,13 +42,13 @@
 
 {% if busy %}
   <div class="notice" id="progress" role="status">
-    <strong id="progress-label">{{ {'queued': '順番待ち…', 'transcribing': '文字起こし中…', 'summarizing': 'AIがノートを書いています…'}[m.status] }}</strong>
+    <strong id="progress-label">{{ {'queued': '順番待ち…', 'transcribing': '文字起こし中…', 'summarizing': '要点とやることを書き留めています…'}[m.status] }}</strong>
     <span id="progress-detail"></span>
-    <div class="small">このページは開いたままで大丈夫です。終わると自動で表示が切り替わります。</div>
+    <div class="small">閉じても続きます。終わったら、この画面が切り替わります。</div>
   </div>
 {% elif m.status == 'failed' %}
   <div class="notice notice-danger" role="alert">
-    <strong>うまく処理できませんでした。</strong>
+    <strong>書き留められませんでした。録音と文字起こしは残っています。</strong>
     <div style="margin: var(--sp-2) 0">{{ m.error }}</div>
     <button class="btn btn-sm" type="button" id="retry-btn">やり直す</button>
   </div>
@@ -72,10 +72,10 @@
       <h2>{{ sec.heading }}</h2>
       <ul>{% for b in sec.bullets %}<li>{{ b }}</li>{% endfor %}</ul>
     {% endfor %}
-    <p class="muted xs" style="margin-top: var(--sp-5)">AIが文字起こしから書いたノートです。大事な数字・約束は文字起こしで確かめてください。
+    <p class="muted xs" style="margin-top: var(--sp-5)">AIが文字起こしから書き留めました。数字と約束は、文字起こしで確かめてから使ってください。
       <button class="btn btn-ghost btn-sm" type="button" id="regen-btn">ノートを作り直す</button></p>
   {% elif busy %}
-    <div class="empty"><p>ノートを作っています。</p></div>
+    <div class="empty"><p>書き留めている途中です。</p></div>
   {% else %}
     <div class="empty"><p>ノートはまだありません。</p></div>
   {% endif %}
@@ -88,7 +88,7 @@
   </ul>
   {% else %}
   <ul class="action-list" id="action-list"></ul>
-  <p class="muted" id="no-actions">{{ 'この会議でのやることは見つかりませんでした。' if m.status == 'done' else 'ノートができると、ここにやることが並びます。' }}</p>
+  <p class="muted" id="no-actions">{{ 'この会議で決まったやることはありませんでした。' if m.status == 'done' else '書き留め終わると、ここにやることが並びます。' }}</p>
   {% endif %}
   <form class="add-action" id="add-action" onsubmit="return false">
     <label class="sr-only" for="na-text">やること</label><input type="text" id="na-text" placeholder="やることを追加" maxlength="500">

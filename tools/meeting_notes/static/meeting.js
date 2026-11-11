@@ -8,7 +8,7 @@
   const on = (elId, ev, fn) => { const el = $(elId); if (el) el.addEventListener(ev, fn); };
 
   // ── 処理中は状態を見に行く ──
-  const labels = { queued: "順番待ち…", transcribing: "文字起こし中…", summarizing: "AIがノートを書いています…" };
+  const labels = { queued: "順番待ち…", transcribing: "文字起こし中…", summarizing: "要点とやることを書き留めています…" };
   if (labels[root.dataset.status]) {
     const poll = async () => {
       try {
@@ -27,7 +27,7 @@
   function notifyDone(status) {
     if (!("Notification" in window) || Notification.permission !== "granted" || !document.hidden) return;
     const title = document.getElementById("title-view").textContent.trim();
-    new Notification(status === "failed" ? "⚠ 会議ノート: 処理に失敗しました" : "✅ 会議ノートができました", { body: title });
+    new Notification(status === "failed" ? "⚠ キキトメ: 書き留められませんでした（録音は残っています）" : "✅ キキトメ: 書き留めました", { body: title });
   }
 
   // ── 編集・削除 ──

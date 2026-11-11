@@ -1,5 +1,5 @@
 #!/bin/bash
-# 会議ノートを起動する（Mac ではこのファイルをダブルクリック）
+# キキトメを起動する（Mac ではこのファイルをダブルクリック）
 # 初回だけ、必要なものを .venv にインストールする（数分かかります）
 cd "$(dirname "$0")" || exit 1
 DATA="${MEETING_NOTES_DIR:-$HOME/MeetingNotes}"

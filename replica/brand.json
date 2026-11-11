@@ -1,0 +1,8 @@
+{
+  "name": "キキトメ",
+  "name_latin": "Kikitome",
+  "avoid": ["Circleback", "Circle back", "circleback.ai"],
+  "domains": ["circleback.ai", "app.circleback.ai"],
+  "colors": [],
+  "_colors_note": "Circleback のブランド色は、この環境から公式サイトを開けず確認できていない。分かったらここに足して sweep をやり直す"
+}

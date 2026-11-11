@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}新しい会議 - 会議ノート{% endblock %}
+{% block title %}新しい会議 - キキトメ{% endblock %}
 {% block main %}
 <h1>新しい会議</h1>
 {% include "_stale.html" %}
@@ -57,7 +57,7 @@
       <audio id="rec-preview" controls></audio>
       <div class="row" style="justify-content:center; margin-top: var(--sp-3)">
         <button class="btn" type="button" id="rec-redo">録り直す</button>
-        <button class="btn btn-primary" type="button" id="rec-save">保存してノートを作る</button>
+        <button class="btn btn-primary" type="button" id="rec-save">保存して書き留める</button>
       </div>
     </div>
     <p class="muted xs" style="margin-top: var(--sp-4)">録音はこのPCの中（~/MeetingNotes）にだけ、10秒ごとに保存されます。ブラウザが落ちても、その直前までの録音は残り、次に開いたときに復旧できます。</p>
@@ -70,7 +70,7 @@
     <label class="field"><span>録音・録画ファイル</span>
       <input type="file" name="audio" id="audio-file" accept="audio/*,video/*,.m4a,.mp3,.wav,.webm,.mp4,.mov,.mkv">
       <small>mp3 / m4a / wav / webm / mp4 / mov など。1GB まで。動画は音声だけ使います。</small></label>
-    <button class="btn btn-primary" type="button" id="upload-save">取り込んでノートを作る</button>
+    <button class="btn btn-primary" type="button" id="upload-save">取り込んで書き留める</button>
   </form>
 </section>
 
@@ -81,7 +81,7 @@
     <label class="field"><span>または貼り付け</span>
       <textarea name="transcript_text" id="transcript-text" placeholder="山田: 来月のイベントの件ですが…&#10;自分: 会場は押さえました"></textarea>
       <small>「名前: 発言」の形だと話者が付きます。形式は自由です。</small></label>
-    <button class="btn btn-primary" type="button" id="text-save">取り込んでノートを作る</button>
+    <button class="btn btn-primary" type="button" id="text-save">取り込んで書き留める</button>
   </form>
 </section>
 {% endblock %}
