@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}設定 - 会議ノート{% endblock %}
+{% block main %}
+<h1>設定</h1>
+<form id="settings" class="stack" onsubmit="return false">
+  <label class="field"><span>ノートの書き方の指示・自分の前提</span>
+    <textarea name="custom_context" maxlength="4000" placeholder="例: 私は ETERNAL d.c.t の代表。ライバー事務所の面談では、配信経験・希望ジャンル・配信できる時間帯を必ず項目にする。金額は税込で書く。">{{ s.custom_context }}</textarea>
+    <small>ここに書いたことを毎回AIに伝えます。会社のこと・よく出る人の名前・ノートに必ず入れてほしい項目など。</small></label>
+  <div class="grid-2">
+    <label class="field"><span>話す言語</span>
+      <select name="language">
+        {% for code, label in [('ja', '日本語'), ('en', '英語'), ('', '自動判定')] %}
+        <option value="{{ code }}" {% if s.language == code %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select></label>
+    <label class="field"><span>文字起こしの精度（Whisper のモデル）</span>
+      <select name="whisper_model">
+        {% for v, label in [('tiny', 'tiny（最速・粗い）'), ('base', 'base'), ('small', 'small（おすすめ）'), ('medium', 'medium（精度高・遅い）'), ('turbo', 'turbo（精度高・Apple Silicon向け）'), ('large-v3', 'large-v3（最高精度・とても遅い）')] %}
+        <option value="{{ v }}" {% if s.whisper_model == v %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+      <small>初回だけモデルのダウンロードがあります（small で約500MB）。{% if not whisper_ok %}<strong>faster-whisper が未インストールです。</strong>{% endif %}</small></label>
+  </div>
+  <label class="field"><span>AIのモデル</span>
+    <select name="model">
+      {% for v, label in [('claude-opus-5-5', 'Claude Opus 5.5（おすすめ・高精度）'), ('claude-sonnet-5-5', 'Claude Sonnet 5.5（安い）')] %}
+      <option value="{{ v }}" {% if s.model == v %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+    <small>1時間の会議1本で、ノート作成は Opus 5.5 でおよそ数十円程度（推測。会話量で変わります）。</small></label>
+  <div><button class="btn btn-primary" type="button" id="save">保存</button></div>
+</form>
+
+<h2>データ</h2>
+<dl class="kv">
+  <dt>保存先</dt><dd><code>{{ data_dir }}</code></dd>
+</dl>
+<p class="small muted" style="margin-top: var(--sp-3)">このフォルダごとコピーすればバックアップになります。JSON でも書き出せます。</p>
+<a class="btn" href="{{ url_for('backup') }}">JSON で書き出す</a>
+{% endblock %}
+{% block scripts %}
+<script>
+document.getElementById("save").addEventListener("click", (e) => {
+  const f = document.getElementById("settings").elements;
+  MN.withLoading(e.currentTarget, async () => {
+    await MN.api("POST", "/api/settings", { custom_context: f.custom_context.value, language: f.language.value, whisper_model: f.whisper_model.value, model: f.model.value });
+    MN.toast("保存しました");
+  });
+});
+</script>
+{% endblock %}

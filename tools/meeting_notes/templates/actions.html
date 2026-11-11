@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}やること - 会議ノート{% endblock %}
+{% block main %}
+<h1>やること</h1>
+<form class="row" method="get" style="margin-bottom: var(--sp-4)">
+  <label class="field" style="width:auto"><span>担当</span>
+    <select name="owner" onchange="this.form.submit()" style="width:auto">
+      <option value="" {% if not owner %}selected{% endif %}>全員</option>
+      {% for o in owners %}<option value="{{ o }}" {% if o == owner %}selected{% endif %}>{{ o }}</option>{% endfor %}
+      <option value="__none__" {% if owner == '__none__' %}selected{% endif %}>担当未定</option>
+    </select></label>
+  <label class="field" style="width:auto"><span>状態</span>
+    <select name="state" onchange="this.form.submit()" style="width:auto">
+      <option value="open" {% if state == 'open' %}selected{% endif %}>まだ</option>
+      <option value="done" {% if state == 'done' %}selected{% endif %}>終わった</option>
+      <option value="all" {% if state == 'all' %}selected{% endif %}>すべて</option>
+    </select></label>
+  <noscript><button class="btn" type="submit">絞り込む</button></noscript>
+</form>
+{% if items %}
+  <p class="muted small">{{ items|length }}件</p>
+  <ul class="action-list" {% if state == 'open' %}data-hide-done{% endif %}>
+    {% set show_meeting = True %}
+    {% for a in items %}{% include "_action_row.html" %}{% endfor %}
+  </ul>
+{% else %}
+  <div class="empty">
+    {% if state == 'open' and not owner %}<p>まだ終わっていないやることはありません 🎉</p>
+    {% else %}<p>条件に当てはまるやることはありません。</p>{% endif %}
+    <a class="btn" href="{{ url_for('actions', state='all') }}">すべて表示</a>
+  </div>
+{% endif %}
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='actions.js') }}"></script>{% endblock %}

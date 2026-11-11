@@ -1,0 +1,14 @@
+<li class="action-row{% if a.done %} done{% endif %}" data-id="{{ a.id }}">
+  <input type="checkbox" id="a-{{ a.id }}" {% if a.done %}checked{% endif %} data-action="toggle">
+  <div class="body">
+    <label class="text" for="a-{{ a.id }}">{{ a.text }}</label>
+    <div class="sub">
+      {% if a.owner %}<span class="chip">{{ a.owner }}</span>{% else %}<span>担当未定</span>{% endif %}
+      {% if a.due %}<span>・期限 {{ a.due }}</span>{% endif %}
+      {% if show_meeting %}<span>・<a href="{{ url_for('meeting', mid=a.meeting_id) }}#tab-actions">{{ a.meeting_title or '（無題の会議）' }}</a>
+        <time data-utc="{{ a.meeting_started_at }}"></time></span>{% endif %}
+      {% if a.manual %}<span>・手入力</span>{% endif %}
+    </div>
+  </div>
+  <button class="btn btn-ghost btn-sm" type="button" data-action="delete" aria-label="「{{ a.text }}」を削除">削除</button>
+</li>

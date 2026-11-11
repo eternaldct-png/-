@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}AIに聞く - 会議ノート{% endblock %}
+{% block main %}
+<h1>AIに聞く（すべての会議から）</h1>
+<p class="muted small">これまでの会議のノートをもとにAIが答えます。質問の言葉が出てくる会議（最大5件）は文字起こしまで読みます。</p>
+<div class="chat" id="chat">
+  {% for c in chat %}<div class="msg msg-{{ c.role }}">{{ c.content }}</div>{% endfor %}
+</div>
+{% if not chat %}<p class="muted" id="chat-empty">例:「先月の面談で、配信時間について話した人は？」「〇〇社との約束で残っているものは？」</p>{% endif %}
+<div id="sources" class="small" style="margin-top: var(--sp-2)"></div>
+<form class="chat-form" onsubmit="return false" style="margin-top: var(--sp-3)">
+  <label class="sr-only" for="question">質問</label>
+  <textarea id="question" placeholder="質問する（⌘ + Enter で送信）"></textarea>
+  <button class="btn btn-primary" type="button" id="ask-btn">聞く</button>
+</form>
+{% if chat %}<p><button class="btn btn-ghost btn-sm" type="button" id="chat-clear">履歴を消す</button></p>{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+(function () {
+  const { api, toast, withLoading } = window.MN;
+  const $ = (id) => document.getElementById(id);
+  function addMsg(role, text) {
+    const d = document.createElement("div"); d.className = `msg msg-${role}`; d.textContent = text;
+    $("chat").appendChild(d); d.scrollIntoView({ block: "nearest" });
+    const e = $("chat-empty"); if (e) e.remove(); return d;
+  }
+  async function ask() {
+    const q = $("question").value.trim();
+    if (!q) { toast("質問を入れてください", "error"); return; }
+    addMsg("user", q); $("question").value = "";
+    const t = addMsg("assistant", "考えています…");
+    const data = await withLoading($("ask-btn"), () => api("POST", "/api/ask", { question: q }));
+    if (!data) { t.remove(); $("question").value = q; return; }
+    t.textContent = data.answer;
+    const box = $("sources"); box.replaceChildren();
+    if (data.sources.length) {
+      box.append("詳しく読んだ会議: ");
+      data.sources.forEach((s, i) => { if (i) box.append("、"); const a = document.createElement("a"); a.href = s.url; a.textContent = s.title; box.append(a); });
+    }
+  }
+  $("ask-btn").addEventListener("click", ask);
+  $("question").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) ask(); });
+  const clear = $("chat-clear");
+  if (clear) clear.addEventListener("click", (e) => {
+    if (!confirm("質問の履歴を消しますか？")) return;
+    withLoading(e.currentTarget, async () => { await api("DELETE", "/api/ask"); location.reload(); });
+  });
+})();
+</script>
+{% endblock %}
