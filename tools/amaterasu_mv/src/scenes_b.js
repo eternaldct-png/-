@@ -380,8 +380,10 @@ scene(S2b, S2c + .1, (c, t) => {
   c.restore();
   c.save(); c.globalAlpha = 1 - out;
   // 何度倒れても（倒れた文字が起き上がる）
-  const L1 = LT('何度倒れても', { size: 86, track: .06 });
-  drawTextS(c, L1, 370, 560, (g, i) => { const kk = E.outExpo(prog(t, 146.97 + i * .07, 146.97 + i * .07 + .3)); const st = E.outBack(prog(t, 149.3 + i * .05, 149.75 + i * .05)); return { a: kk, rot: lerp(-Math.PI / 2, 0, st), dy: (1 - st) * 30 }; }, C_WHITE, C_INK, 6);
+  const L1 = LT('何度倒れても', { size: 86, track: .06 }); const lean = (1 - sat(riseK(t))) * -.42;
+  c.save(); c.translate(370 + L1.len / 2, 600); c.rotate(-lean); c.translate(-(370 + L1.len / 2), -600);
+  drawTextS(c, L1, 370, 560, rise(t, 146.97, { stag: .07, dur: .3 }), C_WHITE, C_INK, 6);
+  c.restore();
   drawTextS(c, LT('首を上げる', { size: 86, track: .06 }), 1540, 470, rise(t, 149.0, { stag: .07, dur: .4, dist: 80 }), C_WHITE, C_INK, 6);
   drawTextS(c, LT('炎', { size: 260, fam: F_MIN }), 1540, 690, () => { const kk = E.outExpo(prog(t, 150.2, 150.6)); return { a: kk, s: lerp(.3, 1, kk) * (1 + kick(t) * .06), dy: (1 - kk) * 120 }; }, C_VERM, C_INK, 8);
   if (t > 150.2) embers(c, t, 150.2, 60, 1540, 660, 90, 90, { vx: 20, vy: -260, life: 1.2, spread: 1, size: 4 });
@@ -414,8 +416,8 @@ scene(S2d, S2e + .1, (c, t) => {
   c.restore();
   c.save(); c.globalAlpha = 1 - out;
   c.fillStyle = C_WHITE;
-  drawText(c, LT('触れられなくても', { size: 78, track: .14 }), 1250, 640, rise(t, 155.07, { stag: .06, dur: .45, out: 158.0, odur: .25 }));
-  drawText(c, LT('構わない', { size: 78, track: .14 }), 1380, 760, rise(t, 156.7, { stag: .08, dur: .45, out: 158.03, odur: .25 }));
+  drawText(c, LT('触れられなくても', { size: 78, track: .14 }), 1250, 640, rise(t, 155.07, { stag: .06, dur: .45, out: 157.75, odur: .25 }));
+  drawText(c, LT('構わない', { size: 78, track: .14 }), 1380, 760, rise(t, 156.7, { stag: .08, dur: .45, out: 157.78, odur: .25 }));
   drawText(c, LT('距離', { size: 150, track: .1 }), 1040, 690, (g, i) => { const kk = E.outExpo(prog(t, 158.13 + i * .1, 158.13 + i * .1 + .4)); return { a: kk * (1 - m), dy: (1 - kk) * 40, s: 1 - m * .3 }; });
   drawText(c, LT('さえ', { size: 70, track: .1 }), 1270, 730, rise(t, 158.75, { stag: .08, dur: .35, out: 159.85, odur: .15 }));
   drawTextS(c, LT('意味', { size: 230, fam: F_GOTH, track: .12 }), 1090, 680, (g, i) => ({ a: m, s: lerp(2, 1, m) }), C_GOLD, C_INK, 8);

@@ -223,8 +223,8 @@ scene(BUILD, CH3 + .15, (c, t) => {
 const FIN = 238.43, OUTRO = 240.3;
 const dawn = t => ez(t, 229.8, 237.6, E.inOutCubic) * .62 + ez(t, 237.4, FIN + .15, E.inExpo) * .38;
 const camZ = t => { const v = 760; return (t < 230.2 ? (t - CH3) * v : (230.2 - CH3) * v + (t - 230.2) * 70 + (v - 70) * .9 * (1 - Math.exp(-(t - 230.2) / .9))); };
-const SUNY = 452;
-bgSeg(CH3, FIN, t => { const d = dawn(t); const ring = t - CH3, ring2 = t - 224.73; return { uSun: [...px2p(CX, SUNY), .145 + d * .02], uSunI: 1.02 + kick(t) * .1, uCorona: 1.3 + kick(t) * .6, uRays: 1.6 + kick(t) * .6, uSurf: .7, uStars: .35 * (1 - d), uFog: .9, uNightA: [.3, .09, .11], uNightB: [.045, .06, .27], uBright: d, uRingR: (ring2 > 0 ? ring2 : ring) * 1.2, uRingA: Math.exp(-(ring2 > 0 ? ring2 : ring) * 2.3) }; });
+const SUNY = 545;
+bgSeg(CH3, FIN, t => { const d = dawn(t); const ring = t - CH3, ring2 = t - 224.73; return { uSun: [...px2p(CX, SUNY), .105 + d * .02], uSunI: 1.0 + kick(t) * .1, uCorona: 1.1 + kick(t) * .5, uRays: 1.8 + kick(t) * .6, uSurf: .7, uStars: .35 * (1 - d), uFog: .9, uNightA: [.3, .09, .11], uNightB: [.045, .06, .27], uBright: d, uRingR: (ring2 > 0 ? ring2 : ring) * 1.2, uRingA: Math.exp(-(ring2 > 0 ? ring2 : ring) * 2.3) }; });
 postSeg(CH3, FIN, t => {
   const f = Math.exp(-(t - CH3) * 3), f2 = t > 224.73 ? Math.exp(-(t - 224.73) * 3.5) : 0, d = dawn(t);
   const quake = prog(t, 221.7, 222.2) * (1 - prog(t, 223.4, 223.9));
@@ -276,7 +276,7 @@ scene(CH3 - .02, FIN + .2, (c, t) => {
   // 少年（背中）— 花の海の中に立つ
   if (t > 230.4) { const k = ez(t, 230.5, 232.2, E.outQuint); c.save(); c.globalAlpha = k * (1 - wo); drawChar(c, 'back', CX, lerp(1500, 1100, k), 560, { grade: '#1a0e10', gamt: lerp(.6, .25, d), rim: [0, 6], rimCol: '#ffd27a', rimA: .9 }); c.restore(); }
   // アマテラス（5回目）
-  amaHit(c, t, CH3, 0, { end: 216.75, y: 300 });
+  amaHit(c, t, CH3, 0, { end: 216.75, y: 280 });
   // 咲き誇れ 神話を超えて
   if (t > 216.9 && t < 220.0) {
     const o = 219.7;
@@ -301,15 +301,15 @@ scene(CH3 - .02, FIN + .2, (c, t) => {
   // 終わらない朝を引き連れて
   if (t > 230.5 && t < 235.2) {
     const o = 234.75; const tc = d > .45 ? C_INK : C_WHITE, sc = d > .45 ? '#ffe9b8' : C_INK;
-    drawTextS(c, LT('終わらない朝を', { size: 118, vert: true, track: .08 }), 520, 500, rise(t, 230.6, { stag: .09, dur: .5, vert: true, dist: 30, out: o, odur: .3 }), tc, sc, 5);
-    drawTextS(c, LT('引き連れて', { size: 118, vert: true, track: .08 }), 1400, 500, rise(t, 232.7, { stag: .1, dur: .5, vert: true, dist: 30, out: o, odur: .3 }), tc, sc, 5);
+    drawTextS(c, LT('終わらない朝を', { size: 92, vert: true, track: .1 }), 500, 400, rise(t, 230.6, { stag: .09, dur: .5, vert: true, dist: 30, out: o, odur: .3 }), tc, sc, 5);
+    drawTextS(c, LT('引き連れて', { size: 92, vert: true, track: .1 }), 1420, 400, rise(t, 232.7, { stag: .1, dur: .5, vert: true, dist: 30, out: o, odur: .3 }), tc, sc, 5);
   }
   // 今 この世界を照らせ
   if (t > 234.95) {
     const k = E.outExpo(prog(t, 235.03, 235.3)), ou = wo;
-    drawTextS(c, LT('今', { size: 400, fam: F_MIN }), 430, 400, () => ({ a: k * (1 - ou), s: lerp(2, 1, k) }), C_INK, '#ffd27a', 10);
+    drawTextS(c, LT('今', { size: 380, fam: F_MIN }), 430, 330, () => ({ a: k * (1 - ou), s: lerp(2, 1, k) }), C_INK, '#ffd27a', 10);
     drawTextS(c, LT('この世界を', { size: 110, track: .16 }), 1340, 270, rise(t, 235.95, { stag: .07, dur: .4 }), C_INK, '#ffe9b8', 5);
-    drawTextS(c, LT('照らせ', { size: 230, fam: F_GOTH, track: .08 }), 1340, 480, (g, i) => { const kk = E.outExpo(prog(t, 237.0 + i * .12, 237.0 + i * .12 + .3)); return { a: kk * (1 - ou), s: lerp(2, 1, kk) }; }, C_VERM, C_INK, 8);
+    drawTextS(c, LT('照らせ', { size: 220, fam: F_GOTH, track: .08 }), 1340, 450, (g, i) => { const kk = E.outExpo(prog(t, 237.0 + i * .12, 237.0 + i * .12 + .3)); return { a: kk * (1 - ou), s: lerp(2, 1, kk) }; }, C_VERM, C_INK, 8);
   }
 });
 

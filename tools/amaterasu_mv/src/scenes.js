@@ -98,7 +98,7 @@ bgSeg(0, B(18), t => {
   const r = track([[B(12), .2], [B(12) + .6, .3, E.outExpo], [B(18), .315, E.lin]])(t);
   return {
     uDoorOn: t < B(13) ? 1 : 0, uDoor: doorGap(t),
-    uSeam: t < B(7) ? ez(t, .5, 3.5, E.inOutCubic) * (.45 + .25 * Math.sin(t * 1.3) + env('all', t) * .5) * (1 + 1.2 * ez(t, 6.3, B(7), E.inCubic)) : .9,
+    uSeam: t < B(7) ? ez(t, 0, 2.2, E.outCubic) * (.45 + .25 * Math.sin(t * 1.3) + env('all', t) * .5) * (1 + 1.2 * ez(t, 6.3, B(7), E.inCubic)) : .9,
     uSun: [0, 0, r], uSunI: t < B(12) ? .95 + kick(t) * .25 : 1.02 + kick(t) * .1 + .5 * (1 - E.outCubic(prog(t, B(12), B(12) + 1.2))),
     uCorona: lerp(1.6, 1.15, open) + kick(t) * .5, uRays: 1.4 + kick(t), uFog: 1, uStars: 0, uSurf: lerp(1, .55, open),
     uRingR: (t - B(12)) * 1.1, uRingA: t > B(12) ? Math.exp(-(t - B(12)) * 2.2) * 1.1 : 0,
@@ -109,7 +109,7 @@ postSeg(0, B(18), t => {
   const blast = t > B(12) ? Math.exp(-(t - B(12)) * 3.2) : 0;
   const a = t < B(12) ? k * 5 * build : blast * 26 + k * 3;
   return {
-    fade: ez(t, 0, 1.2, E.inOutCubic), shake: [sn1(t * 31) * a, sn1(t * 37, 2) * a], flash: blast * .85,
+    fade: ez(t, 0, .5, E.outCubic), shake: [sn1(t * 31) * a, sn1(t * 37, 2) * a], flash: blast * .85,
     zoom: t < B(12) ? 1 + build * .035 + k * .006 * build : 1.06 - .06 * E.outExpo(prog(t, B(12), B(12) + 1.0)) + (t - B(12)) * .0035 + k * .004,
     ca: .0012 + blast * .008 + k * .0012, bars: lerp(.11, 0, E.outExpo(prog(t, B(12), B(12) + .5))), vig: .9,
   };
