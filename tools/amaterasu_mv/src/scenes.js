@@ -99,7 +99,7 @@ bgSeg(0, B(18), t => {
   return {
     uDoorOn: t < B(13) ? 1 : 0, uDoor: doorGap(t),
     uSeam: t < B(7) ? ez(t, 0, 2.2, E.outCubic) * (.45 + .25 * Math.sin(t * 1.3) + env('all', t) * .5) * (1 + 1.2 * ez(t, 6.3, B(7), E.inCubic)) : .9,
-    uSun: [0, 0, r], uSunI: t < B(12) ? .95 + kick(t) * .25 : 1.02 + kick(t) * .1 + .5 * (1 - E.outCubic(prog(t, B(12), B(12) + 1.2))),
+    uSun: [0, 0, r], uSunI: t < B(12) ? .95 + kick(t) * .25 : .85 + kick(t) * .06 + .6 * (1 - E.outCubic(prog(t, B(12), B(12) + 1.2))),
     uCorona: lerp(1.6, 1.15, open) + kick(t) * .5, uRays: 1.4 + kick(t), uFog: 1, uStars: 0, uSurf: lerp(1, .55, open),
     uRingR: (t - B(12)) * 1.1, uRingA: t > B(12) ? Math.exp(-(t - B(12)) * 2.2) * 1.1 : 0,
   };
@@ -173,8 +173,8 @@ scene(TITLE0, B(18) + .5, (c, t) => {
   const rr = R + (1 - k0) * 260;
   sunDials(c, t, CX, CY, rr - 30, k0 * (1 - out) * .85, C_GOLD);
   // 題字（墨色・縦）
-  const L = LT('アマテラス', { size: 118, vert: true, track: .02 });
-  c.fillStyle = C_INK;
+  const L = LT('アマテラス', { size: 126, vert: true, track: .0 });
+  c.fillStyle = '#050308';
   drawText(c, L, CX, CY, (g, i, n) => {
     const t0 = bt(49) + i * P; const k = E.outExpo(prog(t, t0, t0 + .32));
     const hold = 1 + pulse(t, 2, 4) * .012;
@@ -196,7 +196,7 @@ bgSeg(INT0, INT1, t => {
   const ecl = ez(t, INT1 - 2.6, INT1 - .6, E.inOutCubic);
   const ring = (t - INT0) % (P * 16);
   return {
-    uSun: [...px2p(CX, y), r], uSunI: 1.02 + kick(t) * .1 - ecl * .25, uCorona: 1.1 + kick(t) * .5, uRays: 1 - ecl * .6, uSurf: .6, uStars: ez(t, INT0, INT0 + 2) * .8,
+    uSun: [...px2p(CX, y), r], uSunI: lerp(.86, 1.0, ez(t, INT0, INT0 + 1.2)) + kick(t) * .1 - ecl * .25, uCorona: 1.1 + kick(t) * .5, uRays: 1 - ecl * .6, uSurf: .6, uStars: ez(t, INT0, INT0 + 2) * .8,
     uHorOn: 1, uHor: px2p(0, horY(t))[1], uEclipse: ecl, uRingR: ring * .5, uRingA: Math.exp(-ring * 1.6) * .5 * (1 - ecl), uDim: 1 - ecl * .25,
   };
 });
@@ -211,7 +211,7 @@ scene(INT0, INT1, (c, t) => {
   // 水面の影
   const sh = c.createLinearGradient(0, by - 30, 0, by + 200); sh.addColorStop(0, 'rgba(0,0,0,.75)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
   c.fillStyle = sh; c.beginPath(); c.ellipse(CX, by + 60, 130, 120, 0, 0, TAU); c.fill();
-  drawChar(c, 'back', CX, by, 560, { grade: '#0a0a1c', gamt: .88, rim: [0, 5], rimCol: '#ffb24a', rimA: .95 });
+  drawChar(c, 'back', CX, by, 560, { live: t, grade: '#0a0a1c', gamt: .88, rim: [0, 5], rimCol: '#ffb24a', rimA: .95 });
   c.restore();
   // クレジット
   const a = ez(t, INT0 + 1.2, INT0 + 2.2) * (1 - out);
@@ -304,7 +304,7 @@ scene(V1c, PRE + .2, (c, t) => {
   // 少年（横顔）。光の方を向いている
   c.save(); c.globalAlpha = (1 - out) * k;
   const bx = 1500 + (1 - k) * 160 - (t - V1c) * 5, by = 1500;
-  drawChar(c, 'side', bx, by, 1700, { grade: '#07081a', gamt: lerp(.84, .45, lit), rim: [-12, 3], rimCol: lit > .5 ? '#ffd9a0' : '#ff9a4a', rimA: .55 + lit * .45 });
+  drawChar(c, 'side', bx, by, 1700, { live: t, grade: '#07081a', gamt: lerp(.84, .45, lit), rim: [-12, 3], rimCol: lit > .5 ? '#ffd9a0' : '#ff9a4a', rimA: .55 + lit * .45 });
   c.restore();
   c.save(); c.globalAlpha = 1 - out; c.fillStyle = C_WHITE;
   const o1 = 49.55;

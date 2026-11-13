@@ -209,7 +209,7 @@ scene(V2b - .2, V2d + .25, (c, t) => {
   const fxp = 1330 + (1 - k) * 200, fy0 = 70;
   c.save(); c.globalAlpha = (1 - out) * k;
   const warm = ez(t, 116.5, 119.5);
-  drawChar(c, 'face', fxp, fy0, fh, { ay: 0, grade: '#1a1030', gamt: lerp(.62, .12, warm), rim: [-9, 4], rimCol: '#ffb866', rimA: .7 });
+  drawChar(c, 'face', fxp, fy0, fh, { live: t, ay: 0, grade: '#1a1030', gamt: lerp(.62, .12, warm), rim: [-9, 4], rimCol: '#ffb866', rimA: .7 });
   // 仮面: 白い面を小片に割って、拍ごとに剥がす
   const cs = 82, sil = silhouette('face', '#f3ead9'), cols = Math.ceil(im.width / cs), rows = Math.ceil(900 / cs);
   for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
@@ -269,7 +269,7 @@ scene(V2d - .1, V2e + .2, (c, t) => {
 });
 // あなたが在る それだけで再編される宇宙 — 散らばった言葉が軌道に整列する
 const UNI = [...'支配征服祝福試練仮面願革命衝動静寂均衡感情本音嘘運命可能性残像理性夜矛盾孤独焦燥劣等境界線'];
-bgSeg(V2e, BRK, t => { const st = Math.exp(-Math.max(0, t - 129.75) * 3); return { uSun: [0, 0, .07 + ez(t, V2e, V2e + .5, E.outExpo) * .02], uSunI: .95 + kick(t) * .12, uCorona: 1.2 + kick(t) * .5, uRays: 1, uSurf: .8, uStars: 1, uFog: 1 }; });
+bgSeg(V2e, BRK, t => { const st = Math.exp(-Math.max(0, t - 129.75) * 3); return { uSun: [0, .05, .075 + ez(t, V2e, V2e + .5, E.outExpo) * .02], uSunI: .95 + kick(t) * .12, uCorona: 1.2 + kick(t) * .5, uRays: 1, uSurf: .8, uStars: 1, uFog: 1 }; });
 postSeg(V2e, BRK, t => { let s = 0; for (const x of [129.75, 129.92, 130.08]) if (t >= x) s = Math.max(s, Math.exp(-(t - x) * 9)); return { zoom: 1.12 - ez(t, V2e, 129.6, E.outCubic) * .12, rot: (1 - ez(t, V2e, 129.4, E.outCubic)) * .25, shake: [sn1(t * 30) * (kick(t) * 3 + s * 20), sn1(t * 33, 2) * (kick(t) * 3 + s * 20)], flash: s * .5, ca: .0012 + s * .01, mb: 3, shutter: .7 }; });
 scene(V2e - .1, BRK + .1, (c, t) => {
   const k = ez(t, 126.5, 129.4, E.inOutCubic), kin = ez(t, V2e - .1, V2e + .4), out = ez(t, BRK - .12, BRK + .05, E.inExpo);
@@ -289,6 +289,8 @@ scene(V2e - .1, BRK + .1, (c, t) => {
     c.globalAlpha = (1 - out) * kin * lerp(.4, front, kk); c.fillStyle = kk > .9 ? (ring % 2 ? C_GOLD : C_WHITE) : '#8fa0ff'; c.fillText(UNI[i % UNI.length], 0, 0); c.restore();
   }
   c.restore();
+  // 軌道の中心に、ただ立っている少年（正面）
+  { const kb = ez(t, V2e, V2e + .6, E.outQuint); c.save(); c.globalAlpha = (1 - out) * kb; drawChar(c, 'front', CX, CY + 128 + (1 - kb) * 30, 250, { live: t, grade: '#1a0c18', gamt: .35, rim: [0, 2], rimCol: '#ffcf8a', rimA: .8 }); c.restore(); }
   c.save(); c.globalAlpha = 1 - out;
   drawTextS(c, LT('あなたが在る', { size: 118, track: .16 }), CX, 150, rise(t, 125.37, { stag: .07, dur: .4 }), C_WHITE, C_INK, 6);
   c.fillStyle = C_WHITE; drawText(c, LT('それだけで', { size: 56, track: .5 }), CX, 878, rise(t, 126.67, { stag: .06, dur: .4 }));
@@ -309,7 +311,7 @@ scene(BRK, CH2 + .15, (c, t) => {
   const k = ez(t, BRK + .1, BRK + 1.6, E.outCubic), out = ez(t, CH2 - .3, CH2, E.inExpo);
   c.save(); c.globalAlpha = k * (1 - out);
   // 少年（横顔）— 遠くのやわらかい光を見上げる
-  drawChar(c, 'side', 1420 - (t - BRK) * 4, 1010, 640, { grade: '#0c1030', gamt: .5, rim: [-5, -2], rimCol: '#ffd9a8', rimA: .8 });
+  drawChar(c, 'side', 1420 - (t - BRK) * 4, 1010, 640, { live: t, grade: '#0c1030', gamt: .5, rim: [-5, -2], rimCol: '#ffd9a8', rimA: .8 });
   const sh = c.createLinearGradient(1200, 0, 1700, 0); sh.addColorStop(0, 'rgba(0,0,0,0)'); sh.addColorStop(.3, 'rgba(0,0,0,.5)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
   c.fillStyle = sh; c.fillRect(1200, 1004, 520, 10);
   c.restore();
@@ -399,7 +401,7 @@ postSeg(S2d, S2e, t => { const m = t > 159.9 ? Math.exp(-(t - 159.9) * 4) : 0; r
 scene(S2d, S2e + .1, (c, t) => {
   const k = ez(t, S2d, S2d + .7, E.outExpo), out = ez(t, S2e - .25, S2e + .05, E.inCubic), m = ez(t, 159.9, 160.5, E.outExpo);
   c.save(); c.globalAlpha = (1 - out) * k;
-  const bx = 400, by = 930; drawChar(c, 'side', bx + (1 - k) * -120, by, 430, { flip: true, grade: '#0a0c22', gamt: .72, rim: [-5, -3], rimCol: '#ffc880', rimA: .9 });
+  const bx = 400, by = 930; drawChar(c, 'side', bx + (1 - k) * -120, by, 430, { live: t, flip: true, grade: '#0a0c22', gamt: .72, rim: [-5, -3], rimCol: '#ffc880', rimA: .9 });
   // 距離の線
   const ax = bx + 70, ay = by - 330, sx2 = 1500 - 80, sy2 = 300 + 44; const ln = ez(t, 155.2, 157.2, E.inOutCubic);
   const ex = lerp(ax, sx2, ln), ey = lerp(ay, sy2, ln);

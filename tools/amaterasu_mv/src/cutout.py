@@ -18,6 +18,8 @@ def cut(name, hair_bottom):
     bg|=small
     # 本体につながっていない小さな島（JPEGのノイズ）を消す
     l3,n3=ndi.label(~bg); sz=ndi.sum(~bg,l3,range(1,n3+1)); main=1+int(np.argmax(sz)); bg=(l3!=main)
+    if name=='1':  # 低解像度の全身: 脚の間などに閉じ込められた白も抜く (enclosed)
+        l4,n4=ndi.label((mn>=246)&~bg); s4=ndi.sum((mn>=246)&~bg,l4,range(1,n4+1)); bg|=np.isin(l4,1+np.where((s4>12)&(s4<400))[0])&(np.arange(im.shape[0])[:,None]>150)
     alpha=(~bg).astype(np.float32)
     # ふち: 背景から3px以内は「暗さ」でアルファを決める（髪の細い毛）
     dist=ndi.distance_transform_edt(~bg)
@@ -39,7 +41,7 @@ def cut(name, hair_bottom):
     o=Image.fromarray(out,'RGBA').crop(box); o.save(f'assets/char_{name}.png'); print(name,o.size,box)
     for col,tag in (((8,10,30),'dark'),((240,120,30),'org')):
         bgim=Image.new('RGBA',o.size,col+(255,)); bgim.alpha_composite(o); bgim.convert('RGB').resize((o.size[0]//2,o.size[1]//2)).save(f'analysis/chk_{name}_{tag}.jpg',quality=88)
-cut('2',760); cut('3',470); cut('4',420)
+cut('2',760); cut('3',470); cut('4',420); cut('1',92)
 # ロゴ: 白→透明（乗算用の原本はそのまま使う）。暗い背景用に白文字版も作る
 lg=np.asarray(Image.open('assets/5.webp').convert('RGB')).astype(np.float32)
 mn=lg.min(2); mx=lg.max(2); a=np.clip((250-mn)/60,0,1)

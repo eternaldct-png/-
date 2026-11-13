@@ -15,7 +15,7 @@
 <script>
 window.ready = (async () => {
   const sync = await (await fetch('/assets/sync.json')).json(); initSync(sync);
-  await Promise.all([loadImg('face', '/assets/char_2.png'), loadImg('back', '/assets/char_3.png'), loadImg('side', '/assets/char_4.png'), loadImg('logo', '/assets/5.webp'), loadImg('logoA', '/assets/logo_alpha.png'), loadImg('orig2', '/assets/2.jpg'), loadImg('orig4', '/assets/4.jpg'), loadImg('orig3', '/assets/3.jpg')]);
+  await Promise.all([loadImg('face', '/assets/char_2.png'), loadImg('front', '/assets/char_1.png'), loadImg('back', '/assets/char_3.png'), loadImg('side', '/assets/char_4.png'), loadImg('logo', '/assets/5.webp'), loadImg('logoA', '/assets/logo_alpha.png'), loadImg('orig2', '/assets/2.jpg'), loadImg('orig4', '/assets/4.jpg'), loadImg('orig3', '/assets/3.jpg')]);
   const txt = ALLTEXT + 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,:/-— ';
   await Promise.all([document.fonts.load('800 80px "Shippori Mincho B1"', txt), document.fonts.load('500 80px "Shippori Mincho B1"', txt), document.fonts.load('400 80px "Dela Gothic One"', txt), document.fonts.load('700 80px "Cinzel"', txt), document.fonts.load('400 80px "Cinzel"', txt)]);
   initGL(); initScenes(); return true;

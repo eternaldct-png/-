@@ -382,17 +382,38 @@ function graded(name, mulColor, amt) {
     c.globalAlpha = 1; c.globalCompositeOperation = 'destination-in'; c.drawImage(im, 0, 0);
   });
 }
-// キャラを描く: 足元(または指定アンカー)を x,y に、高さ h
+// 髪のある高さ（画像の上から何pxまでを風で揺らすか）。顔の行は揺らさない
+const HAIR = { back: 430, side: 185, face: 360, front: 60 };
+// 生きている感じ: 髪が風でなびき、呼吸でわずかに伸び縮みする（横の帯に分けてずらして描く）
+const _live = new WeakMap(), LPAD = 40;
+function liveCanvas(img, name, t) {
+  // 元の解像度のまま、髪の行だけを1pxずつ横にずらして別キャンバスに描く（継ぎ目が出ない）
+  let cv = _live.get(img); if (!cv) { cv = document.createElement('canvas'); cv.width = img.width + LPAD * 2; cv.height = img.height; _live.set(img, cv); }
+  const x = cv.getContext('2d'), ih = img.height, iw = img.width, hair = Math.min(ih, HAIR[name] || ih * .3), amp = iw * .022;
+  x.clearRect(0, 0, cv.width, cv.height);
+  const gust = .35 * sn1(t * .6, 5);
+  for (let y = 0; y < hair; y++) {
+    const wgt = Math.pow(1 - y / hair, 1.4);
+    const dx = wgt * amp * (Math.sin(t * 1.9 + y * .013) + .45 * Math.sin(t * 3.7 - y * .031) + gust);
+    x.drawImage(img, 0, y, iw, 1, LPAD + dx, y, iw, 1);
+  }
+  if (hair < ih) x.drawImage(img, 0, hair, iw, ih - hair, LPAD, hair, iw, ih - hair);
+  return cv;
+}
+// キャラを描く: 足元(または指定アンカー)を x,y に、高さ h。o.live に時刻を渡すと髪と呼吸が動く
 function drawChar(c, name, x, y, h, o = {}) {
   const im = IMG[name]; const s = h / im.height; const w = im.width * s;
   const ax = o.ax === undefined ? .5 : o.ax, ay = o.ay === undefined ? 1 : o.ay;
+  const live = o.live !== undefined, t = o.live || 0;
   c.save(); c.translate(x, y); if (o.rot) c.rotate(o.rot); if (o.flip) c.scale(-1, 1);
+  if (live) { const br = Math.sin(t * 1.55); c.scale(1 - br * .0035, 1 + br * .006); c.rotate(Math.sin(t * .7) * .006); }
   const X = -w * ax, Y = -h * ay;
   const a0 = c.globalAlpha;
-  if (o.sil) { c.drawImage(silhouette(name, o.sil), X, Y, w, h); }
-  else if (o.grade) { c.drawImage(graded(name, o.grade, o.gamt === undefined ? .7 : o.gamt), X, Y, w, h); }
-  else c.drawImage(im, X, Y, w, h);
-  if (o.rim) { c.globalCompositeOperation = 'lighter'; c.globalAlpha = a0 * (o.rimA === undefined ? 1 : o.rimA); c.drawImage(rim(name, o.rim[0], o.rim[1], o.rimCol || '#ffb347', o.rimSoft || 0), X, Y, w, h); c.globalCompositeOperation = 'source-over'; c.globalAlpha = a0; }
+  const put = img => { if (!live) return c.drawImage(img, X, Y, w, h); const cv = liveCanvas(img, name, t); c.drawImage(cv, X - LPAD * s, Y, cv.width * s, h); };
+  if (o.sil) put(silhouette(name, o.sil));
+  else if (o.grade) put(graded(name, o.grade, o.gamt === undefined ? .7 : o.gamt));
+  else put(im);
+  if (o.rim) { c.globalCompositeOperation = 'lighter'; c.globalAlpha = a0 * (o.rimA === undefined ? 1 : o.rimA); put(rim(name, o.rim[0], o.rim[1], o.rimCol || '#ffb347', o.rimSoft || 0)); c.globalCompositeOperation = 'source-over'; c.globalAlpha = a0; }
   c.restore();
 }
 

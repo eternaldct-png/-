@@ -16,7 +16,7 @@ scene(IL0, IL1 + .05, (c, t) => {
   sunDials(c, t, CX, 400, 260, .55 * k * (1 - out), C_GOLD);
   const by = lerp(1600, 1066, k);
   const sh = c.createLinearGradient(0, by - 30, 0, by + 200); sh.addColorStop(0, 'rgba(0,0,0,.7)'); sh.addColorStop(1, 'rgba(0,0,0,0)'); c.fillStyle = sh; c.beginPath(); c.ellipse(CX, by + 50, 140, 110, 0, 0, TAU); c.fill();
-  drawChar(c, 'back', CX, by, 620, { grade: '#0a0a1c', gamt: .86, rim: [0, 6], rimCol: '#ffb24a', rimA: 1 });
+  drawChar(c, 'back', CX, by, 620, { live: t, grade: '#0a0a1c', gamt: .86, rim: [0, 6], rimCol: '#ffb24a', rimA: 1 });
   c.restore();
 });
 
@@ -134,7 +134,7 @@ scene(BRd - .05, BD, (c, t) => {
   }
   c.restore();
   // 光を浴びて立つ少年
-  if (t > 189.9) { const kb = ez(t, 190.0, 191.2, E.outQuint); c.save(); c.globalAlpha = kb * (1 - out); drawChar(c, 'back', CX, lerp(1500, 1075, kb), 660, { grade: '#0a0a1c', gamt: .88, rim: [0, 6], rimCol: '#ffc46a', rimA: 1 }); c.restore(); }
+  if (t > 189.9) { const kb = ez(t, 190.0, 191.2, E.outQuint); c.save(); c.globalAlpha = kb * (1 - out); drawChar(c, 'back', CX, lerp(1500, 1075, kb), 660, { live: t, grade: '#0a0a1c', gamt: .88, rim: [0, 6], rimCol: '#ffc46a', rimA: 1 }); c.restore(); }
 });
 
 // ================================================================
@@ -164,7 +164,7 @@ scene(NO, BUILD + .05, (c, t) => {
   c.save(); c.translate(bx + 6, by - 2); c.transform(1, 0, -Ls, .2, 0, 0);
   const sil = silhouette('side', '#15121c'), im = IMG.side, s = bh / im.height;
   c.globalAlpha = .82 * k; c.drawImage(sil, -im.width * s / 2, -bh, im.width * s, bh); c.restore();
-  c.globalAlpha = k; drawChar(c, 'side', bx, by, bh, {}); c.globalAlpha = 1;
+  c.globalAlpha = k; drawChar(c, 'side', bx, by, bh, { live: t }); c.globalAlpha = 1;
   c.fillStyle = C_INK; c.fillRect(120, by + 2, (W - 240) * k, 1.5);
   // 光の向き
   c.save(); c.globalAlpha = .5 * k; c.strokeStyle = '#c7902a'; c.lineWidth = 1.5; for (let i = 0; i < 5; i++) { const y0 = 250 + i * 110; const kk = ez(t, DEF + .3 + i * .1, DEF + 1 + i * .1, E.outQuint); c.beginPath(); c.moveTo(60, y0); c.lineTo(60 + 330 * kk, y0 + 330 * kk * .16); c.stroke(); } c.restore();
@@ -274,7 +274,7 @@ scene(CH3 - .02, FIN + .2, (c, t) => {
   petals(c, t, CH3, 26, .9 * (1 - wo));
   if (t > CH3 + .5) label(c, t, CH3 + .6, '陸　向日葵の海', 'SEA OF SUNFLOWERS');
   // 少年（背中）— 花の海の中に立つ
-  if (t > 230.4) { const k = ez(t, 230.5, 232.2, E.outQuint); c.save(); c.globalAlpha = k * (1 - wo); drawChar(c, 'back', CX, lerp(1500, 1100, k), 560, { grade: '#1a0e10', gamt: lerp(.6, .25, d), rim: [0, 6], rimCol: '#ffd27a', rimA: .9 }); c.restore(); }
+  if (t > 230.4) { const k = ez(t, 230.5, 232.2, E.outQuint); c.save(); c.globalAlpha = k * (1 - wo); drawChar(c, 'back', CX, lerp(1500, 1100, k), 560, { live: t, grade: '#1a0e10', gamt: lerp(.6, .25, d), rim: [0, 6], rimCol: '#ffd27a', rimA: .9 }); c.restore(); }
   // アマテラス（5回目）
   amaHit(c, t, CH3, 0, { end: 216.75, y: 280 });
   // 咲き誇れ 神話を超えて
@@ -316,7 +316,7 @@ scene(CH3 - .02, FIN + .2, (c, t) => {
 // ================================================================
 //  3:58–4:26  終幕 — 太陽は奪わない
 // ================================================================
-const LOGO = 253.2, END = 266.35;
+const LOGO = 254.6, END = 266.35;
 bgSeg(FIN, END, t => { const k = ez(t, LOGO - .6, LOGO + 2.5, E.inOutCubic); return { uBright: 1, uSun: [...px2p(CX, lerp(390, 470, k)), lerp(.13, .0, ez(t, LOGO - .4, LOGO + 1.6, E.inOutCubic))], uSunI: 1 }; });
 postSeg(FIN, END, t => ({ flash: Math.exp(-(t - FIN) * 1.4), vig: .22, bloom: .22, thr: .95, grain: .04, ca: .0008, zoom: 1 + (t - FIN) * .0012, fade: 1 - ez(t, END - 1.7, END - .15, E.inOutCubic) }));
 scene(FIN, END, (c, t) => {
@@ -325,7 +325,7 @@ scene(FIN, END, (c, t) => {
   const k = ez(t, FIN + .2, FIN + 2.2, E.outCubic);
   c.save(); c.globalAlpha = k * (1 - lg);
   c.fillStyle = 'rgba(120,80,30,.16)'; c.beginPath(); c.ellipse(CX, 1012, 150, 15, 0, 0, TAU); c.fill();
-  drawChar(c, 'back', CX, 1010 - (t - FIN) * .8, 500, {});
+  drawChar(c, 'back', CX, 1010 - (t - FIN) * .8, 500, { live: t });
   c.strokeStyle = 'rgba(176,120,40,.45)'; c.lineWidth = 1.5; c.beginPath(); c.arc(CX, 390, 200 + (t - FIN) * 2, 0, TAU); c.stroke();
   c.save(); c.strokeStyle = 'rgba(176,120,40,.55)'; tickRing(c, CX, 390, 212 + (t - FIN) * 2, 90, 8, t * .03, 1.2, 9, 20); c.restore();
   c.restore();
@@ -336,9 +336,15 @@ scene(FIN, END, (c, t) => {
   drawText(c, LT('ただ在るだけで', { size: 92, vert: true, track: .14 }), 1270, 580, rise(t, 244.73, { stag: .17, dur: 1.0, vert: true, dist: 16 }));
   drawText(c, LT('救われる命がある', { size: 92, vert: true, track: .1 }), 520, 540, (g, i, n) => { const r = rise(t, 248.57, { stag: .17, dur: 1.0, vert: true, dist: 16 })(g, i, n); r.col = i === 4 ? '#c2410c' : '#1a1210'; return r; });
   c.restore();
-  // ロゴ
+  // ロゴ（金の光が横切る・目盛りの輪がゆっくり回る）
   if (t > LOGO) {
-    const kk = ez(t, LOGO, LOGO + 1.8, E.outCubic); const im = IMG.logoA; const h = 560 * (1 + (t - LOGO) * .004), w = im.width * h / im.height;
-    c.save(); c.globalAlpha = kk; c.drawImage(im, CX - w / 2, CY - h / 2 + (1 - kk) * 14, w, h); c.restore();
+    const kk = ez(t, LOGO, LOGO + 1.8, E.outCubic); const im = IMG.logoA; const h = 540 * (1 + (t - LOGO) * .005), w = im.width * h / im.height;
+    c.save(); c.globalAlpha = kk * .5; c.strokeStyle = 'rgba(176,120,40,.6)'; c.lineWidth = 1.5;
+    c.beginPath(); c.arc(CX, CY, 470 + (1 - kk) * 60, -t * .1, -t * .1 + TAU * .8 * kk); c.stroke(); tickRing(c, CX, CY, 482 + (1 - kk) * 60, 120, 8, t * .04, 1.2, 10, 22); c.restore();
+    if (!flowerField._lc) { flowerField._lc = document.createElement('canvas'); flowerField._lc.width = im.width; flowerField._lc.height = im.height; }
+    const lc = flowerField._lc, lx = lc.getContext('2d'); lx.globalCompositeOperation = 'source-over'; lx.clearRect(0, 0, lc.width, lc.height); lx.drawImage(im, 0, 0);
+    for (const t0 of [LOGO + 1.9, LOGO + 6.2]) { const q = prog(t, t0, t0 + 1.5); if (q <= 0 || q >= 1) continue; const sx = lerp(-300, lc.width + 300, E.inOutCubic(q)); const g = lx.createLinearGradient(sx - 170, 0, sx + 170, 120); g.addColorStop(0, 'rgba(255,244,210,0)'); g.addColorStop(.5, 'rgba(255,246,220,.85)'); g.addColorStop(1, 'rgba(255,244,210,0)'); lx.globalCompositeOperation = 'source-atop'; lx.fillStyle = g; lx.fillRect(0, 0, lc.width, lc.height); }
+    c.save(); c.globalAlpha = kk; c.drawImage(lc, CX - w / 2, CY - h / 2 + (1 - kk) * 14, w, h); c.restore();
+    petals(c, t, FIN, 10, .55 * kk, '#f2b21c');
   }
 });
