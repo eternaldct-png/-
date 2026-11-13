@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><title>アマテラス MV</title>
+<link rel="stylesheet" href="/node_modules/@fontsource/shippori-mincho-b1/800.css">
+<link rel="stylesheet" href="/node_modules/@fontsource/shippori-mincho-b1/500.css">
+<link rel="stylesheet" href="/node_modules/@fontsource/dela-gothic-one/400.css">
+<link rel="stylesheet" href="/node_modules/@fontsource/cinzel/700.css">
+<link rel="stylesheet" href="/node_modules/@fontsource/cinzel/400.css">
+<style>html,body{margin:0;background:#000;overflow:hidden}canvas{display:block;width:100vw;height:auto}</style>
+</head><body><canvas id="out"></canvas>
+<script src="engine.js"></script>
+<script src="scenes.js"></script>
+<script src="scenes_b.js"></script>
+<script src="scenes_c.js"></script>
+<script src="scenes_z.js"></script>
+<script>
+window.ready = (async () => {
+  const sync = await (await fetch('/assets/sync.json')).json(); initSync(sync);
+  await Promise.all([loadImg('face', '/assets/char_2.png'), loadImg('back', '/assets/char_3.png'), loadImg('side', '/assets/char_4.png'), loadImg('logo', '/assets/5.webp'), loadImg('logoA', '/assets/logo_alpha.png'), loadImg('orig2', '/assets/2.jpg'), loadImg('orig4', '/assets/4.jpg'), loadImg('orig3', '/assets/3.jpg')]);
+  const txt = ALLTEXT + 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,:/-— ';
+  await Promise.all([document.fonts.load('800 80px "Shippori Mincho B1"', txt), document.fonts.load('500 80px "Shippori Mincho B1"', txt), document.fonts.load('400 80px "Dela Gothic One"', txt), document.fonts.load('700 80px "Cinzel"', txt), document.fonts.load('400 80px "Cinzel"', txt)]);
+  initGL(); initScenes(); return true;
+})();
+window.frameJPEG = (t, q) => { renderFrame(t); return document.getElementById('out').toDataURL('image/jpeg', q || 0.95).slice(23); };
+// ブラウザで直接開いたときはプレビュー再生（?t=秒 で頭出し）
+if (!navigator.webdriver) window.ready.then(() => { const a = new Audio('/assets/song.mp3'); const q = new URLSearchParams(location.search); a.currentTime = +(q.get('t') || 0); document.body.onclick = () => a.paused ? a.play() : a.pause(); const loop = () => { renderFrame(a.currentTime); requestAnimationFrame(loop); }; loop(); });
+</script></body></html>
