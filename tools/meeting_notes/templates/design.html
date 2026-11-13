@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}部品の見本 - キキトメ{% endblock %}
+{% block main %}
+<h1>部品の見本</h1>
+<p class="muted small">replica/design/components.md の部品を並べたページ。見た目を変えるときはここで確認する。</p>
+
+<h2>ボタン</h2>
+<div class="row">
+  <button class="btn btn-primary">保存</button><button class="btn">ふつう</button><button class="btn btn-ghost">ゴースト</button>
+  <button class="btn btn-danger">削除</button><button class="btn" disabled>使えない</button><button class="btn is-loading" aria-busy="true">処理中</button>
+  <button class="btn btn-sm">小</button><button class="btn btn-rec">● 録音を開始</button>
+</div>
+
+<h2>入力</h2>
+<div class="grid-2">
+  <label class="field"><span>タイトル</span><input type="text" placeholder="例: 打ち合わせ"><small>補足の説明</small></label>
+  <label class="field field-error"><span>エラーの例</span><input type="text" aria-describedby="e1" value=""><span class="error-text" id="e1">入れてください</span></label>
+</div>
+
+<h2>タブ</h2>
+<div class="tabs" role="tablist" aria-label="見本">
+  <button role="tab" id="d-t1" aria-controls="d-p1" aria-selected="true">ノート</button>
+  <button role="tab" id="d-t2" aria-controls="d-p2" aria-selected="false">やること</button>
+</div>
+<div role="tabpanel" id="d-p1" aria-labelledby="d-t1">1つ目のパネル</div>
+<div role="tabpanel" id="d-p2" aria-labelledby="d-t2" hidden>2つ目のパネル</div>
+
+<h2>カード・バッジ・チップ</h2>
+<ul class="meeting-list">
+  <li><a class="card meeting-card" href="#"><div class="row row-between"><span class="title">とても長いタイトルの会議の例・とても長いタイトルの会議の例・とても長いタイトルの会議の例</span><span class="badge badge-warn">処理中</span></div>
+    <div class="meta"><span>2026/11/11(水) 10:00</span><span>45分</span><span class="chips"><span class="chip">営業</span><span class="chip">面談</span></span></div>
+    <div class="snippet">要約の1行目がここに入ります。</div></a></li>
+  <li><a class="card meeting-card" href="#"><div class="row row-between"><span class="title">失敗した会議</span><span class="badge badge-danger">失敗</span></div></a></li>
+</ul>
+
+<h2>やること</h2>
+<ul class="action-list">
+  <li class="action-row"><input type="checkbox" id="x1"><div class="body"><label class="text" for="x1">見積もりを送る</label><div class="sub"><span class="chip">自分</span><span>・期限 金曜</span></div></div></li>
+  <li class="action-row done"><input type="checkbox" id="x2" checked><div class="body"><label class="text" for="x2">会場を押さえる</label><div class="sub"><span>担当未定</span></div></div></li>
+</ul>
+
+<h2>お知らせ・空の状態</h2>
+<p class="notice">処理中のお知らせ</p>
+<p class="notice notice-danger">失敗のお知らせ</p>
+<div class="empty"><p>まだありません。</p><button class="btn btn-primary">＋ 追加</button></div>
+
+<h2>トースト</h2>
+<div class="row"><button class="btn" onclick="MN.toast('保存しました')">成功</button><button class="btn" onclick="MN.toast('失敗しました', 'error')">エラー</button></div>
+{% endblock %}

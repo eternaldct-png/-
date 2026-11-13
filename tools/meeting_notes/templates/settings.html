@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}設定 - キキトメ{% endblock %}
+{% block main %}
+<h1>設定</h1>
+
+<h2 id="check">動作チェック</h2>
+<p class="muted small">うまく動かないときは、まずここを見てください。✗ と ⚠ の行に直し方が書いてあります。</p>
+<ul class="check-list" aria-label="動作チェックの結果">
+  {% for c in checks %}
+  <li>
+    <span aria-hidden="true">{{ '✅' if c.ok == True else ('❌' if c.ok == False else '⚠️') }}</span>
+    <div><strong>{{ c.name }}</strong><span class="sr-only">: {{ 'OK' if c.ok == True else ('問題あり' if c.ok == False else '注意') }}</span>
+      <div class="small">{{ c.detail }}</div>
+      {% if c.fix %}<div class="fix">直し方: {{ c.fix }}</div>{% endif %}</div>
+  </li>
+  {% endfor %}
+</ul>
+
+<h2>AIの費用</h2>
+<dl class="kv">
+  <dt>今月</dt><dd><strong id="month-cost">約{{ month_jpy }}円</strong>{% if s.monthly_budget_jpy|int > 0 %}（上限 {{ '{:,}'.format(s.monthly_budget_jpy|int) }}円）{% endif %}</dd>
+</dl>
+{% if months %}
+<table class="log-table" style="margin-top: var(--sp-3); max-width: 420px">
+  <thead><tr><th>月(UTC)</th><th>AIを呼んだ回数</th><th>費用（目安）</th></tr></thead>
+  <tbody>{% for r in months %}<tr><td>{{ r.month }}</td><td>{{ r.calls }}</td><td>約{{ r.jpy }}円</td></tr>{% endfor %}</tbody>
+</table>
+{% endif %}
+<p class="muted xs" style="margin-top: var(--sp-2)">Claude の公表単価 × 使ったトークン数で計算した目安です。実際の請求は Anthropic のコンソールで確認してください。</p>
+
+<h2>設定</h2>
+<form id="settings" class="stack" onsubmit="return false">
+  <fieldset class="consent" style="max-width:none; margin:0">
+    <legend>ノートの作り方（今: {{ engine_labels[engine] }}）</legend>
+    {% for v, label, help in [
+      ('auto', '自動（おすすめ）', '端末内AIが使えれば端末内AI、無ければAIなし。外部のAPIは使いません'),
+      ('ollama', '端末内AI（Ollama）', 'このPCの中で動くAI。無料・外部に送らない。Ollama のアプリとモデルが必要（README）'),
+      ('simple', 'AIなし（簡易まとめ）', '何も入れなくても動く。発言をそのまま抜き出すだけなので、要約の質は低い'),
+      ('claude', 'Claude API', '文字起こしを Anthropic に送る。いちばん高精度。APIキーと費用が必要')] %}
+    <label><input type="radio" name="ai_engine" value="{{ v }}" {% if (s.ai_engine or 'auto') == v %}checked{% endif %}>
+      <span><strong>{{ label }}</strong><br><small class="muted">{{ help }}</small></span></label>
+    {% endfor %}
+  </fieldset>
+  <label class="field"><span>端末内AIのモデル名（Ollama）</span>
+    <input type="text" name="ollama_model" value="{{ s.ollama_model }}" style="max-width: 16em">
+    <small>おすすめ: qwen2.5:7b（日本語に強く、メモリ16GBのMacで動く）。メモリ8GBなら qwen2.5:3b。</small></label>
+  <label class="field"><span>ノートの書き方の指示・自分の前提</span>
+    <textarea name="custom_context" maxlength="4000" placeholder="例: 私は ETERNAL d.c.t の代表。ライバー事務所の面談では、配信経験・希望ジャンル・配信できる時間帯を必ず項目にする。金額は税込で書く。">{{ s.custom_context }}</textarea>
+    <small>ここに書いたことを毎回AIに伝えます。会社のこと・ノートに必ず入れてほしい項目など。</small></label>
+  <label class="field"><span>よく出る言葉・固有名詞（カンマか改行で区切る）</span>
+    <textarea name="vocabulary" maxlength="4000" style="min-height: 96px" placeholder="例: ETERNAL d.c.t、ライバー、カラーシング、歌推し、chaco">{{ s.vocabulary }}</textarea>
+    <small>文字起こし（Whisper）とAIの両方に渡し、この表記で聞き取り・書き直しやすくします。</small></label>
+  <div class="grid-2">
+    <label class="field"><span>話す言語</span>
+      <select name="language">
+        {% for code, label in [('ja', '日本語'), ('en', '英語'), ('', '自動判定')] %}
+        <option value="{{ code }}" {% if s.language == code %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select></label>
+    <label class="field"><span>文字起こしの精度（Whisper のモデル）</span>
+      <select name="whisper_model">
+        {% for v, label in [('tiny', 'tiny（最速・粗い）'), ('base', 'base'), ('small', 'small（おすすめ）'), ('medium', 'medium（精度高・遅い）'), ('turbo', 'turbo（精度高・Apple Silicon向け）'), ('large-v3', 'large-v3（最高精度・とても遅い）')] %}
+        <option value="{{ v }}" {% if s.whisper_model == v %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+      <small>初回だけモデルのダウンロードがあります（small で約500MB）。</small></label>
+  </div>
+  <label class="row" style="align-items:flex-start"><input type="checkbox" name="quiet_mode" {% if s.quiet_mode == '1' %}checked{% endif %} style="margin-top: 6px">
+    <span>小さい声を拾うモード<br><small class="muted">声が小さい人・離れた席の声が抜けるときに。無音を切り捨てる処理を止めるので、文字起こしに少し時間がかかります。</small></span></label>
+  <label class="field"><span>AIのモデル</span>
+    <select name="model">
+      {% for v, label in [('claude-opus-5-5', 'Claude Opus 5.5（おすすめ・高精度）'), ('claude-sonnet-5-5', 'Claude Sonnet 5.5（約半額）')] %}
+      <option value="{{ v }}" {% if s.model == v %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select></label>
+  <div class="grid-2">
+    <label class="field"><span>AI費用の月の上限（円）</span>
+      <input type="text" inputmode="numeric" name="monthly_budget_jpy" value="{{ s.monthly_budget_jpy }}">
+      <small>超えたらその月はAIを呼ばずに止めます。0 なら上限なし。</small></label>
+    <label class="field"><span>1ドル＝何円で計算するか</span>
+      <input type="text" inputmode="numeric" name="usd_jpy" value="{{ s.usd_jpy }}"></label>
+  </div>
+  <label class="field"><span>録音ファイルを残す日数</span>
+    <input type="text" inputmode="numeric" name="audio_retention_days" value="{{ s.audio_retention_days }}" style="max-width: 10em">
+    <small>この日数を過ぎた会議の録音ファイルを自動で消します（ノート・文字起こしは残ります）。0 ならずっと残します。</small></label>
+  <div><button class="btn btn-primary" type="button" id="save">保存</button></div>
+</form>
+
+<h2>データ</h2>
+<dl class="kv">
+  <dt>保存先</dt><dd><code>{{ data_dir }}</code></dd>
+  <dt>外に送るもの</dt><dd class="small">{% if engine == 'claude' %}音声は送りません（文字起こしはこのPCの中）。ノート作成・質問・話者の推定のときだけ、文字起こしの文字を Claude（Anthropic）に送ります。{% else %}<strong>何も送りません。</strong>録音・文字起こし・ノートはすべてこのPCの中で作り、このPCの中に保存します（今のノートの作り方: {{ engine_labels[engine] }}）。{% endif %}送ったかどうかは下の「操作の記録」に残ります。</dd>
+</dl>
+<p class="small muted" style="margin-top: var(--sp-3)">このフォルダごとコピーすればバックアップになります。JSON でも書き出せます。</p>
+<a class="btn" href="{{ url_for('backup') }}">JSON で書き出す</a>
+
+<h2 id="activity">操作の記録</h2>
+<p class="muted small">作成・編集・削除・AIへの送信などを、新しい順に100件まで表示します。</p>
+{% if activity %}
+<div class="log-scroll">
+<table class="log-table">
+  <thead><tr><th>日時</th><th>操作</th><th>内容</th></tr></thead>
+  <tbody>
+  {% for a in activity %}
+    <tr><td><time data-utc="{{ a.at }}">{{ a.at }}</time></td>
+      <td>{{ {'local_notes': '端末内で作成', 'local_ask': '端末内で処理', 'local_ask_all': '端末内で処理', 'local_speakers': '端末内で処理', 'created': '作成', 'edited': '編集', 'deleted': '削除', 'regenerate': 'ノート作り直し', 'retry': 'やり直し', 'speaker': '話者名', 'exported': '書き出し', 'ai_notes': 'AIへ送信', 'ai_ask': 'AIへ送信', 'ai_ask_all': 'AIへ送信', 'ai_speakers': 'AIへ送信', 'failed': '失敗', 'settings': '設定', 'audio_purged': '録音の自動削除', 'recording_started': '録音開始', 'recording_discarded': '録音を捨てた'}.get(a.action, a.action) }}</td>
+      <td>{% if a.meeting_id %}<a href="{{ url_for('meeting', mid=a.meeting_id) }}">{{ a.detail }}</a>{% else %}{{ a.detail }}{% endif %}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p class="muted">まだありません。</p>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+document.getElementById("save").addEventListener("click", (e) => {
+  const f = document.getElementById("settings").elements;
+  MN.withLoading(e.currentTarget, async () => {
+    await MN.api("POST", "/api/settings", {
+      custom_context: f.custom_context.value, vocabulary: f.vocabulary.value, language: f.language.value,
+      whisper_model: f.whisper_model.value, model: f.model.value,
+      ai_engine: (f.ai_engine.value || "auto"), ollama_model: f.ollama_model.value, quiet_mode: f.quiet_mode.checked ? "1" : "0",
+      monthly_budget_jpy: f.monthly_budget_jpy.value, usd_jpy: f.usd_jpy.value, audio_retention_days: f.audio_retention_days.value,
+    });
+    MN.toast("保存しました");
+  });
+});
+</script>
+{% endblock %}

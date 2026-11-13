@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="キキトメ">
+  <!-- 仮のマーク（ロゴの依頼文は replica/brand.md）。朱の留め印に、音の波を一本の線で「留める」。 -->
+  <rect x="4" y="4" width="56" height="56" rx="14" fill="#b5361c"/>
+  <path d="M14 34 q4 -10 8 0 t8 0 t8 0" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round"/>
+  <path d="M42 18 v28" stroke="#ffffff" stroke-width="5" stroke-linecap="round"/>
+  <path d="M42 46 l8 -6" stroke="#ffffff" stroke-width="5" stroke-linecap="round"/>
+</svg>

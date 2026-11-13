@@ -1,0 +1,29 @@
+{% if stale %}
+<section class="notice" role="alert" style="margin-bottom: var(--sp-4)">
+  <strong>途中で止まった録音があります。</strong>
+  <span class="small">ブラウザが閉じた・PCが止まったなどで、保存ボタンが押されなかった録音です。止まる直前までの音声は残っています。</span>
+  <ul class="stale-list" style="margin: var(--sp-2) 0 0; padding-left: 1.2em">
+  {% for r in stale %}
+    <li data-rid="{{ r.id }}">
+      <time data-utc="{{ r.started_at }}">{{ r.started_at }}</time> に開始・{{ (r.bytes / 1024 / 1024)|round(1) }}MB
+      {% if r.meta.title %}「{{ r.meta.title }}」{% endif %}
+      <button class="btn btn-sm btn-primary" type="button" data-recover="{{ r.id }}">会議として保存</button>
+      <button class="btn btn-sm btn-ghost" type="button" data-discard="{{ r.id }}">捨てる</button>
+    </li>
+  {% endfor %}
+  </ul>
+</section>
+<script>
+document.addEventListener("click", (e) => {
+  const rec = e.target.closest("[data-recover]"), dis = e.target.closest("[data-discard]");
+  if (rec) MN.withLoading(rec, async () => {
+    const d = await MN.api("POST", `/api/recordings/${rec.dataset.recover}/finish`, { recovered: 1 });
+    location.href = d.url;
+  });
+  if (dis && confirm("この録音を捨てますか？元に戻せません。")) MN.withLoading(dis, async () => {
+    await MN.api("DELETE", `/api/recordings/${dis.dataset.discard}`);
+    dis.closest("li").remove(); MN.toast("捨てました");
+  });
+});
+</script>
+{% endif %}

@@ -396,3 +396,26 @@ Claude Code のサブエージェント20人（5部署×4人）。共通の前�
   例：「名前を、よんで、お礼を言う」は不自然 → 「名前をよんで、お礼を言う」で自然になった。読点は意味の切れ目だけに打つ。
 - 声を直すときは一部だけ差し替えず、全文を同じ感情で作り直し、無音の位置（ffmpeg silencedetect）でテロップのタイミングを合わせ直す。
 - 新しく読み間違い・不自然な抑揚が見つかったら、ここと週次ルーティン（`trig_01Bga8ytBdesUWxHLhnGmStx`）のプロンプトの両方に追記する。
+
+---
+
+## キキトメ — 会議ノート（tools/meeting_notes、自分のPCで動かす）
+
+既存のAI会議ノートサービスのコア機能を Replica スキル（recon → architect → design → build → test → entrepreneur → brand）で
+自分用に作り直したもの（元のサービス名・調査は `replica/` にだけ書く。アプリ本体・README には出さない。`replica/brand.json` の sweep で確認）。
+名前は「キキトメ」（聞き留め）。ブランド・配色・言葉づかいは `replica/brand.md`。
+**Render にはデプロイしない**。代表の Mac で `tools/meeting_notes/start.command` をダブルクリックして使う（`http://127.0.0.1:5055`）。
+使い方・準備は `tools/meeting_notes/README.md`、設計の記録は `replica/`（recon.md / architecture.md / features.csv / design/ / test-plan.md / bugs.md / build-log.md）。
+
+- 録音（ブラウザ）・録音ファイル・文字起こし（Zoom/Meet の .vtt 等）→ faster-whisper（ローカル）で文字起こし → 要約・話題別ノート・担当者つきのやること
+- **APIキー不要・端末保存が既定。** ノートの作り方は「設定」の `ai_engine`（`ai.resolve_engine`）:
+  `auto`（既定。Ollama が動いていて設定のモデルがあれば端末内AI、無ければAIなし）/ `ollama`（`local_ai.py`、127.0.0.1 の Ollama だけに接続・プロキシを通さない）/
+  `simple`（AIなし。発言の抜き出しで決まりごと・やること・担当・期限を拾う）/ `claude`（Claude API。**明示して選んだときだけ**。`auto` では選ばない）
+- 端末内AI は長い会議を 12,000 文字ずつに分けて読み、最後に要約をまとめる（`ai.OLLAMA_CHUNK_CHARS`）
+- データは `~/MeetingNotes/`（SQLite と録音）。リポジトリには入れない。Claude を使うときだけ APIキーを `~/MeetingNotes/.env` に置く
+- ログインなしの代わりに、`127.0.0.1` だけで待ち受け、Host ヘッダーを確認し、書き換えAPIは独自ヘッダー `X-Meeting-Notes: 1` 必須
+- faster-whisper が無くても録音は必ず保存する（処理は「失敗」になり、導入後に「やり直す」）。録り直せない会議を失わないため
+- 元のサービスの口コミ（22件・検索経由で原文未確認）から不満を順位付けし、8項目を直した（`replica/fixes.md`）:
+  AI費用の表示と月の上限 / 動作チェック / 話者の1行ずつ修正とAI推定 / 録音前の同意・操作の記録・録音の保存日数 /
+  10秒ごとの途中保存と復旧・無音警告・通知 / やることの根拠照合（要確認）・よく出る言葉・小さい声モード / マイク選択・会議室モード
+- テスト: `python3 -m pytest tests/test_meeting_notes.py`、E2E は `bash tools/meeting_notes/e2e/run.sh`（偽の Claude/Whisper、Playwright）

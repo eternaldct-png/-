@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% block title %}{{ m.title or '会議' }} - キキトメ{% endblock %}
+{% block main %}
+{% set busy = m.status in ('queued', 'transcribing', 'summarizing') %}
+<div id="meeting" data-id="{{ m.id }}" data-status="{{ m.status }}" data-has-audio="{{ '1' if m.audio_path else '' }}">
+
+<p class="small"><a href="{{ url_for('index') }}">← 会議の一覧</a></p>
+
+<div class="row row-between" style="align-items:flex-start">
+  <h1 id="title-view" style="flex:1; min-width: 0; overflow-wrap:anywhere">{{ m.title or '（タイトル未設定）' }}</h1>
+  <div class="row head-actions" style="gap: var(--sp-2)">
+    <button class="btn btn-sm" type="button" id="edit-btn" aria-expanded="false" aria-controls="edit-form">編集</button>
+    {% if m.status == 'done' %}<a class="btn btn-sm" href="{{ url_for('export_md', mid=m.id) }}">Markdown保存</a>
+    <button class="btn btn-sm" type="button" id="copy-md">コピー</button>{% endif %}
+  </div>
+</div>
+<div class="meta" style="margin-bottom: var(--sp-4)">
+  <time data-utc="{{ m.started_at }}">{{ m.started_at }}</time>
+  {% if m.duration_sec %}<span>{{ fmt_clock(m.duration_sec) }}</span>{% endif %}
+  {% if m.participants %}<span>👥 {{ m.participants|join('、') }}</span>{% endif %}
+  {% if m.tags %}<span class="chips">{% for t in m.tags %}<a class="chip" href="{{ url_for('index', tag=t) }}">{{ t }}</a>{% endfor %}</span>{% endif %}
+  {% if m.consent == 1 %}<span>🤝 録音は相手に伝えた</span>{% elif m.consent == 2 %}<span>📝 自分だけのメモ</span>{% endif %}
+  {% if cost_jpy %}<span title="この会議でAIに使った金額（目安）">💴 AI費用 約{{ cost_jpy }}円</span>{% endif %}
+</div>
+
+<form id="edit-form" class="card card-surface stack" hidden onsubmit="return false" style="margin-bottom: var(--sp-4)">
+  <label class="field"><span>タイトル</span><input type="text" name="title" maxlength="200" value="{{ m.title }}"></label>
+  <div class="grid-2">
+    <label class="field"><span>日時</span><input type="datetime-local" name="started_at" data-utc="{{ m.started_at }}"></label>
+    <label class="field"><span>タグ</span><input type="text" name="tags" list="tag-list" value="{{ m.tags|join('、') }}">
+      <datalist id="tag-list">{% for t in tags %}<option value="{{ t }}">{% endfor %}</datalist></label>
+  </div>
+  <label class="field"><span>参加者</span><input type="text" name="participants" value="{{ m.participants|join('、') }}"></label>
+  <div class="row row-between">
+    <button class="btn btn-danger btn-sm" type="button" id="delete-btn">この会議を削除</button>
+    <div class="row">
+      <button class="btn btn-ghost" type="button" id="edit-cancel">やめる</button>
+      <button class="btn btn-primary" type="button" id="edit-save">保存</button>
+    </div>
+  </div>
+</form>
+
+{% if busy %}
+  <div class="notice" id="progress" role="status">
+    <strong id="progress-label">{{ {'queued': '順番待ち…', 'transcribing': '文字起こし中…', 'summarizing': '要点とやることを書き留めています…'}[m.status] }}</strong>
+    <span id="progress-detail"></span>
+    <div class="small">閉じても続きます。終わったら、この画面が切り替わります。</div>
+  </div>
+{% elif m.status == 'failed' %}
+  <div class="notice notice-danger" role="alert">
+    <strong>書き留められませんでした。録音と文字起こしは残っています。</strong>
+    <div style="margin: var(--sp-2) 0">{{ m.error }}</div>
+    <button class="btn btn-sm" type="button" id="retry-btn">やり直す</button>
+  </div>
+{% endif %}
+
+<div class="tabs" role="tablist" aria-label="会議の中身">
+  <button role="tab" id="tab-notes" aria-controls="panel-notes" aria-selected="true">ノート</button>
+  <button role="tab" id="tab-actions" aria-controls="panel-actions" aria-selected="false">やること（<span id="open-count">{{ actions|rejectattr('done')|list|length }}</span>）</button>
+  <button role="tab" id="tab-transcript" aria-controls="panel-transcript" aria-selected="false">文字起こし</button>
+  <button role="tab" id="tab-ask" aria-controls="panel-ask" aria-selected="false">AIに聞く</button>
+</div>
+
+<section role="tabpanel" id="panel-notes" aria-labelledby="tab-notes" class="notes">
+  {% if m.notes and m.notes.summary %}
+    <div class="summary"><h2 style="margin-top:0" class="sr-only">要約</h2><p style="margin:0">{{ m.notes.summary }}</p></div>
+    {% if m.notes.decisions %}
+      <h2>決まったこと</h2>
+      <ul>{% for d in m.notes.decisions %}<li>{{ d }}</li>{% endfor %}</ul>
+    {% endif %}
+    {% for sec in m.notes.sections %}
+      <h2>{{ sec.heading }}</h2>
+      <ul>{% for b in sec.bullets %}<li>{{ b }}</li>{% endfor %}</ul>
+    {% endfor %}
+    <p class="muted xs" style="margin-top: var(--sp-5)">{% if m.notes_model == 'simple' %}AIなしの簡易まとめです（発言をそのまま抜き出しています）。端末内AIを入れると、要約として書き留められます。{% else %}{{ engine_labels.get(m.notes_model, 'AI') if m.notes_model in engine_labels else 'AI' }}が文字起こしから書き留めました。数字と約束は、文字起こしで確かめてから使ってください。{% endif %}
+      <button class="btn btn-ghost btn-sm" type="button" id="regen-btn">ノートを作り直す</button></p>
+  {% elif busy %}
+    <div class="empty"><p>書き留めている途中です。</p></div>
+  {% else %}
+    <div class="empty"><p>ノートはまだありません。</p></div>
+  {% endif %}
+</section>
+
+<section role="tabpanel" id="panel-actions" aria-labelledby="tab-actions" hidden>
+  {% if actions %}
+  <ul class="action-list" id="action-list">
+    {% for a in actions %}{% include "_action_row.html" %}{% endfor %}
+  </ul>
+  {% else %}
+  <ul class="action-list" id="action-list"></ul>
+  <p class="muted" id="no-actions">{{ 'この会議で決まったやることはありませんでした。' if m.status == 'done' else '書き留め終わると、ここにやることが並びます。' }}</p>
+  {% endif %}
+  <form class="add-action" id="add-action" onsubmit="return false">
+    <label class="sr-only" for="na-text">やること</label><input type="text" id="na-text" placeholder="やることを追加" maxlength="500">
+    <label class="sr-only" for="na-owner">担当</label><input type="text" id="na-owner" placeholder="担当" maxlength="60" list="people">
+    <label class="sr-only" for="na-due">期限</label><input type="text" id="na-due" placeholder="期限" maxlength="60">
+    <button class="btn" type="button" id="na-add">追加</button>
+    <datalist id="people">{% for p in m.participants %}<option value="{{ p }}">{% endfor %}</datalist>
+  </form>
+</section>
+
+<section role="tabpanel" id="panel-transcript" aria-labelledby="tab-transcript" hidden>
+  {% if m.transcript %}
+    <div class="row" style="margin-bottom: var(--sp-3)">
+      <label class="sr-only" for="t-find">文字起こし内を検索</label>
+      <input type="search" id="t-find" placeholder="文字起こし内を検索" style="flex:1; min-width: 180px">
+      <span class="muted small" id="t-count" aria-live="polite"></span>
+    </div>
+    <div class="row" style="margin-bottom: var(--sp-3)">
+      <button class="btn btn-sm" type="button" id="guess-btn" {% if m.participants|length < 2 or engine == 'simple' %}disabled aria-describedby="guess-help"{% endif %}>🤖 話者をAIで推定</button>
+      <span class="muted xs" id="guess-help">{% if engine == 'simple' %}AIなしモードでは使えません（名前を押して1行ずつ直せます）。{% elif m.participants|length < 2 %}参加者を2人以上入れると使えます（「編集」から）。{% else %}話者が空の行だけに付けます。付いた行には「推定」と出ます。{% endif %}</span>
+      {% if guessed %}<span class="badge badge-guess">推定 {{ guessed }}行 — 名前を押して直せます</span>{% endif %}
+    </div>
+    {% if speakers %}
+    <details style="margin-bottom: var(--sp-3)">
+      <summary>話者の名前を直す</summary>
+      <form class="row" id="speaker-form" onsubmit="return false" style="margin-top: var(--sp-2)">
+        <label class="sr-only" for="sp-from">今の名前</label>
+        <select id="sp-from" style="width:auto">{% for s in speakers %}<option>{{ s }}</option>{% endfor %}</select>
+        <span aria-hidden="true">→</span>
+        <label class="sr-only" for="sp-to">新しい名前</label>
+        <input type="text" id="sp-to" maxlength="40" style="width: 12em" placeholder="新しい名前">
+        <button class="btn btn-sm" type="button" id="sp-save">変える</button>
+      </form>
+    </details>
+    {% endif %}
+    <datalist id="people-all">{% for p in people %}<option value="{{ p }}">{% endfor %}</datalist>
+    <ol class="transcript" id="transcript">
+      {% for s in m.transcript %}
+      <li class="tline">
+        <button class="t" type="button" data-t="{{ s.start if s.start is not none else '' }}" {% if s.start is none or not m.audio_path %}disabled{% endif %}
+          aria-label="{{ fmt_clock(s.start) or '時刻なし' }}から再生">{{ fmt_clock(s.start) or '—' }}</button>
+        <div>
+          <div class="who"><button class="who-btn{% if not s.speaker %} empty{% endif %}" type="button" data-i="{{ loop.index0 }}" data-speaker="{{ s.speaker }}"
+            aria-label="この行の話者を変える（今: {{ s.speaker or 'なし' }}）">{{ s.speaker or '＋ 話者を付ける' }}</button>
+            {% if s.guessed %}<span class="badge badge-guess">推定</span>{% endif %}</div>
+          <div class="txt">{{ s.text }}</div>
+        </div>
+      </li>
+      {% endfor %}
+    </ol>
+  {% else %}
+    <div class="empty"><p>{{ '文字起こし中です。' if busy else '文字起こしはありません。' }}</p></div>
+  {% endif %}
+</section>
+
+<section role="tabpanel" id="panel-ask" aria-labelledby="tab-ask" hidden>
+  <div class="chat" id="chat">
+    {% for c in chat %}<div class="msg msg-{{ c.role }}">{{ c.content }}</div>{% endfor %}
+  </div>
+  {% if not chat %}<p class="muted" id="chat-empty">例:「価格について相手は何と言っていた？」「次回までの宿題は？」</p>{% endif %}
+  <form class="chat-form" id="chat-form" onsubmit="return false" style="margin-top: var(--sp-3)">
+    <label class="sr-only" for="question">質問</label>
+    <textarea id="question" placeholder="この会議について質問する" {% if not m.transcript %}disabled{% endif %}></textarea>
+    <button class="btn btn-primary" type="button" id="ask-btn" {% if not m.transcript %}disabled{% endif %}>聞く</button>
+  </form>
+  {% if chat %}<p><button class="btn btn-ghost btn-sm" type="button" id="chat-clear">質問の履歴を消す</button></p>{% endif %}
+</section>
+
+{% if m.audio_path %}
+<div class="player"><audio id="player" controls preload="metadata" src="{{ url_for('audio', mid=m.id) }}"></audio></div>
+{% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='actions.js') }}"></script>
+<script src="{{ url_for('static', filename='meeting.js') }}"></script>
+{% endblock %}
