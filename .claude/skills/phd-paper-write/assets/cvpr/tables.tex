@@ -1,0 +1,30 @@
+\documentclass[10pt,twocolumn,letterpaper]{article}
+\usepackage[pagenumbers]{cvpr}
+\usepackage{booktabs,amssymb}
+\usepackage[hidelinks]{hyperref}
+% Keep gallery float pages compact. Copy the individual table snippets into papers.
+\makeatletter
+\setlength{\@fptop}{0pt}
+\setlength{\@fpsep}{12pt}
+\setlength{\@fpbot}{0pt plus 1fil}
+\setlength{\@dblfptop}{0pt}
+\setlength{\@dblfpsep}{12pt}
+\setlength{\@dblfpbot}{0pt plus 1fil}
+\makeatother
+\title{Illustrative table templates}
+\author{Template gallery}
+\begin{document}
+\maketitle
+Every value in this gallery is illustrative. Copy a suitable table into the paper's existing author kit and replace values from verified records. Compile with the current kit's cvpr.sty available to TeX.
+\input{tables/mixed-metrics}
+\input{tables/grouped-columns}
+\input{tables/row-blocks}
+\input{tables/component-ablation}
+\input{tables/repeated-runs}
+\input{tables/paired-changes}
+\input{tables/efficiency}
+\input{tables/missing-and-ties}
+\input{tables/multi-panel}
+\input{tables/per-class-support}
+\clearpage
+\end{document}

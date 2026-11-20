@@ -1,0 +1,30 @@
+% Illustrative values only. Replace from verified experiment records.
+\begin{table*}[!htbp]
+\centering\small
+\begin{minipage}[t]{0.46\textwidth}
+\centering
+\begin{tabular}{lrr}
+\toprule
+Levels & AP $\uparrow$ & ms $\downarrow$ \\
+\midrule
+Three & 48.0 & 1.4 \\
+Two$^{\dagger}$ & \textbf{48.6} & \textbf{1.2} \\
+\bottomrule
+\end{tabular}
+\par\smallskip (a) Prediction levels
+\end{minipage}\hfill
+\begin{minipage}[t]{0.46\textwidth}
+\centering
+\begin{tabular}{lrr}
+\toprule
+Recipe & Small AP $\uparrow$ & Large AP $\uparrow$ \\
+\midrule
+Recipe A & \textbf{48.6} & 55.1 \\
+Recipe B & 48.2 & \textbf{55.6} \\
+\bottomrule
+\end{tabular}
+\par\smallskip (b) Training recipe
+\end{minipage}
+\caption{Related panels with illustrative values. Each panel answers a separate ablation question under its own fixed protocol. Bold stays within each panel and column. $^{\dagger}$Selected design.}
+\label{tab:multi-panel}
+\end{table*}

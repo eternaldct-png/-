@@ -1,0 +1,16 @@
+% Illustrative values only. Replace from verified experiment records.
+\begin{table}[!htbp]
+\centering\small
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{lrrrr}
+\toprule
+Model & AP $\uparrow$ & Params (M) $\downarrow$ & GFLOPs $\downarrow$ & ms $\downarrow$ \\
+\midrule
+Compact & 43.0 & \textbf{4.2} & \textbf{12.0} & \textbf{1.0} \\
+Medium & 48.0 & 11.0 & 28.0 & 1.8 \\
+Large & \textbf{52.0} & 23.0 & 54.0 & 3.1 \\
+\bottomrule
+\end{tabular}
+\caption{Efficiency trade-offs. Illustrative values. ms is median latency on one named GPU at batch size 1, excluding warmup. Column extrema do not define a universal best model.}
+\label{tab:efficiency}
+\end{table}

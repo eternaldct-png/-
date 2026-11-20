@@ -419,3 +419,13 @@ Claude Code のサブエージェント20人（5部署×4人）。共通の前�
   AI費用の表示と月の上限 / 動作チェック / 話者の1行ずつ修正とAI推定 / 録音前の同意・操作の記録・録音の保存日数 /
   10秒ごとの途中保存と復旧・無音警告・通知 / やることの根拠照合（要確認）・よく出る言葉・小さい声モード / マイク選択・会議室モード
 - テスト: `python3 -m pytest tests/test_meeting_notes.py`、E2E は `bash tools/meeting_notes/e2e/run.sh`（偽の Claude/Whisper、Playwright）
+
+---
+
+## 外部スキル（Claude Agent Skills 100選 から追加）
+
+スプレッドシート「Claude Agent Skills 100選」の GitHub 公開スキル 120個を `.claude/skills/` に入れている
+（Anthropic 公式・導入済みプラグインと重複するものは除外）。一覧・出典・ライセンスは `docs/external_skills.md`。
+- 中身は原文（英語）のまま。phd-skills だけ名前の重複を避けるため `phd-` を付けた。
+- 同梱のテストを拾わないよう、`pytest.ini` で `testpaths = tests` にしている。
+- 追加・更新するときは元リポジトリから取り直し、外部送信・プロンプト注入・危険なコマンドが無いかを確認してから入れる。
