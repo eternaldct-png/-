@@ -429,3 +429,17 @@ Claude Code のサブエージェント20人（5部署×4人）。共通の前�
 - 中身は原文（英語）のまま。phd-skills だけ名前の重複を避けるため `phd-` を付けた。
 - 同梱のテストを拾わないよう、`pytest.ini` で `testpaths = tests` にしている。
 - 追加・更新するときは元リポジトリから取り直し、外部送信・プロンプト注入・危険なコマンドが無いかを確認してから入れる。
+
+### ETERNAL向けに日本語化したスキル（`eternal-*`）
+英語の元スキルは残したまま、考え方を ETERNAL の事業・日本の法令に合わせて日本語で書き直した版を別に置いている。
+ETERNAL の仕事ではこちらを優先して使う。
+
+| スキル | 元にした英語スキル | 使う場面 |
+|---|---|---|
+| `eternal-copywriting` | copywriting | LP・募集ページ・ホームページ・グッズの文章 |
+| `eternal-line-broadcast` | email-campaigns | 公式LINEの配信文・あいさつ・ステップ配信（通数の計算つき。配信は人が押す） |
+| `eternal-note-research` | content-research-writer | note記事の調査・出典・冒頭・章ごとのレビュー（有料noteの一気通貫は `note` スキル） |
+| `eternal-liver-success` | customer-success-manager | 所属ライバーの継続フォロー。`scripts/liver_health.py` がCSVから状態スコアと声かけの優先順を出す（`tests/test_liver_health.py`） |
+
+- ライバーの売上・個人情報のCSVはリポジトリに入れない。スコアは声かけの順番の目安で、評価・報酬・契約の判断には使わない。
+- LINEの料金・通数、フリーランス新法の予告義務は2026年11月時点の確認。変わったら各 SKILL.md を直す。

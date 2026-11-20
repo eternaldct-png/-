@@ -8,6 +8,17 @@
 - 取り込み時に、外部へ勝手に送信するコード・プロンプト注入・危険なコマンドが無いかを確認済み。外部APIに接続するのは脆弱性系（NVD/EPSS/CISA/MITRE の公開データ）と video-downloader（yt-dlp）だけ。
 - 更新したいときは元リポジトリから同じフォルダを取り直す。
 
+## ETERNAL向けに日本語化した版
+
+| スキル | 元にした英語スキル（シートのNo） |
+|---|---|
+| `/eternal-copywriting` | copywriting（No.1） |
+| `/eternal-line-broadcast` | email-campaigns（No.2） |
+| `/eternal-note-research` | content-research-writer（No.4） |
+| `/eternal-liver-success` | customer-success-manager（No.13） |
+
+## 元のスキル一覧
+
 | No | 分類 | シートのスキル名 | 追加したスキル（/呼び方） | こんな時に使う（シートより） | ライセンス | 出典 |
 |---|---|---|---|---|---|---|
 | 1 | マーケ・営業 | Marketing Skills for Claude Code | `/copywriting` | LPの改善案出しから広告コピー作成、SEO分析までを一気通貫で行い、マーケティング施策のPDCAを高速化するために使う。 | MIT | [GitHub](https://github.com/coreyhaines31/marketingskills/tree/HEAD/skills/copywriting) |
