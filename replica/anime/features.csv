@@ -1,0 +1,38 @@
+feature,area,priority,original,clone,notes
+アイデア文から作品を作る,new,must,yes,yes,S02
+種類（ストーリー/MV/クイック）を選ぶ,new,must,yes,yes,
+スタイルを選ぶ,new,must,yes,yes,スタイル名と説明文だけ（見本画像は先方の著作物なので作らない）／6種。名前と説明文だけ
+尺・縦横比（16:9/9:16/1:1）を選ぶ,new,must,yes,yes,
+セリフの言語・雰囲気を選ぶ,new,should,yes,partial,雰囲気は入力できる。言語は日本語固定（AIへの指示はできる）
+参照画像を最初に貼る,new,should,yes,partial,最初ではなくキャラ・場面の段階で入れる
+作品一覧（新しい順・段階表示）,home,must,yes,yes,S01
+作品の削除,home,must,yes,yes,
+段階のステッパー（脚本→キャラ→シーン→絵コンテ→映像→音→書き出し）,workspace,must,yes,yes,S03
+エージェント役割つきの進行ログ（チャット風）,workspace,should,yes,yes,
+チャットで「こう直して」と指示して作り直す,workspace,must,yes,partial,Ollama/Claude のとき。AIなしでは指示を読めない（画面で案内）
+脚本の生成,script,must,yes,yes,S04／AIなし・Ollama・Claude
+脚本の直接編集,script,must,yes,yes,
+キャラクターの生成（名前・外見・性格）,character,must,yes,yes,S05／AIなしは名前だけ
+キャラ画像のアップロード・差し替え,character,must,yes,yes,
+キャラ画像の生成,character,should,yes,no,fal.ai（任意・従量）／未実装（ChatGPT 等で作って入れる）
+シーン（背景）の生成と画像差し替え,scene,should,yes,yes,S06／仮の背景＋アップロード
+絵コンテ（カット割り・秒・カメラ・セリフ・プロンプト）の生成,storyboard,must,yes,yes,S07
+カットの並べ替え・追加・削除,storyboard,must,yes,yes,
+カットのプロンプト修正・画像差し替え,storyboard,must,yes,yes,
+カット画像の生成,storyboard,should,yes,partial,fal.ai（任意）／fal.ai（任意・実機未確認）／既定は合成の仮の絵
+カットの動画化（静止画→動き）,video,should,yes,partial,無料の既定はカメラの動き（ズーム・パン）。AI動画は fal.ai（任意）／カメラワークは yes。AI動画は fal.ai（任意・実機未確認）
+BGMのアップロード,audio,must,yes,yes,S09
+セリフの読み上げ（声）,audio,should,yes,partial,Mac の say コマンド（無料・端末内）／Mac の say。クラウド環境では未確認
+効果音,audio,could,yes,no,
+1本の動画に書き出す（字幕つき）,export,must,yes,yes,S10 ffmpeg
+書き出した動画のプレビュー・ダウンロード,export,must,yes,yes,
+おまかせ（全段階を自動で進める）,workspace,should,yes,yes,F02
+前の段階を直したら後ろを「古い」表示,workspace,must,yes,yes,F03
+素材ライブラリ（キャラ保存・別作品で使う）,library,should,yes,yes,S11／キャラ帳
+曲に尺を合わせてMVにする,mv,could,yes,yes,F07／カットの秒数を曲の長さに合わせる
+マンガ→動画,mv,could,yes,partial,マンガのコマを「自分の絵」として入れれば動画にできる（自動のコマ切り出しは無し）
+1080p・透かしなし,export,must,yes,yes,自分用なので常に透かしなし
+ログイン,account,skip,yes,no,ユーザーの指示で不要
+クレジット・課金,account,skip,yes,no,ユーザーの指示で不要
+作品の公開・コミュニティ,social,skip,yes,no,自分専用
+自社の生成モデル（キャラ一貫性エンジン）,model,skip,yes,no,持ち出せない。参照画像＋外部生成で代える

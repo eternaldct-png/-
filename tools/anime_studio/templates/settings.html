@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}設定 — コマドリ{% endblock %}
+{% block main %}
+<h1>設定</h1>
+<form id="settings-form">
+  <div class="card" style="margin-bottom: var(--sp-4)">
+    <h2>文章AI（脚本・キャラ・場面・絵コンテ）</h2>
+    <p class="small muted">いま使っているもの: <b>{{ engine_labels[engine] }}</b></p>
+    <fieldset class="chips"><legend class="sr-only">文章AI</legend>
+      {% for k, label in [('auto', 'おまかせ（Ollama があれば使う・無ければAIなし）'), ('simple', 'AIなし（自分の文を並べる・無料）'), ('ollama', '端末内AI Ollama（無料）'), ('claude', 'Claude API（従量課金）')] %}
+      <label class="chip"><input type="radio" name="ai_engine" value="{{ k }}" {% if s.ai_engine == k %}checked{% endif %}><span>{{ label }}</span></label>
+      {% endfor %}
+    </fieldset>
+    <div class="two">
+      <label class="field"><span>Ollama のモデル</span><input type="text" name="ollama_model" value="{{ s.ollama_model }}"></label>
+      <label class="field"><span>Claude のモデル</span><input type="text" name="claude_model" value="{{ s.claude_model }}"></label>
+    </div>
+    <p class="xs muted">Claude APIキー: {{ '設定あり' if claude_key else 'なし（使うときは ' + data_dir + '/.env に ANTHROPIC_API_KEY=... を書いて起動し直す）' }}</p>
+    <label class="field"><span>読み上げの速さ（1秒あたりの文字数。セリフの長さチェックに使う）</span><input type="number" name="chars_per_second" min="3" max="15" step="0.5" value="{{ s.chars_per_second }}"></label>
+  </div>
+
+  <div class="card" style="margin-bottom: var(--sp-4)">
+    <h2>絵と動き</h2>
+    <fieldset class="chips"><legend>絵</legend>
+      <label class="chip"><input type="radio" name="image_engine" value="placeholder" {% if s.image_engine != 'fal' %}checked{% endif %}><span>仮の絵（キャラ・場面の画像を合成・無料）</span></label>
+      <label class="chip"><input type="radio" name="image_engine" value="fal" {% if s.image_engine == 'fal' %}checked{% endif %}><span>fal.ai で生成（従量）</span></label>
+    </fieldset>
+    <fieldset class="chips"><legend>動き</legend>
+      <label class="chip"><input type="radio" name="video_engine" value="camera" {% if s.video_engine != 'fal' %}checked{% endif %}><span>カメラの動き（寄り・引き・パン・無料）</span></label>
+      <label class="chip"><input type="radio" name="video_engine" value="fal" {% if s.video_engine == 'fal' %}checked{% endif %}><span>fal.ai で動画化（従量・高い）</span></label>
+    </fieldset>
+    {% if not fal_key %}<div class="banner warning">FAL_KEY がありません。fal.ai を使うときは {{ data_dir }}/.env に FAL_KEY=... を書いて起動し直してください。</div>{% endif %}
+    <div class="two">
+      <label class="field"><span>画像のモデル</span><input type="text" name="fal_image_model" value="{{ s.fal_image_model }}"></label>
+      <label class="field"><span>動画のモデル</span><input type="text" name="fal_video_model" value="{{ s.fal_video_model }}"></label>
+      <label class="field"><span>画像1枚の見積もり（円）</span><input type="number" name="fal_image_yen" min="0" step="0.1" value="{{ s.fal_image_yen }}"></label>
+      <label class="field"><span>動画1秒の見積もり（円）</span><input type="number" name="fal_video_yen_per_sec" min="0" step="0.1" value="{{ s.fal_video_yen_per_sec }}"></label>
+    </div>
+    <label class="field"><span>fal.ai の月の上限（円・0で上限なし）</span><input type="number" name="monthly_budget_jpy" min="0" step="100" value="{{ s.monthly_budget_jpy }}"></label>
+    <p class="small muted">今月の見積もり: 約{{ '%.0f' % spent }}円。モデル名と単価は fal.ai のモデルページで確かめてから入れてください（見積もりは目安で、請求額とは違うことがあります）。</p>
+  </div>
+
+  <div class="card" style="margin-bottom: var(--sp-4)">
+    <h2>音と字幕</h2>
+    <fieldset class="chips"><legend>セリフの声</legend>
+      <label class="chip"><input type="radio" name="voice_engine" value="say" {% if s.voice_engine != 'none' %}checked{% endif %}><span>Mac の読み上げ（無料）</span></label>
+      <label class="chip"><input type="radio" name="voice_engine" value="none" {% if s.voice_engine == 'none' %}checked{% endif %}><span>声なし</span></label>
+    </fieldset>
+    <label class="field"><span>いつもの声</span>
+      <input type="text" name="default_voice" value="{{ s.default_voice }}" list="voices">
+      <datalist id="voices">{% for v in voices %}<option value="{{ v }}">{% endfor %}</datalist></label>
+    <p class="xs muted">{% if say %}使える日本語の声: {{ voices | join('、') or '（見つかりません。システム設定 → アクセシビリティ → 読み上げコンテンツ で追加できます）' }}{% else %}このPCでは読み上げ（say）が使えません（Mac 以外）。{% endif %}</p>
+    <fieldset class="chips"><legend>字幕</legend>
+      <label class="chip"><input type="radio" name="subtitles" value="1" {% if s.subtitles != '0' %}checked{% endif %}><span>セリフを字幕で焼き込む</span></label>
+      <label class="chip"><input type="radio" name="subtitles" value="0" {% if s.subtitles == '0' %}checked{% endif %}><span>字幕なし</span></label>
+    </fieldset>
+    <p class="xs muted">字幕のフォント: {{ font or '日本語フォントが見つかりません（文字化けします）' }}</p>
+  </div>
+  <div class="row end"><button class="btn primary" type="submit">保存</button></div>
+</form>
+<p class="small muted">データの保存先: {{ data_dir }}（このフォルダごとコピーすればバックアップになります）</p>
+{% endblock %}
+{% block scripts %}<script>
+document.getElementById('settings-form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = e.target.querySelector('[type=submit]');
+  K.busy(btn, true);
+  try { await K.api('POST', '/api/settings', Object.fromEntries(new FormData(e.target))); K.toast('保存しました'); setTimeout(() => location.reload(), 600); }
+  catch (err) { K.toast(err.message, true); }
+  finally { K.busy(btn, false); }
+});
+</script>{% endblock %}

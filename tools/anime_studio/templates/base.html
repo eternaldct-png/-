@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}コマドリ{% endblock %}</title>
+<link rel="icon" href="{{ url_for('static', filename='mark.svg') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='tokens.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body>
+<nav class="nav" aria-label="メニュー">
+  <a class="brand" href="/" aria-label="コマドリ（作品一覧）"><img src="{{ url_for('static', filename='mark.svg') }}" alt="" width="24" height="24"><span class="brand-text">コマドリ</span></a>
+  <a href="/" {% if nav == 'index' %}aria-current="page"{% endif %}>作品</a>
+  <a href="/library" {% if nav == 'library' %}aria-current="page"{% endif %}>キャラ帳</a>
+  <a href="/settings" {% if nav == 'settings_page' %}aria-current="page"{% endif %}>設定</a>
+  <span class="spacer"></span>
+  <a class="btn primary sm" href="/new" aria-label="新しく作る">＋<span class="wide-only"> 新しく作る</span></a>
+</nav>
+<main class="wrap">{% block main %}{% endblock %}</main>
+<div id="toast-root" role="status" aria-live="polite"></div>
+<dialog id="confirm"><p id="confirm-text"></p><form method="dialog" class="row end"><button class="btn" value="no">やめる</button><button class="btn danger" value="yes" id="confirm-yes">はい</button></form></dialog>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

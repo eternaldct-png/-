@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}部品一覧 — コマドリ{% endblock %}
+{% block main %}
+<h1>部品一覧</h1>
+<div class="card" style="margin-bottom: var(--sp-4)">
+  <h2>ボタン</h2>
+  <div class="row"><button class="btn primary">OK・次へ →</button><button class="btn">作り直す</button><button class="btn ink">保存</button><button class="btn ghost">＋ 足す</button><button class="btn danger">消す</button><button class="btn" aria-busy="true" disabled>作っています</button><button class="btn sm">小さい</button></div>
+</div>
+<div class="card" style="margin-bottom: var(--sp-4)">
+  <h2>段階の状態</h2>
+  <div class="row">{% for s, l in [('todo','未着手'),('generating','作成中'),('review','確認待ち'),('approved','✓ 承認済み'),('stale','古い'),('failed','失敗')] %}<span class="badge {{ s }}">{{ l }}</span>{% endfor %}</div>
+  <ol class="stepper" style="margin-top: var(--sp-3)">{% for k, label in STAGES %}<li><a href="#" {% if loop.index == 4 %}aria-current="step"{% endif %}><span class="num">{{ loop.index }}</span>{{ label }}<span class="st {{ 'approved' if loop.index < 4 else ('generating' if loop.index == 4 else 'todo') }}">.</span></a></li>{% endfor %}</ol>
+</div>
+<div class="card" style="margin-bottom: var(--sp-4)">
+  <h2>お知らせ</h2>
+  <div class="banner info">情報</div><div class="banner warning">古い段階があります</div><div class="banner danger">失敗しました</div>
+</div>
+<div class="card" style="margin-bottom: var(--sp-4)">
+  <h2>入力</h2>
+  <label class="field"><span>ラベル</span><input type="text" placeholder="入力例"></label>
+  <fieldset class="chips"><legend>チップ</legend><label class="chip"><input type="radio" name="d" checked><span>選択中</span></label><label class="chip"><input type="radio" name="d"><span>未選択</span></label></fieldset>
+  <label class="drop"><input type="file">📁 画像を入れる</label>
+  <div class="counter over">40 / 32文字</div>
+</div>
+<div class="card"><h2>進行ログ</h2><div class="msg"><span class="who">✍️ 脚本</span>3場面で書きました。</div><div class="msg me" style="margin-top: var(--sp-2)"><span class="who">あなた</span>もっと明るく</div></div>
+{% endblock %}

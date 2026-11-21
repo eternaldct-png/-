@@ -419,3 +419,21 @@ Claude Code のサブエージェント20人（5部署×4人）。共通の前�
   AI費用の表示と月の上限 / 動作チェック / 話者の1行ずつ修正とAI推定 / 録音前の同意・操作の記録・録音の保存日数 /
   10秒ごとの途中保存と復旧・無音警告・通知 / やることの根拠照合（要確認）・よく出る言葉・小さい声モード / マイク選択・会議室モード
 - テスト: `python3 -m pytest tests/test_meeting_notes.py`、E2E は `bash tools/meeting_notes/e2e/run.sh`（偽の Claude/Whisper、Playwright）
+
+---
+
+## コマドリ — ショートアニメ制作（tools/anime_studio、自分のPCで動かす）
+
+AIアニメ制作サービスのコアループ（アイデア → 脚本 → キャラ → 場面 → 絵コンテ → 絵と動き → 音 → 書き出し）を
+Replica スキル（recon → architect → design → build → test）で自分用に作り直したもの（元のサービス名・調査は `replica/anime/` にだけ書く。アプリ本体・README には出さない）。
+**Render にはデプロイしない**。代表の Mac で `tools/anime_studio/start.command` をダブルクリックして使う（`http://127.0.0.1:5056`）。
+使い方は `tools/anime_studio/README.md`、設計の記録は `replica/anime/`（recon.md / architecture.md / features.csv / design/ / test-plan.md / bugs.md / build-log.md / clone-screens/）。
+
+- **既定はすべて無料・APIキー不要**: 文章は「AIなし（アイデアの文をそのまま脚本とカットに並べる・作り話をしない）」か端末内AI（Ollama）、
+  絵は「キャラ・場面の画像を合成した仮の絵」＋自分の絵の差し替え、動きは ffmpeg のカメラワーク、声は Mac の `say`
+- **お金がかかるのは明示して選んだときだけ**: Claude API（`ANTHROPIC_API_KEY`）、fal.ai の画像・動画（`FAL_KEY`、月の上限で止める。モデル名・単価は仮なので fal.ai で確かめる）
+- 文章AIの選び方は `engine.resolve_engine`（キキトメと同じ方針で `tools.meeting_notes.local_ai` を共有）。`auto` は Claude を選ばない
+- 段階の状態（todo / generating / review / approved / stale / failed）は `projects.stages`。前の段階を直すと後ろが `stale`
+- 字幕は Pillow で描いた透過PNGを ffmpeg で重ねる（フォント: Mac はヒラギノ、`KOMADORI_FONT` で指定可）
+- データは `~/Komadori/`（SQLite・画像・音・書き出し）。リポジトリには入れない。キーは `~/Komadori/.env`
+- テスト: `python3 -m pytest tests/test_anime_studio.py`、E2E は `bash tools/anime_studio/e2e/run.sh`

@@ -1,0 +1,41 @@
+/* コマドリのトークン（replica/anime/design/tokens.json）。部品の CSS は必ずこの変数を使う（生の色・px を書かない）。 */
+:root {
+  --bg: #fbf8f3;
+  --surface: #ffffff;
+  --surface-2: #f2ede4;
+  --border: #e3dccf;
+  --border-input: #857c6d;
+  --text: #1e1b18;
+  --text-muted: #5f584e;
+  --accent: #b3471d;
+  --accent-soft: #fbe9df;
+  --on-accent: #ffffff;
+  --ink: #2a2f45;
+  --on-ink: #ffffff;
+  --danger: #b0262b;
+  --success: #1f6f45;
+  --warning: #875800;
+  --warning-soft: #fff3d6;
+
+  --font-sans: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --fs-xs: 12px;  --lh-xs: 18px;
+  --fs-sm: 14px;  --lh-sm: 22px;
+  --fs-base: 16px; --lh-base: 26px;
+  --fs-lg: 20px;  --lh-lg: 30px;
+  --fs-xl: 28px;  --lh-xl: 38px;
+
+  --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px;
+  --sp-5: 24px; --sp-6: 32px; --sp-7: 48px; --sp-8: 64px;
+
+  --radius-sm: 6px; --radius-md: 10px; --radius-lg: 16px; --radius-pill: 999px;
+  --shadow-card: 0 1px 2px rgba(40,30,20,.06), 0 1px 3px rgba(40,30,20,.10);
+  --shadow-pop: 0 12px 32px rgba(40,30,20,.18);
+  --motion-fast: 120ms; --motion-base: 200ms; --ease: cubic-bezier(.2,.8,.2,1);
+
+  --content-max: 1180px; --nav-height: 56px; --chat-width: 340px; --gutter: 16px;
+  --btn-sm: 32px; --btn-md: 40px; --thumb: 72px; --line: 1px; --line-2: 2px;
+  --card-min: 260px; --card-min-narrow: 200px; --shot-min: 300px; --frame-tall: 360px; --col-speaker: 140px; --dialog-max: 440px;
+  --focus-ring: 0 0 0 3px var(--accent-soft), 0 0 0 5px var(--accent);
+}

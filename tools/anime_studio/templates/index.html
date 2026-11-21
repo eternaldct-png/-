@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}作品 — コマドリ{% endblock %}
+{% block main %}
+<div class="between"><h1>作品</h1><a class="btn primary" href="/new">＋ 新しく作る</a></div>
+{% if not projects %}
+<div class="card empty">
+  <p style="font-size: var(--fs-xl)">🎬</p>
+  <h2>まだ作品がありません</h2>
+  <p>アイデアを数行書くだけで、脚本・キャラ・絵コンテ・動画まで順番に作ります。</p>
+  <a class="btn primary" href="/new">最初の1本を作る</a>
+</div>
+{% else %}
+<div class="grid">
+  {% for p in projects %}
+  <a class="card pcard" href="/p/{{ p.id }}">
+    <div class="thumb">{% if p.thumb_url %}<img src="{{ p.thumb_url }}" alt="">{% else %}<span aria-hidden="true">🎞</span>{% endif %}</div>
+    <div class="body">
+      <h3>{{ p.title or '（題名なし）' }}</h3>
+      <p class="small muted">{{ KINDS[p.kind] }}・{{ p.aspect }}・{{ p.duration_sec }}秒・{{ STYLES[p.style][0] if p.style in STYLES else p.style }}</p>
+      <div class="row">
+        {% if p.busy %}<span class="badge generating">作成中</span>{% endif %}
+        {% if 'failed' in p.stages.values() %}<span class="badge failed">失敗あり</span>{% endif %}
+        {% if p.render_path %}<span class="badge approved">書き出し済み</span>{% endif %}
+        <span class="badge">いま: {{ p.current }}</span>
+        <span class="xs muted">{{ p.updated_at[:16].replace('T', ' ') }}（UTC）</span>
+      </div>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

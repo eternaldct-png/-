@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}{{ p.title or '作品' }} — コマドリ{% endblock %}
+{% block main %}
+<div class="between">
+  <h1 id="ptitle">{{ p.title or '（題名なし）' }}</h1>
+  <div class="row"><span class="small muted" id="pmeta"></span><button class="btn sm danger" id="del-project" type="button">作品を消す</button></div>
+</div>
+<nav aria-label="段階"><ol class="stepper" id="stepper"></ol></nav>
+<div class="ws">
+  <aside class="card chat" aria-label="制作チームとのやりとり">
+    <div class="log" id="log" role="log" aria-live="polite"></div>
+    <form id="chat-form">
+      <label class="sr-only" for="instruction">今の段階への指示</label>
+      <textarea id="instruction" maxlength="2000" placeholder="例）もっと明るい終わり方にして／2人目のキャラを足して"></textarea>
+      <div class="between" style="margin-top: var(--sp-2)">
+        <span class="xs muted" id="engine-label"></span>
+        <button class="btn primary sm" type="submit">この段階を作り直す</button>
+      </div>
+    </form>
+  </aside>
+  <section class="panel" id="panel" aria-live="polite"></section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>window.PID = {{ p.id | tojson }}; window.CAMERAS = {{ CAMERAS | tojson }}; window.STAGE_LIST = {{ STAGES | tojson }};</script>
+<script src="{{ url_for('static', filename='project.js') }}"></script>
+{% endblock %}
