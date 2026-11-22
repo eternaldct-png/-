@@ -62,7 +62,11 @@ STORYBOARD_SCHEMA = _obj({"shots": {"type": "array", "items": _obj({
 # ── AI の呼び出し ───────────────────────────────────────────
 
 def _claude_client():
-    import anthropic
+    try:
+        import anthropic
+    except ImportError as e:
+        raise EngineError("Claude を使う部品が入っていません（Python 3.10 以上が必要です）。設定で「AIなし」か「端末内AI」を選ぶか、"
+                          "python.org から新しい Python を入れて start.command をダブルクリックし直してください。") from e
     if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")):
         raise EngineError("ANTHROPIC_API_KEY が設定されていません（~/Tsuzuri/.env に書いて起動し直してください）。")
     return anthropic.Anthropic()
