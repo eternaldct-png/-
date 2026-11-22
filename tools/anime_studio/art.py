@@ -179,12 +179,13 @@ def _character_layer(char: dict, height: int) -> Image.Image:
     return _figure(char, height)
 
 
-def compose_shot(size, scene: dict | None, chars: list[dict], *, seed: int = 0, note: str = "") -> Image.Image:
-    """場面の背景の上にキャラを並べた1枚を作る。"""
+def compose_shot(size, scene: dict | None, chars: list[dict], *, seed: int = 0, note: str = "", camera: str = "still") -> Image.Image:
+    """場面の背景の上にキャラを並べた1枚を作る。カメラに合わせて構図を変える（寄り=大きく、引き=小さく）。"""
     w, h = size
     canvas = _background(size, scene, seed).convert("RGBA")
     if chars:
-        ch = int(h * (0.55 if h > w else 0.62))
+        scale = {"zoom_in": 1.25, "zoom_out": 0.8}.get(camera, 1.0)
+        ch = int(h * (0.55 if h > w else 0.62) * scale)
         layers = [_character_layer(c, ch) for c in chars[:4]]
         total = sum(l.width for l in layers)
         gap = max(0, (w - total) // (len(layers) + 1))
@@ -193,8 +194,9 @@ def compose_shot(size, scene: dict | None, chars: list[dict], *, seed: int = 0, 
             layers = [l.resize((max(1, int(l.width * k)), max(1, int(l.height * k))), Image.LANCZOS) for l in layers]
             gap = int(w * 0.05 / (len(layers) + 1))
         x = gap
+        bottom = h - int(h * 0.04) + (int(h * 0.12) if camera == "zoom_in" else 0)  # 寄りは胸から上
         for l in layers:
-            canvas.alpha_composite(l, (int(x), h - l.height - int(h * 0.04)))
+            canvas.alpha_composite(l, (int(x), bottom - l.height))
             x += l.width + gap
     if note:
         d = ImageDraw.Draw(canvas)
@@ -306,8 +308,11 @@ def download(url: str, dest: Path, max_bytes: int = 200 * 1024 * 1024) -> Path:
     return dest
 
 
-def fal_image(model: str, prompt: str, size: tuple[int, int], dest: Path) -> Path:
-    out = fal_run(model, {"prompt": prompt, "image_size": {"width": size[0], "height": size[1]}, "num_images": 1})
+def fal_image(model: str, prompt: str, size: tuple[int, int], dest: Path, seed: int | None = None) -> Path:
+    payload = {"prompt": prompt, "image_size": {"width": size[0], "height": size[1]}, "num_images": 1}
+    if seed is not None:
+        payload["seed"] = seed  # 作品ごとに同じ種を使い、絵柄・顔のばらつきを減らす
+    out = fal_run(model, payload)
     imgs = out.get("images") or []
     if not imgs or not imgs[0].get("url"):
         raise ArtError("fal.ai から画像が返ってきませんでした。")

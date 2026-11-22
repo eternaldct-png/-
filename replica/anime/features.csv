@@ -36,3 +36,13 @@ BGMのアップロード,audio,must,yes,yes,S09
 クレジット・課金,account,skip,yes,no,ユーザーの指示で不要
 作品の公開・コミュニティ,social,skip,yes,no,自分専用
 自社の生成モデル（キャラ一貫性エンジン）,model,skip,yes,no,持ち出せない。参照画像＋外部生成で代える
+決まりごと（作品ごと＋いつもの）を毎回AIに最優先で渡す,fixes,should,no,yes,FX1 口コミ: 指示より流れが優先・長期の記憶がない
+この絵だけ作り直す・このカットだけAIで直す,fixes,should,no,yes,FX2 口コミ: 細かく直せない
+1カットの失敗で止めない・失敗したカットだけやり直す,fixes,should,no,yes,FX3 口コミ: エラー・やり直しでクレジットが減る
+AI画像のキャラの見た目・種をそろえる＋そろわない警告,fixes,should,no,yes,FX4 口コミ: 一貫性
+有料の生成の前に見積もりを出す,fixes,should,no,yes,FX5 口コミ: クレジット・料金が分からない
+同じキャラ・決まりごと・あらすじで続きを作る（600秒まで）,fixes,should,no,yes,FX6 口コミ: 短い・物語の深さ
+似たアイデアの警告・カメラに合わせた構図,fixes,could,no,yes,FX7 口コミ: 似た動画ばかり（1件）
+録った声に差し替え・キャラごとの読み上げの速さ,fixes,should,no,yes,FX8 口コミ（出典未特定）: TTS がロボット
+書き出す前の確認（自動＋権利のチェック）,fixes,should,no,yes,FX9 口コミ: 仕事に使えるか自分で確かめる必要
+はじめての人向けの説明・例・段階ごとの一言,fixes,could,no,yes,FX10 口コミ: 招待制・慣れるまで分かりにくい

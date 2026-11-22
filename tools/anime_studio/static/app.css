@@ -155,3 +155,13 @@ dialog::backdrop { background: rgba(20, 15, 10, .45); }
   .nav a:not(.brand) { padding: var(--sp-2); }
   .nav .brand-text, .nav .btn .wide-only { display: none; }
 }
+
+/* 決まりごと・確認リスト */
+.rules { border-bottom: var(--line) solid var(--border); padding: var(--sp-2) var(--sp-3); }
+.rules summary { cursor: pointer; }
+.rules textarea { margin: var(--sp-2) 0; }
+.checklist { list-style: none; padding: 0; margin: 0 0 var(--sp-2); display: grid; gap: var(--sp-1); font-size: var(--fs-sm); }
+.checklist .ok { color: var(--success); }
+.checklist .ng { color: var(--warning); font-weight: 700; }
+.steps { display: grid; gap: var(--sp-3); grid-template-columns: repeat(auto-fit, minmax(var(--card-min-narrow), 1fr)); margin-bottom: var(--sp-4); }
+.steps .card { padding: var(--sp-3); }

@@ -134,12 +134,26 @@ def _brief(project: dict) -> str:
     ]
     if project.get("mood"):
         lines.append(f"雰囲気: {project['mood']}")
+    if project.get("previous"):
+        lines.append("前の回のあらすじ（この作品はその続き。キャラの性格・設定を変えない）:\n" + project["previous"])
     lines.append("アイデア（ユーザーが書いたもの）:\n" + (project.get("idea") or ""))
+    rules = rules_text(project)
+    if rules:
+        lines.append(rules)
     return "\n".join(lines)
 
 
+def rules_text(project: dict) -> str:
+    """いつもの決まりごと（設定）とこの作品の決まりごと。毎回AIに最優先で渡す（不満: 指示より決まった流れが優先される・長期の記憶がない）。"""
+    parts = [x.strip() for x in (project.get("house_rules", ""), project.get("notes", "")) if x and x.strip()]
+    if not parts:
+        return ""
+    return "必ず守る決まりごと（どの指示・どの段階よりも優先する）:\n" + "\n".join(parts)
+
+
 _RULES = ("ルール: 炎上しそうな話題・実在の人の悪口・根拠のない数字は入れない。"
-          "既存のアニメ・ゲームのキャラや作品名をまねない（オリジナルにする）。")
+          "既存のアニメ・ゲームのキャラや作品名をまねない（オリジナルにする）。"
+          "どの動画にも使えそうな決まり文句（「〜な人必見」「最後まで見て」「衝撃の結末」など）は使わず、この作品だけの言葉で書く。")
 
 
 def _instruction_text(instruction: str) -> str:
@@ -412,3 +426,58 @@ def check_shots(project: dict, shots: list[dict], settings: dict) -> list[str]:
     if shots and abs(total - target) > target * 0.2:
         warns.append(f"合計の尺が {total:.1f}秒 です（目標 {target:.0f}秒）")
     return warns
+
+
+# ── 1カットだけ直す（不満: 細かく直せない・全部作り直すとお金と時間がかかる） ─────────
+
+SHOT_SCHEMA = _obj({k: v for k, v in STORYBOARD_SCHEMA["properties"]["shots"]["items"]["properties"].items()})
+
+
+def rewrite_shot(project: dict, settings: dict, shot: dict, characters: list[dict], scenes: list[dict], instruction: str,
+                 client=None, engine: str | None = None) -> dict:
+    engine = engine or resolve_engine(settings, client)
+    if engine == "simple":
+        raise EngineError("AIなしモードでは指示を読めません。カットの欄を直接書き換えてください（設定で Ollama か Claude を選ぶと使えます）。")
+    scene_name = next((s["name"] for s in scenes if s.get("id") == shot.get("scene_id")), "")
+    system = ("あなたはアニメの絵コンテ担当です。指定された1カットだけを、指示どおりに直します。ほかのカットは変えません。"
+              f"dialogue は「秒数×{settings.get('chars_per_second') or 8}文字」以内。scene は場面の一覧から、characters はキャラ一覧から選ぶ。"
+              "image_prompt は英語。" + _RULES)
+    user = (_brief(project)
+            + "\n\nキャラ:\n" + json.dumps([{k: c.get(k, "") for k in ("name", "look")} for c in characters], ensure_ascii=False)
+            + "\n\n場面:\n" + json.dumps([s["name"] for s in scenes], ensure_ascii=False)
+            + "\n\n直すカット:\n" + json.dumps({"seconds": shot["seconds"], "scene": scene_name, "characters": shot["characters"],
+                                                 "camera": shot["camera"], "action": shot["action"], "speaker": shot["speaker"],
+                                                 "dialogue": shot["dialogue"], "caption": shot["caption"],
+                                                 "image_prompt": shot["image_prompt"]}, ensure_ascii=False)
+            + _instruction_text(instruction))
+    data = _llm(engine, settings, client, system, user, SHOT_SCHEMA, max_tokens=3000)
+    out = normalize_shots([data], dict(project, duration_sec=shot["seconds"]), characters, scenes)[0]
+    if float(data.get("seconds") or 0) > 0:
+        out["seconds"] = round(min(30.0, max(0.5, float(data["seconds"]))), 1)
+    return out
+
+
+# ── そろっているかのチェック（不満: キャラ・場面がそろわない） ─────────────────────
+
+def consistency_warnings(characters: list[dict], scenes: list[dict], shots: list[dict], image_engine: str) -> list[str]:
+    warns = []
+    used = {n for s in shots for n in s.get("characters", [])}
+    for c in characters:
+        if c["name"] not in used:
+            continue
+        if not c.get("image_path") and not (c.get("look") or "").strip():
+            warns.append(f"キャラ「{c['name']}」に画像も見た目の説明もありません。カットごとに見た目がばらつく原因になります")
+        elif image_engine == "fal" and not (c.get("look") or "").strip():
+            warns.append(f"キャラ「{c['name']}」の見た目の説明が空です。AI画像ではカットごとに顔や服が変わりやすくなります")
+    for i, s in enumerate(shots, 1):
+        if not s.get("scene_id") and scenes:
+            warns.append(f"カット{i}: 場面が「なし」なので、背景が他のカットとそろいません")
+    return warns
+
+
+def similar_ratio(a: str, b: str) -> float:
+    from difflib import SequenceMatcher
+    a, b = re.sub(r"\s+", "", a or ""), re.sub(r"\s+", "", b or "")
+    if not a or not b:
+        return 0.0
+    return SequenceMatcher(None, a, b).ratio()

@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import time
@@ -12,7 +13,7 @@ from pathlib import Path
 from flask import Flask, abort, jsonify, render_template, request, send_file
 
 from . import art, engine, render
-from .store import ASPECTS, CAMERAS, DEFAULT_SETTINGS, KINDS, STAGE_KEYS, STAGE_LABELS, STAGES, STYLES, Store, new_id
+from .store import ASPECTS, CAMERAS, DEFAULT_SETTINGS, KINDS, MAX_DURATION, STAGE_KEYS, STAGE_LABELS, STAGES, STYLES, Store, new_id
 from .worker import Worker, month_start_iso
 
 HERE = Path(__file__).resolve().parent
@@ -92,6 +93,7 @@ def create_app(data_dir: str | Path | None = None, *, ai_client=None, start_work
             sh["image_url"] = file_url(pid, sh["image_path"])
             sh["video_url"] = file_url(pid, sh["video_path"])
             sh["max_chars"] = engine.max_chars(sh["seconds"], s)
+            sh["voice_url"] = file_url(pid, sh["voice_path"])
         chars = store.characters(pid)
         for c in chars:
             c["image_url"] = file_url(pid, c["image_path"])
@@ -108,8 +110,50 @@ def create_app(data_dir: str | Path | None = None, *, ai_client=None, start_work
             bgm_url=file_url(pid, p["bgm_path"]), bgm_name=Path(p["bgm_path"]).name if p["bgm_path"] else "",
             voice_count=len(voices), say_available=render.say_available(),
             engine=engine.ENGINE_LABELS[engine.resolve_engine(s, ai_client)],
+            engine_key=engine.resolve_engine(s, ai_client),
+            consistency=engine.consistency_warnings(chars, scenes, shots, s.get("image_engine", "placeholder")) if shots else [],
+            cost=cost_estimate(pid, shots, s), preflight=preflight(p, shots, voices),
+            house_rules=s.get("house_rules", ""),
+            sequel_title=(store.get_project(p["sequel_of"]) or {}).get("title", "") if p.get("sequel_of") else "",
         )
         return p
+
+    def cost_estimate(pid, shots, s) -> dict:
+        """有料の生成を使う設定なら、押す前に見積もりを出す（不満: クレジットがいつの間にか減る・料金が分からない）。"""
+        img, vid = s.get("image_engine", "placeholder"), s.get("video_engine", "camera")
+        todo = [x for x in shots if x["image_source"] != "upload" or not worker.abs(pid, x["image_path"])]
+        missing = [x for x in todo if x["error"] or not worker.abs(pid, x["image_path"])]
+        per_img = float(s.get("fal_image_yen") or 0) if img == "fal" else 0.0
+        per_sec = float(s.get("fal_video_yen_per_sec") or 0) if vid == "fal" else 0.0
+
+        def yen(items):
+            return round(len(items) * per_img + sum((10 if x["seconds"] > 5 else 5) * per_sec for x in items))
+
+        return {"paid": img == "fal" or vid == "fal", "all": yen(todo), "missing": yen(missing), "one_image": per_img,
+                "missing_count": len(missing), "spent_month": round(store.spend_since(month_start_iso())),
+                "budget": float(s.get("monthly_budget_jpy") or 0)}
+
+    def preflight(p, shots, voices) -> list[dict]:
+        """書き出す前の確認（不満: 仕事に使えるか自分で確かめないといけない）。自動の確認と、自分で確かめる項目。"""
+        items = []
+        no_img = [str(x["sort"] + 1) for x in shots if not worker.abs(p["id"], x["image_path"])]
+        items.append({"key": "images", "auto": True, "ok": bool(shots) and not no_img,
+                      "label": "全部のカットに絵がある" + (f"（無い: カット{'・'.join(no_img)}）" if no_img else "")})
+        failed = [str(x["sort"] + 1) for x in shots if x["error"]]
+        items.append({"key": "errors", "auto": True, "ok": not failed,
+                      "label": "失敗したカットが無い" + (f"（失敗: カット{'・'.join(failed)}）" if failed else "")})
+        long_ = [str(x["sort"] + 1) for x in shots if len(x["dialogue"]) > x["max_chars"]]
+        items.append({"key": "dialogue", "auto": True, "ok": not long_,
+                      "label": "セリフが尺に収まっている" + (f"（長い: カット{'・'.join(long_)}）" if long_ else "")})
+        stale = [STAGE_LABELS[k] for k in STAGE_KEYS[:-1] if p["stages"].get(k) in ("stale", "failed", "todo")]
+        items.append({"key": "stages", "auto": True, "ok": not stale,
+                      "label": "全部の段階が終わっている" + (f"（まだ: {'・'.join(stale)}）" if stale else "")})
+        checks = p.get("checks") or {}
+        items.append({"key": "bgm_rights", "auto": False, "ok": bool(checks.get("bgm_rights")) or not p["bgm_path"],
+                      "label": "BGM・曲は使ってよいもの（自作・フリー音源・権利を持っている曲）" if p["bgm_path"] else "BGMなし（確認不要）"})
+        items.append({"key": "cast_ok", "auto": False, "ok": bool(checks.get("cast_ok")),
+                      "label": "出演キャラ・声の持ち主（所属ライバーなど）に使ってよいと確認した"})
+        return items
 
     # ── 画面 ────────────────────────────────────────────
 
@@ -123,7 +167,9 @@ def create_app(data_dir: str | Path | None = None, *, ai_client=None, start_work
 
     @app.get("/new")
     def new():
-        return render_template("new.html", engine=engine.ENGINE_LABELS[engine.resolve_engine(store.settings(), ai_client)])
+        prev = store.get_project(request.args.get("from", "")) if request.args.get("from") else None
+        return render_template("new.html", engine=engine.ENGINE_LABELS[engine.resolve_engine(store.settings(), ai_client)], prev=prev,
+                               max_duration=MAX_DURATION)
 
     @app.get("/p/<pid>")
     def workspace(pid):
@@ -183,10 +229,20 @@ def create_app(data_dir: str | Path | None = None, *, ai_client=None, start_work
             dur = int(d.get("duration_sec") or 30)
         except (TypeError, ValueError):
             dur = 30
-        dur = min(180, max(5, dur))
+        dur = min(MAX_DURATION, max(5, dur))
+        prev = store.get_project(str(d.get("sequel_of") or "")) if d.get("sequel_of") else None
+        notes = str(d.get("notes") if d.get("notes") is not None else (prev or {}).get("notes", ""))[:4000]
+        # 似たアイデアの作品が前にあれば知らせる（不満: 似た動画・同じ言い回しばかり）
+        similar = None if prev else next((x for x in store.list_projects() if engine.similar_ratio(x["idea"], idea) >= 0.8), None)
         p = store.create_project(title=str(d.get("title") or "").strip()[:80], kind=kind, idea=idea, style=style, aspect=aspect,
                                  duration_sec=dur, language=str(d.get("language") or "ja")[:10], mood=str(d.get("mood") or "")[:200],
-                                 auto=bool(d.get("auto")))
+                                 auto=bool(d.get("auto")), notes=notes, sequel_of=prev["id"] if prev else "")
+        if prev:
+            for c in store.characters(prev["id"]):  # 続きは同じキャラ（画像・声も）で作る
+                copy_character(p["id"], c, from_dir=worker.pdir(prev["id"]))
+            store.log(p["id"], "director", f"「{prev['title'] or '前の作品'}」の続きです。キャラ・決まりごと・前の回のあらすじを引きつぎます。")
+        if similar:
+            store.log(p["id"], "system", f"「{similar['title'] or '前の作品'}」とアイデアがよく似ています。似た動画が続くと見る人が飽きるので、切り口を変えるのもおすすめです。")
         store.log(p["id"], "director", "はじめまして。脚本 → キャラ → 場面 → 絵コンテ → 絵と動き → 音 → 書き出し の順に進めます。"
                   + ("おまかせなので、最後まで自動で進めます。" if p["auto"] else "各段階で確認してから次へ進みます。"))
         for cid in d.get("library_ids") or []:
@@ -197,15 +253,19 @@ def create_app(data_dir: str | Path | None = None, *, ai_client=None, start_work
         return jsonify(id=p["id"])
 
     def copy_from_library(pid: str, src: dict) -> dict:
+        return copy_character(pid, src, from_dir=data_dir / "library", library_id=src["id"])
+
+    def copy_character(pid: str, src: dict, *, from_dir: Path, library_id: str = "") -> dict:
         rel = ""
         if src["image_path"]:
-            s_abs = data_dir / "library" / src["image_path"]
+            s_abs = from_dir / src["image_path"]
             if s_abs.exists():
                 rel = f"chars/{new_id()}{s_abs.suffix}"
                 (worker.pdir(pid) / "chars").mkdir(exist_ok=True)
                 shutil.copy(s_abs, worker.pdir(pid) / rel)
         return store.add_character(pid, name=src["name"], look=src["look"], personality=src["personality"], voice=src["voice"],
-                                   color=src["color"], image_path=rel, library_id=src["id"])
+                                   voice_rate=src.get("voice_rate") or 0, color=src["color"], image_path=rel,
+                                   library_id=library_id or src.get("library_id", ""))
 
     @app.get("/api/projects/<pid>")
     def get_project(pid):
@@ -228,7 +288,11 @@ def create_app(data_dir: str | Path | None = None, *, ai_client=None, start_work
             if p["aspect"] != d["aspect"]:
                 store.set_stage(pid, "storyboard", p["stages"]["storyboard"], invalidate_after=True)
         if "duration_sec" in d:
-            f["duration_sec"] = min(180, max(5, int(d["duration_sec"])))
+            f["duration_sec"] = min(MAX_DURATION, max(5, int(d["duration_sec"])))
+        if "notes" in d:
+            f["notes"] = str(d["notes"])[:4000]
+        if "checks" in d and isinstance(d["checks"], dict):
+            f["checks"] = {**p["checks"], **{k: bool(v) for k, v in d["checks"].items() if k in ("bgm_rights", "cast_ok")}}
         if "auto" in d:
             f["auto"] = bool(d["auto"])
         if "bgm_volume" in d:
@@ -257,7 +321,9 @@ def create_app(data_dir: str | Path | None = None, *, ai_client=None, start_work
             abort(404)
         d = request.get_json(silent=True) or {}
         instruction = str(d.get("instruction") or "").strip()[:2000]
-        if instruction:
+        if stage == "art" and d.get("only_missing"):
+            instruction = "missing"
+        elif instruction:
             store.log(pid, "me", instruction)
         job = worker.enqueue(pid, stage, instruction)
         return jsonify(job=job, project=full(pid))
@@ -306,6 +372,11 @@ def create_app(data_dir: str | Path | None = None, *, ai_client=None, start_work
         c = store.get_character(cid) or abort(404)
         d = body()
         f = {k: str(d[k])[:600] for k in ("name", "look", "personality", "voice") if k in d}
+        if "voice_rate" in d:
+            try:
+                f["voice_rate"] = max(0, min(400, int(d["voice_rate"] or 0)))
+            except (TypeError, ValueError):
+                raise ValueError("読み上げの速さは数字で入れてください。") from None
         if "name" in f and not f["name"].strip():
             raise ValueError("名前を入れてください。")
         if d.get("save_to_library"):
@@ -460,6 +531,18 @@ def create_app(data_dir: str | Path | None = None, *, ai_client=None, start_work
             store.update_project(oid, bgm_path=rel)
             store.log(oid, "sound", f"BGM「{Path(f.filename).name[:60]}」を入れました。")
             return jsonify(full(oid))
+        if kind == "voice":  # 自分で録った声（そのカットだけ、読み上げの代わりに使う）
+            sh = store.get_shot(oid) or abort(404)
+            ext = art.check_audio(data, f.filename)
+            rel = f"voice_rec/{oid}_{new_id()[:8]}{ext}"
+            (worker.pdir(sh["project_id"]) / "voice_rec").mkdir(exist_ok=True)
+            (worker.pdir(sh["project_id"]) / rel).write_bytes(data)
+            o = worker.abs(sh["project_id"], sh["voice_path"])
+            if o:
+                o.unlink(missing_ok=True)
+            out = store.update_shot(oid, voice_path=rel)
+            store.log(sh["project_id"], "sound", f"カット{sh['sort'] + 1}に自分で録った声を入れました。")
+            return jsonify(out)
         ext = art.check_image(data, f.filename)
         if kind == "character":
             c = store.get_character(oid) or abort(404)
@@ -501,6 +584,39 @@ def create_app(data_dir: str | Path | None = None, *, ai_client=None, start_work
         store.update_shot(sid, image_path="", image_source="", video_path="")
         mark_edited(sh["project_id"], "art")
         return jsonify(ok=True)
+
+    @app.post("/api/shots/<sid>/clear-voice")
+    def clear_voice(sid):
+        sh = store.get_shot(sid) or abort(404)
+        o = worker.abs(sh["project_id"], sh["voice_path"])
+        if o:
+            o.unlink(missing_ok=True)
+        store.update_shot(sid, voice_path="")
+        return jsonify(ok=True)
+
+    @app.post("/api/shots/<sid>/regenerate-image")
+    def regenerate_shot_image(sid):
+        """このカットの絵だけ作り直す（不満: 細かく直せない・全部やり直すとお金がかかる）。"""
+        sh = store.get_shot(sid) or abort(404)
+        d = request.get_json(silent=True) or {}
+        note = str(d.get("note") or "").strip()[:500]
+        if note:
+            store.log(sh["project_id"], "me", f"カット{sh['sort'] + 1}の絵: {note}")
+        job = worker.enqueue(sh["project_id"], "art_shot", json.dumps({"shot_id": sid, "note": note}, ensure_ascii=False))
+        return jsonify(job=job)
+
+    @app.post("/api/shots/<sid>/rewrite")
+    def rewrite_shot(sid):
+        """このカットだけ、指示でAIに直してもらう。"""
+        sh = store.get_shot(sid) or abort(404)
+        note = str((request.get_json(silent=True) or {}).get("note") or "").strip()[:1000]
+        if not note:
+            raise ValueError("どう直すかを書いてください。")
+        if engine.resolve_engine(store.settings(), ai_client) == "simple":
+            raise ValueError("AIなしモードでは指示を読めません。カットの欄を直接書き換えてください（設定で Ollama か Claude を選ぶと使えます）。")
+        store.log(sh["project_id"], "me", f"カット{sh['sort'] + 1}: {note}")
+        job = worker.enqueue(sh["project_id"], "shot_rewrite", json.dumps({"shot_id": sid, "note": note}, ensure_ascii=False))
+        return jsonify(job=job)
 
     @app.get("/files/<pid>/<path:rel>")
     def files(pid, rel):
@@ -546,7 +662,7 @@ def create_app(data_dir: str | Path | None = None, *, ai_client=None, start_work
                         raise ValueError
                 except ValueError:
                     raise ValueError("数字で入れてください。") from None
-            out[k] = v[:200]
+            out[k] = v[:4000] if k == "house_rules" else v[:200]
         return jsonify(store.save_settings(out))
 
     return app

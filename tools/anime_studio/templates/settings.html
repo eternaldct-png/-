@@ -16,6 +16,8 @@
       <label class="field"><span>Claude のモデル</span><input type="text" name="claude_model" value="{{ s.claude_model }}"></label>
     </div>
     <p class="xs muted">Claude APIキー: {{ '設定あり' if claude_key else 'なし（使うときは ' + data_dir + '/.env に ANTHROPIC_API_KEY=... を書いて起動し直す）' }}</p>
+    <label class="field"><span>いつもの決まりごと（全部の作品で、毎回AIに最優先で渡す）</span>
+      <textarea name="house_rules" maxlength="4000" placeholder="例）ETERNAL d.c.t の所属ライバーが出る。悪口・政治の話は入れない。最後に「フォローしてね」は入れない。">{{ s.house_rules }}</textarea></label>
     <label class="field"><span>読み上げの速さ（1秒あたりの文字数。セリフの長さチェックに使う）</span><input type="number" name="chars_per_second" min="3" max="15" step="0.5" value="{{ s.chars_per_second }}"></label>
   </div>
 

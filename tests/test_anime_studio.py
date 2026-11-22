@@ -178,7 +178,7 @@ def test_create_project_validation(client):
     assert call(client, "POST", "/api/projects", json={"idea": "あ" * 8001}).status_code == 400
     r = call(client, "POST", "/api/projects", json={"idea": "絵文字🎤とアクセントé", "aspect": "4:3", "kind": "x", "duration_sec": 9999})
     p = get(client, r.get_json()["id"])
-    assert p["aspect"] == "9:16" and p["kind"] == "story" and p["duration_sec"] == 180
+    assert p["aspect"] == "9:16" and p["kind"] == "story" and p["duration_sec"] == 600
 
 
 def test_files_route_blocks_traversal(client, app, tmp_path):
@@ -393,3 +393,209 @@ def test_settings_validation(client):
     assert call(client, "POST", "/api/settings", json={"image_engine": "midjourney"}).status_code == 400
     assert call(client, "POST", "/api/settings", json={"monthly_budget_jpy": "-1"}).status_code == 400
     assert call(client, "POST", "/api/settings", json={"monthly_budget_jpy": "500"}).get_json()["monthly_budget_jpy"] == "500"
+
+
+# ── 口コミの不満への対応（replica/anime/fixes.md） ─────────────────────
+
+def to_storyboard(client, app, pid):
+    drain(app)
+    for st in ("script", "characters", "scenes", "storyboard"):
+        approve(client, app, pid, st)  # 絵コンテを承認すると絵も作られる
+
+
+def test_fix_rules_are_sent_to_ai_every_time(client, app):
+    """FX1: いつもの決まりごと＋作品の決まりごとが、毎回AIに最優先で渡る（指示より流れが優先される・記憶がない）。"""
+    fake = FakeClaude([{"title": "t", "logline": "l", "scenes": [{"place": "部屋", "summary": "s", "lines": [{"speaker": "あまりん", "text": "やで"}]}]}])
+    app.extensions["k_worker"].ai_client = fake
+    app.extensions["k_store"].save_settings({"ai_engine": "claude", "house_rules": "悪口は入れない"})
+    pid = make_project(client, notes="あまりんは関西弁")
+    drain(app)
+    sent = fake.calls[0]["messages"][0]["content"]
+    assert "必ず守る決まりごと" in sent and "悪口は入れない" in sent and "あまりんは関西弁" in sent
+    assert "決まり文句" in fake.calls[0]["system"]
+    r = call(client, "PATCH", f"/api/projects/{pid}", json={"notes": "標準語にする"})
+    assert r.get_json()["notes"] == "標準語にする"
+
+
+def test_fix_rewrite_one_shot_only(client, app):
+    """FX2: 1カットだけAIで直せる。ほかのカットは変わらない。AIなしモードでは理由つきで断る。"""
+    pid = make_project(client)
+    to_storyboard(client, app, pid)
+    shots = get(client, pid)["shots"]
+    r = call(client, "POST", f"/api/shots/{shots[1]['id']}/rewrite", json={"note": "驚いた顔に"})
+    assert r.status_code == 400 and "AIなし" in r.get_json()["error"]
+    fake = FakeClaude([{"seconds": 2, "scene": "なかほど", "characters": ["あまりん"], "camera": "zoom_in", "action": "驚く",
+                        "speaker": "あまりん", "dialogue": "えっ！", "caption": "", "image_prompt": "surprised"}])
+    app.extensions["k_worker"].ai_client = fake
+    app.extensions["k_store"].save_settings({"ai_engine": "claude"})
+    assert call(client, "POST", f"/api/shots/{shots[1]['id']}/rewrite", json={"note": "驚いた顔に"}).status_code == 200
+    drain(app)
+    after = get(client, pid)["shots"]
+    assert after[1]["dialogue"] == "えっ！" and after[1]["camera"] == "zoom_in"
+    assert [s["dialogue"] for i, s in enumerate(after) if i != 1] == [s["dialogue"] for i, s in enumerate(shots) if i != 1]
+    assert "驚いた顔に" in fake.calls[0]["messages"][0]["content"]
+
+
+def test_fix_regenerate_one_image_only(client, app):
+    """FX2: この絵だけ作り直す。ほかのカットの絵はそのまま。"""
+    pid = make_project(client)
+    to_storyboard(client, app, pid)
+    before = {s["id"]: s["image_path"] for s in get(client, pid)["shots"]}
+    target = next(iter(before))
+    assert call(client, "POST", f"/api/shots/{target}/regenerate-image", json={"note": "もっと明るく"}).status_code == 200
+    drain(app)
+    after = {s["id"]: s["image_path"] for s in get(client, pid)["shots"]}
+    assert after[target] != before[target]
+    assert all(after[k] == v for k, v in before.items() if k != target)
+    assert get(client, pid)["stages"]["sound"] in ("todo", "stale", "generating", "review")
+
+
+def test_fix_one_failed_shot_does_not_stop_others_and_retry_only_missing(client, app, monkeypatch):
+    """FX3: 1カットの失敗で全部を止めない。失敗したカットだけやり直せる（できたカットの分は二度払わない）。"""
+    from tools.anime_studio import art
+    calls = []
+
+    def fake_fal(model, prompt, size, dest, seed=None):
+        calls.append(prompt)
+        if len(calls) == 2:
+            raise art.ArtError("fal.ai がエラーを返しました: 500")
+        from PIL import Image
+        Image.new("RGB", size, (10, 20, 30)).save(dest)
+        return dest
+
+    monkeypatch.setattr(art, "fal_image", fake_fal)
+    monkeypatch.setattr(art, "fal_key", lambda: "x")
+    app.extensions["k_store"].save_settings({"image_engine": "fal", "monthly_budget_jpy": "0", "fal_image_yen": "3"})
+    pid = make_project(client)
+    to_storyboard(client, app, pid)
+    p = get(client, pid)
+    n = len(p["shots"])
+    assert p["stages"]["art"] == "review"  # 1カット失敗しても段階は止まらない
+    failed = [s for s in p["shots"] if s["error"]]
+    assert len(failed) == 1 and len(calls) == n
+    assert p["cost"]["missing_count"] == 1 and p["cost"]["missing"] == 3
+    assert any("失敗" in l["text"] for l in p["logs"])
+    call(client, "POST", f"/api/projects/{pid}/stages/art/generate", json={"only_missing": True})
+    drain(app)
+    p = get(client, pid)
+    assert len(calls) == n + 1  # 失敗した1カットだけ作り直した
+    assert not any(s["error"] for s in p["shots"])
+    assert app.extensions["k_store"].spend_since("2000") == pytest.approx(3 * n)  # 失敗した分は数えない
+
+
+def test_fix_consistency_prompt_and_seed(client, app, monkeypatch):
+    """FX4: AI画像のプロンプトに毎回キャラの見た目・背景を入れ、作品ごとに同じ種を使う。足りなければ警告。"""
+    from tools.anime_studio import art
+    got = []
+
+    def fake_fal(model, prompt, size, dest, seed=None):
+        got.append((prompt, seed))
+        from PIL import Image
+        Image.new("RGB", size).save(dest)
+        return dest
+
+    monkeypatch.setattr(art, "fal_image", fake_fal)
+    pid = make_project(client)
+    drain(app)
+    for st in ("script", "characters", "scenes"):
+        approve(client, app, pid, st)
+    p = get(client, pid)
+    assert any("画像も見た目の説明もありません" in w for w in p["consistency"])
+    c = next(c for c in p["characters"] if c["name"] == "あまりん")
+    call(client, "PATCH", f"/api/characters/{c['id']}", json={"look": "pink twin tails, purple hoodie"})
+    app.extensions["k_store"].save_settings({"image_engine": "fal", "monthly_budget_jpy": "0"})
+    approve(client, app, pid, "storyboard")
+    prompts = [g[0] for g in got]
+    assert any("pink twin tails, purple hoodie" in x for x in prompts)
+    assert len({g[1] for g in got}) == 1 and got[0][1] is not None
+
+
+def test_fix_cost_estimate_shown_before_paid_generation(client, app):
+    """FX5: 有料の設定なら、押す前に見積もりが出る。無料の設定なら 0 円。"""
+    pid = make_project(client)
+    to_storyboard(client, app, pid)
+    assert get(client, pid)["cost"]["paid"] is False
+    app.extensions["k_store"].save_settings({"image_engine": "fal", "fal_image_yen": "4", "video_engine": "fal", "fal_video_yen_per_sec": "2"})
+    c = get(client, pid)["cost"]
+    shots = get(client, pid)["shots"]
+    expected = len(shots) * 4 + sum((10 if s["seconds"] > 5 else 5) * 2 for s in shots)
+    assert c["paid"] is True and c["all"] == expected
+
+
+def test_fix_sequel_keeps_characters_rules_and_story(client, app):
+    """FX6: 続きを作る。キャラ（画像も）・決まりごと・前の回のあらすじを引きつぐ。尺は600秒まで。"""
+    fake = FakeClaude([
+        {"title": "第1話", "logline": "はじまり", "scenes": [{"place": "部屋", "summary": "歌の練習", "lines": [{"speaker": "あまりん", "text": "いくよ"}]}]},
+        {"characters": [{"name": "あまりん", "look": "pink hair", "personality": "元気"}]},
+        {"title": "第2話", "logline": "つづき", "scenes": [{"place": "ステージ", "summary": "本番", "lines": [{"speaker": "あまりん", "text": "本番だ"}]}]},
+    ])
+    app.extensions["k_worker"].ai_client = fake
+    app.extensions["k_store"].save_settings({"ai_engine": "claude"})
+    pid = make_project(client, notes="関西弁")
+    drain(app)
+    approve(client, app, pid, "script")
+    c = get(client, pid)["characters"][0]
+    call(client, "POST", f"/api/upload/character/{c['id']}", data={"file": (io.BytesIO(png_bytes()), "a.png")})
+    r = call(client, "POST", "/api/projects", json={"idea": "本番の日", "sequel_of": pid, "duration_sec": 600})
+    pid2 = r.get_json()["id"]
+    drain(app)
+    p2 = get(client, pid2)
+    assert p2["notes"] == "関西弁" and p2["duration_sec"] == 600 and p2["sequel_of"] == pid
+    assert p2["characters"][0]["name"] == "あまりん" and p2["characters"][0]["image_url"]
+    sent = fake.calls[-1]["messages"][0]["content"]
+    assert "前の回のあらすじ" in sent and "歌の練習" in sent
+    assert call(client, "GET", f"/new?from={pid}").status_code == 200
+
+
+def test_fix_similar_idea_warning(client, app):
+    """FX7: 前の作品とアイデアがほぼ同じなら知らせる（似た動画ばかりになる）。"""
+    make_project(client)
+    pid2 = make_project(client)
+    assert any("よく似ています" in l["text"] for l in get(client, pid2)["logs"])
+
+
+def test_fix_recorded_voice_replaces_tts(client, app, tmp_path):
+    """FX8: 読み上げが不自然なカットは、自分で録った声に差し替えられる（書き出しに入る）。"""
+    wav = tmp_path / "v.wav"
+    subprocess.run([render.ffmpeg_exe(), "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=300:duration=1", str(wav)], check=True)
+    pid = make_project(client)
+    to_storyboard(client, app, pid)
+    sh = get(client, pid)["shots"][0]
+    assert call(client, "POST", f"/api/upload/voice/{sh['id']}", data={"file": (io.BytesIO(b"x" * 10), "v.exe")}).status_code == 400
+    r = call(client, "POST", f"/api/upload/voice/{sh['id']}", data={"file": (io.BytesIO(wav.read_bytes()), "v.wav")})
+    assert r.status_code == 200 and r.get_json()["voice_path"]
+    w = app.extensions["k_worker"]
+    assert sh["id"] in w.voice_files(pid)
+    for st in ("art", "sound"):
+        approve(client, app, pid, st)
+    p = get(client, pid)
+    assert p["stages"]["render"] == "approved"
+    assert call(client, "POST", f"/api/shots/{sh['id']}/clear-voice").status_code == 200
+    assert sh["id"] not in w.voice_files(pid)
+    c = p["characters"][0]
+    assert call(client, "PATCH", f"/api/characters/{c['id']}", json={"voice_rate": "abc"}).status_code == 400
+    assert call(client, "PATCH", f"/api/characters/{c['id']}", json={"voice_rate": 999}).get_json()["voice_rate"] == 400
+
+
+def test_fix_preflight_checklist(client, app):
+    """FX9: 書き出す前の確認（自動の確認＋BGMの権利・出演の了承）。"""
+    pid = make_project(client)
+    to_storyboard(client, app, pid)
+    pf = {i["key"]: i for i in get(client, pid)["preflight"]}
+    assert pf["images"]["ok"] and not pf["stages"]["ok"] and not pf["cast_ok"]["ok"]
+    call(client, "PATCH", f"/api/projects/{pid}", json={"checks": {"cast_ok": True, "evil": True}})
+    p = get(client, pid)
+    assert {i["key"]: i for i in p["preflight"]}["cast_ok"]["ok"] and "evil" not in p["checks"]
+
+
+def test_fix_old_database_gets_new_columns(tmp_path):
+    """古い DB（列が足りない）でも起動できる。"""
+    import sqlite3
+    db = tmp_path / "old.db"
+    c = sqlite3.connect(db)
+    c.executescript((Path(__file__).resolve().parents[1] / "tools/anime_studio/schema.sql").read_text())
+    c.execute("INSERT INTO projects(id, created_at, updated_at) VALUES('p1', 'x', 'x')")
+    c.commit()
+    c.close()
+    st = Store(db)
+    assert st.get_project("p1")["notes"] == ""

@@ -8,6 +8,15 @@
 <nav aria-label="段階"><ol class="stepper" id="stepper"></ol></nav>
 <div class="ws">
   <aside class="card chat" aria-label="制作チームとのやりとり">
+    <details class="rules" id="rules-box">
+      <summary class="small"><b>📌 この作品の決まりごと</b> <span class="xs muted" id="rules-count"></span></summary>
+      <form id="rules-form">
+        <label class="sr-only" for="rules">この作品の決まりごと</label>
+        <textarea id="rules" maxlength="4000" placeholder="例）あまりんは関西弁。語尾は「〜やで」。&#10;明るい終わり方にする。"></textarea>
+        <p class="xs muted">どの段階でも、毎回AIに最優先で渡します（指示より決まった流れが優先されないように）。いつもの決まりごとは「設定」で。</p>
+        <button class="btn sm ink" type="submit">保存</button>
+      </form>
+    </details>
     <div class="log" id="log" role="log" aria-live="polite"></div>
     <form id="chat-form">
       <label class="sr-only" for="instruction">今の段階への指示</label>

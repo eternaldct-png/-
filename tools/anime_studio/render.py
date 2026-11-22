@@ -74,14 +74,16 @@ def say_voices() -> list[str]:
     return voices
 
 
-def make_voice(text: str, voice: str, dest: Path) -> Path | None:
-    """セリフを読み上げて wav にする。say が無ければ None。"""
+def make_voice(text: str, voice: str, dest: Path, rate: int = 0) -> Path | None:
+    """セリフを読み上げて wav にする。say が無ければ None。rate は1分あたりの語数（0 = ふつう）。"""
     if not text.strip() or not say_available():
         return None
     aiff = dest.with_suffix(".aiff")
     args = ["say", "-o", str(aiff)]
     if voice:
         args[1:1] = ["-v", voice]
+    if rate:
+        args[1:1] = ["-r", str(max(80, min(400, int(rate))))]
     try:
         subprocess.run([*args, text], check=True, capture_output=True, timeout=60)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):

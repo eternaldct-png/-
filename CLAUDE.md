@@ -436,4 +436,8 @@ Replica スキル（recon → architect → design → build → test）で自�
 - 段階の状態（todo / generating / review / approved / stale / failed）は `projects.stages`。前の段階を直すと後ろが `stale`
 - 字幕は Pillow で描いた透過PNGを ffmpeg で重ねる（フォント: Mac はヒラギノ、`KOMADORI_FONT` で指定可）
 - データは `~/Komadori/`（SQLite・画像・音・書き出し）。リポジトリには入れない。キーは `~/Komadori/.env`
+- 元のアプリの口コミ（14件・7出典・星つき0件。利用者の口コミがほぼ無く、記事の短所欄中心・うち6件は競合の記事。検索経由で原文未確認）から
+  不満を順位付けし、10項目を直した（`replica/anime/fixes.md`）: 決まりごとを毎回AIに最優先で渡す / 1カットだけ作り直す・AIで直す /
+  1カットの失敗で止めない・失敗したカットだけやり直す / AI画像の見た目と種をそろえる・警告 / 有料の生成の前に見積もり /
+  同じキャラで続きを作る（600秒まで）/ 似たアイデアの警告 / 録った声に差し替え / 書き出す前の確認 / はじめての人向けの説明
 - テスト: `python3 -m pytest tests/test_anime_studio.py`、E2E は `bash tools/anime_studio/e2e/run.sh`

@@ -1,0 +1,22 @@
+{
+  "_about": "AIアニメ制作アプリ用のテーマ（replica-entrepreneur の themes.json を元に作り直した）",
+  "request_patterns": ["\\bmissing\\b", "\\bneed(s)? to\\b", "必要", "ほしい"],
+  "themes": [
+    {"id": "credits", "label": "クレジット・料金（期限切れ・再実行で減る・料金が不明・無料枠が狭い）", "kind": "complaint",
+     "patterns": ["credit", "price", "members-only", "クレジット", "無料会員", "plan names"]},
+    {"id": "control", "label": "細かく直せない・決まった流れが指示より優先される", "kind": "complaint",
+     "patterns": ["manual control", "fixed flow", "fixed production line", "linear logic", "higher priority than our instructions"]},
+    {"id": "consistency", "label": "キャラ・場面がそろわない（一貫性・人の手直しが要る）", "kind": "complaint",
+     "patterns": ["consistency", "continuity", "human intervention"]},
+    {"id": "errors", "label": "生成中のエラー・不安定（やり直すとお金が減る）", "kind": "complaint",
+     "patterns": ["エラー", "error", "instabil", "fail"]},
+    {"id": "length", "label": "短い動画しか作れない・物語の深さが出ない", "kind": "complaint",
+     "patterns": ["short clips", "narrative depth", "long-term creative memory"]},
+    {"id": "sameness", "label": "似た動画・同じ言い回しばかりになる", "kind": "complaint",
+     "patterns": ["similar videos", "same phrases"]},
+    {"id": "access", "label": "使い始めるまでが面倒（招待制・同時生成の制限）", "kind": "complaint",
+     "patterns": ["招待", "同時に", "invite"]},
+    {"id": "brand", "label": "仕事に使える品質か自分で確かめる必要がある", "kind": "complaint",
+     "patterns": ["brand fit", "client-facing", "license"]}
+  ]
+}

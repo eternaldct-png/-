@@ -56,8 +56,22 @@ DEFAULT_SETTINGS = {
     "voice_engine": "say",          # say（Mac の読み上げ・無料） | none
     "default_voice": "Kyoko",
     "subtitles": "1",
+    "house_rules": "",              # いつもの決まりごと（全部の作品で、毎回AIに最優先で渡す）
     "chars_per_second": "8",
 }
+
+
+# 口コミの不満への対応で足した列（replica/anime/fixes.md）
+MIGRATIONS = [
+    ("projects", "notes", "TEXT NOT NULL DEFAULT ''"),        # この作品の決まりごと（毎回AIに最優先で渡す）
+    ("projects", "checks", "TEXT NOT NULL DEFAULT '{}'"),     # 書き出し前の確認（BGMの権利・出演の了承）
+    ("projects", "sequel_of", "TEXT NOT NULL DEFAULT ''"),    # 「続きを作る」の元の作品
+    ("shots", "error", "TEXT NOT NULL DEFAULT ''"),           # このカットだけ失敗したときの理由
+    ("shots", "voice_path", "TEXT NOT NULL DEFAULT ''"),      # 自分で録った声（読み上げより優先）
+    ("characters", "voice_rate", "INTEGER NOT NULL DEFAULT 0"),  # 読み上げの速さ（0 = ふつう、say -r の値）
+]
+
+MAX_DURATION = 600  # 尺の上限（秒）
 
 
 def now() -> str:
@@ -78,6 +92,10 @@ class Store:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         with self.conn() as c:
             c.executescript(SCHEMA.read_text(encoding="utf-8"))
+            for table, col, decl in MIGRATIONS:  # あとから足した列（古い DB にも足す）
+                cols = {r[1] for r in c.execute(f"PRAGMA table_info({table})")}
+                if col not in cols:
+                    c.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
 
     @contextmanager
     def conn(self):
@@ -117,6 +135,7 @@ class Store:
         stages.update(json.loads(d.get("stages") or "{}"))
         d["stages"] = stages
         d["render_warnings"] = json.loads(d.get("render_warnings") or "[]")
+        d["checks"] = json.loads(d.get("checks") or "{}")
         d["auto"] = bool(d.get("auto"))
         return d
 
@@ -124,11 +143,11 @@ class Store:
         pid, t = new_id(), now()
         with self.conn() as c:
             c.execute(
-                "INSERT INTO projects(id, title, kind, idea, style, aspect, duration_sec, language, mood, auto, stages, created_at, updated_at)"
-                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO projects(id, title, kind, idea, style, aspect, duration_sec, language, mood, auto, stages, notes, sequel_of,"
+                " created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (pid, f.get("title", ""), f.get("kind", "story"), f.get("idea", ""), f.get("style", "anime"),
                  f.get("aspect", "9:16"), int(f.get("duration_sec", 30)), f.get("language", "ja"), f.get("mood", ""),
-                 1 if f.get("auto") else 0, json.dumps(default_stages()), t, t))
+                 1 if f.get("auto") else 0, json.dumps(default_stages()), f.get("notes", ""), f.get("sequel_of", ""), t, t))
         return self.get_project(pid)
 
     def get_project(self, pid: str) -> dict | None:
@@ -151,7 +170,7 @@ class Store:
         return out
 
     PROJECT_FIELDS = ("title", "kind", "idea", "style", "aspect", "duration_sec", "language", "mood", "auto",
-                      "bgm_path", "bgm_volume", "render_path")
+                      "bgm_path", "bgm_volume", "render_path", "notes", "sequel_of")
 
     def update_project(self, pid: str, **f) -> dict | None:
         sets, vals = [], []
@@ -159,7 +178,7 @@ class Store:
             if k in self.PROJECT_FIELDS:
                 sets.append(f"{k} = ?")
                 vals.append(int(v) if k == "auto" else v)
-            elif k in ("script", "stages", "render_warnings"):
+            elif k in ("script", "stages", "render_warnings", "checks"):
                 sets.append(f"{k} = ?")
                 vals.append(json.dumps(v, ensure_ascii=False))
         if not sets:
@@ -188,7 +207,7 @@ class Store:
 
     # ── キャラ ───────────────────────────────────────────
 
-    CHAR_FIELDS = ("name", "look", "personality", "voice", "color", "image_path", "sort")
+    CHAR_FIELDS = ("name", "look", "personality", "voice", "voice_rate", "color", "image_path", "sort")
 
     def add_character(self, project_id: str | None, **f) -> dict:
         cid, t = new_id(), now()
@@ -196,11 +215,11 @@ class Store:
             if "sort" not in f:
                 f["sort"] = (c.execute("SELECT COALESCE(MAX(sort), -1) + 1 FROM characters WHERE project_id IS ?",
                                        (project_id,)).fetchone()[0])
-            c.execute("INSERT INTO characters(id, project_id, name, look, personality, voice, color, image_path, library_id, sort, created_at, updated_at)"
-                      " VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            c.execute("INSERT INTO characters(id, project_id, name, look, personality, voice, voice_rate, color, image_path, library_id,"
+                      " sort, created_at, updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
                       (cid, project_id, (f.get("name") or "名前なし")[:60], f.get("look", ""), f.get("personality", ""),
-                       f.get("voice", ""), f.get("color", ""), f.get("image_path", ""), f.get("library_id", ""),
-                       int(f["sort"]), t, t))
+                       f.get("voice", ""), int(f.get("voice_rate") or 0), f.get("color", ""), f.get("image_path", ""),
+                       f.get("library_id", ""), int(f["sort"]), t, t))
         return self.get_character(cid)
 
     def get_character(self, cid: str) -> dict | None:
@@ -268,7 +287,7 @@ class Store:
     # ── カット ───────────────────────────────────────────
 
     SHOT_FIELDS = ("sort", "seconds", "scene_id", "characters", "camera", "action", "speaker", "dialogue", "caption",
-                   "image_prompt", "image_path", "image_source", "video_path")
+                   "image_prompt", "image_path", "image_source", "video_path", "error", "voice_path")
 
     @staticmethod
     def _shot(r) -> dict:

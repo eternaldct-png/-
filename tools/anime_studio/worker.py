@@ -1,6 +1,8 @@
 """バックグラウンド処理: 段階ごとの生成（脚本 → キャラ → 場面 → 絵コンテ → 絵と動き → 音 → 書き出し）を1本ずつ順番に行う。"""
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import shutil
 import threading
@@ -13,8 +15,15 @@ from .store import STAGE_KEYS, STAGE_LABELS, STYLES, Store, new_id
 
 log = logging.getLogger("komadori.worker")
 
+JOB_LABELS = {**STAGE_LABELS, "art_shot": "1カットの絵", "shot_rewrite": "1カットの直し"}
+
 ROLE_OF = {"script": "writer", "characters": "character", "scenes": "scene", "storyboard": "storyboard",
            "art": "animator", "sound": "sound", "render": "editor"}
+
+
+def project_seed(pid: str) -> int:
+    """作品ごとに決まった乱数の種。AI画像の絵柄・顔のばらつきを減らす。"""
+    return int(hashlib.sha256(pid.encode()).hexdigest()[:8], 16)
 
 
 def month_start_iso() -> str:
@@ -62,7 +71,7 @@ class Worker:
     def enqueue(self, pid: str, kind: str, instruction: str = "") -> dict:
         active = self.store.active_job(pid)
         if active:
-            raise ValueError(f"「{STAGE_LABELS.get(active['kind'], active['kind'])}」を作っている途中です。終わってから押してください。")
+            raise ValueError(f"「{JOB_LABELS.get(active['kind'], active['kind'])}」を作っている途中です。終わってから押してください。")
         if kind in STAGE_KEYS:
             self.store.set_stage(pid, kind, "generating", invalidate_after=kind != "render")
         job = self.store.add_job(pid, kind, instruction)
@@ -88,13 +97,17 @@ class Worker:
             msg = str(e) or type(e).__name__
             self.store.set_job(job["id"], "failed", msg)
             if self.store.get_project(pid):
-                self.store.set_stage(pid, kind, "failed")
-                self.store.log(pid, "system", f"⚠️ {STAGE_LABELS.get(kind, kind)}で失敗しました: {msg}")
+                if kind in STAGE_KEYS:
+                    self.store.set_stage(pid, kind, "failed")
+                self.store.log(pid, "system", f"⚠️ {JOB_LABELS.get(kind, kind)}で失敗しました: {msg}")
             return
         finally:
             self.progress.pop(pid, None)
         p = self.store.get_project(pid)
         if not p:
+            self.store.set_job(job["id"], "done")
+            return
+        if kind not in STAGE_KEYS:  # 1カットだけの仕事は段階を進めない
             self.store.set_job(job["id"], "done")
             return
         # 段階の状態を先に変えてからジョブを「終わり」にする（画面が「作成中」のまま止まらないように）
@@ -120,13 +133,25 @@ class Worker:
     def settings(self) -> dict:
         return self.store.settings()
 
+    def for_ai(self, pid: str, s: dict) -> dict:
+        """AIに渡す作品の情報。いつもの決まりごと・この作品の決まりごと・前の回のあらすじを足す。"""
+        p = self.store.get_project(pid)
+        p["house_rules"] = s.get("house_rules", "")
+        prev = self.store.get_project(p["sequel_of"]) if p.get("sequel_of") else None
+        if prev and prev["script"].get("scenes"):
+            sc = prev["script"]
+            p["previous"] = f"「{sc.get('title') or prev['title']}」{sc.get('logline', '')}\n" + "\n".join(
+                f"- {x['place']}: {x['summary']}" for x in sc["scenes"])
+        return p
+
     def _size(self, p: dict) -> tuple[int, int]:
         return art.frame_size(p["aspect"], self.short_side or 1080)
 
     # ── 各段階 ───────────────────────────────────────────
 
     def do_script(self, pid: str, instruction: str) -> None:
-        p, s = self.store.get_project(pid), self.settings()
+        s = self.settings()
+        p = self.for_ai(pid, s)
         eng = engine.resolve_engine(s, self.ai_client)
         self.store.log(pid, "writer", f"脚本を書きます（{engine.ENGINE_LABELS[eng]}）。")
         if instruction and eng == "simple":
@@ -137,7 +162,8 @@ class Worker:
         self.store.log(pid, "writer", f"「{script['title']}」{len(script['scenes'])}場面・{n_lines}行で書きました。直したいところがあれば教えてください。")
 
     def do_characters(self, pid: str, instruction: str) -> None:
-        p, s = self.store.get_project(pid), self.settings()
+        s = self.settings()
+        p = self.for_ai(pid, s)
         eng = engine.resolve_engine(s, self.ai_client)
         existing = self.store.characters(pid)
         items = engine.gen_characters(p, s, instruction, existing, client=self.ai_client, engine=eng)
@@ -158,7 +184,8 @@ class Worker:
         self.store.log(pid, "character", msg)
 
     def do_scenes(self, pid: str, instruction: str) -> None:
-        p, s = self.store.get_project(pid), self.settings()
+        s = self.settings()
+        p = self.for_ai(pid, s)
         eng = engine.resolve_engine(s, self.ai_client)
         old = {sc["name"]: sc for sc in self.store.scenes(pid)}
         items = engine.gen_scenes(p, s, instruction, client=self.ai_client, engine=eng)
@@ -169,7 +196,8 @@ class Worker:
         self.store.log(pid, "scene", f"場面は {len(items)} つ: " + "、".join(i["name"] for i in items) + "。背景の画像を入れるとそのまま使います。")
 
     def do_storyboard(self, pid: str, instruction: str) -> None:
-        p, s = self.store.get_project(pid), self.settings()
+        s = self.settings()
+        p = self.for_ai(pid, s)
         eng = engine.resolve_engine(s, self.ai_client)
         chars, scenes = self.store.characters(pid), self.store.scenes(pid)
         shots = engine.gen_storyboard(p, s, chars, scenes, instruction, self.store.shots(pid), client=self.ai_client, engine=eng)
@@ -179,57 +207,130 @@ class Worker:
         self.store.log(pid, "storyboard", f"{len(shots)}カット・合計{total:.1f}秒に割りました。" + (" 注意: " + " / ".join(warns) if warns else ""))
 
     def do_art(self, pid: str, instruction: str) -> None:
+        """全部のカットの絵を作る。instruction が "missing" なら、絵が無い・失敗したカットだけ作る（お金と時間の節約）。"""
         p, s = self.store.get_project(pid), self.settings()
-        size = self._size(p)
         shots = self.store.shots(pid)
         if not shots:
             raise ValueError("カットがありません。絵コンテを先に作ってください。")
-        chars = {c["name"]: dict(c, image_abs=str(self.abs(pid, c["image_path"]) or "")) for c in self.store.characters(pid)}
-        scenes = {sc["id"]: dict(sc, image_abs=str(self.abs(pid, sc["image_path"]) or "")) for sc in self.store.scenes(pid)}
+        only_missing = instruction == "missing"
+        targets = [sh for sh in shots if not (sh["image_source"] == "upload" and self.abs(pid, sh["image_path"]))]
+        if only_missing:
+            targets = [sh for sh in targets if sh["error"] or not self.abs(pid, sh["image_path"])]
         img_engine, vid_engine = s.get("image_engine", "placeholder"), s.get("video_engine", "camera")
         if img_engine == "fal" or vid_engine == "fal":
-            self._check_budget(s, shots, img_engine, vid_engine)
-        out = self.pdir(pid) / "shots"
-        out.mkdir(exist_ok=True)
-        style_en = STYLES.get(p["style"], STYLES["anime"])[2]
-        made = kept = 0
-        for i, sh in enumerate(shots):
-            self.progress[pid] = f"カット {i + 1}/{len(shots)} の絵"
-            if sh["image_source"] == "upload" and self.abs(pid, sh["image_path"]):
-                kept += 1
-            else:
-                rel = f"shots/{sh['id']}_{new_id()[:8]}.png"
-                if img_engine == "fal":
-                    prompt = f"{style_en}. {sh['image_prompt'] or sh['action']}"
-                    art.fal_image(s["fal_image_model"], prompt, size, self.pdir(pid) / rel)
-                    self.store.add_spend(float(s.get("fal_image_yen") or 0), f"画像 {pid[:6]} カット{i + 1}")
-                    source = "fal"
-                else:
-                    cs = [chars[n] for n in sh["characters"] if n in chars]
-                    art.compose_shot(size, scenes.get(sh["scene_id"]), cs, seed=i + 7).save(self.pdir(pid) / rel)
-                    source = "placeholder"
-                if sh["image_path"] != rel:
-                    self._remove_old(pid, sh["image_path"])
-                self.store.update_shot(sh["id"], image_path=rel, image_source=source)
-                made += 1
-            if vid_engine == "fal":
-                sh = self.store.get_shot(sh["id"])
-                still = self.abs(pid, sh["image_path"])
-                rel = f"shots/{sh['id']}_{new_id()[:8]}.mp4"
-                art.fal_video(s["fal_video_model"], sh["image_prompt"] or sh["action"], art.data_uri(still), sh["seconds"], self.pdir(pid) / rel)
-                self.store.add_spend(float(s.get("fal_video_yen_per_sec") or 0) * (10 if sh["seconds"] > 5 else 5), f"動画 {pid[:6]} カット{i + 1}")
-                self._remove_old(pid, sh["video_path"])
-                self.store.update_shot(sh["id"], video_path=rel)
-            elif sh.get("video_path"):
-                self.store.update_shot(sh["id"], video_path="")
-        how = {"placeholder": "仮の絵（キャラと場面の画像を合成）", "fal": "fal.ai の画像生成"}[img_engine if img_engine in ("fal",) else "placeholder"]
+            self._check_budget(s, targets, img_engine, vid_engine)
+        ok, failed = 0, []
+        for i, sh in enumerate(targets):
+            self.progress[pid] = f"カット {sh['sort'] + 1} の絵（{i + 1}/{len(targets)}）"
+            try:
+                self._make_shot(pid, p, s, sh)
+                ok += 1
+            except Exception as e:  # noqa: BLE001 — 1カットの失敗で全部を止めない
+                log.warning("shot failed: %s", e)
+                self.store.update_shot(sh["id"], error=str(e)[:500])
+                failed.append(sh["sort"] + 1)
+        kept = len(shots) - len([x for x in shots if x in targets]) if not only_missing else 0
+        how = "fal.ai の画像生成" if img_engine == "fal" else "仮の絵（キャラと場面の画像を合成）"
         motion = "AI動画（fal.ai）" if vid_engine == "fal" else "カメラの動き（寄り・引き・パン）"
-        self.store.log(pid, "animator", f"{made}カットの絵を{how}で作りました" + (f"（自分の画像 {kept}カットはそのまま）" if kept else "")
-                       + f"。動きは{motion}で付けます。")
+        msg = f"{ok}カットの絵を{how}で作りました" + (f"（自分の絵 {kept}カットはそのまま）" if kept else "") + f"。動きは{motion}です。"
+        if failed:
+            msg += f" ⚠️ カット{'・'.join(map(str, failed))}は失敗しました。「絵が無いカットだけ作る」で、そのカットだけやり直せます（できたカットの分はかかりません）。"
+        self.store.log(pid, "animator", msg)
+        if targets and not ok:
+            raise ValueError("全部のカットで失敗しました。理由はカットに表示しています。")
+
+    def _make_shot(self, pid: str, p: dict, s: dict, sh: dict, note: str = "") -> None:
+        """1カットの絵（と、設定によっては動画）を作る。fal.ai は通信の失敗なら1回だけやり直す。"""
+        size = self._size(p)
+        img_engine, vid_engine = s.get("image_engine", "placeholder"), s.get("video_engine", "camera")
+        (self.pdir(pid) / "shots").mkdir(exist_ok=True)
+        rel = f"shots/{sh['id']}_{new_id()[:8]}.png"
+        if img_engine == "fal":
+            prompt = self.image_prompt(pid, p, sh, note)
+            self._retry(lambda: art.fal_image(s["fal_image_model"], prompt, size, self.pdir(pid) / rel, seed=project_seed(pid)))
+            self.store.add_spend(float(s.get("fal_image_yen") or 0), f"画像 {pid[:6]} カット{sh['sort'] + 1}")
+            source = "fal"
+        else:
+            chars = {c["name"]: dict(c, image_abs=str(self.abs(pid, c["image_path"]) or "")) for c in self.store.characters(pid)}
+            scene = self.store.get_scene(sh["scene_id"]) if sh["scene_id"] else None
+            if scene:
+                scene["image_abs"] = str(self.abs(pid, scene["image_path"]) or "")
+            cs = [chars[n] for n in sh["characters"] if n in chars]
+            art.compose_shot(size, scene, cs, seed=sh["sort"] + 7, camera=sh["camera"]).save(self.pdir(pid) / rel)
+            source = "placeholder"
+        if sh["image_path"] != rel and sh["image_source"] != "upload":
+            self._remove_old(pid, sh["image_path"])
+        self.store.update_shot(sh["id"], image_path=rel, image_source=source, error="")
+        if vid_engine == "fal":
+            still = self.pdir(pid) / rel
+            vrel = f"shots/{sh['id']}_{new_id()[:8]}.mp4"
+            self._retry(lambda: art.fal_video(s["fal_video_model"], self.image_prompt(pid, p, sh, note), art.data_uri(still),
+                                              sh["seconds"], self.pdir(pid) / vrel))
+            self.store.add_spend(float(s.get("fal_video_yen_per_sec") or 0) * (10 if sh["seconds"] > 5 else 5), f"動画 {pid[:6]} カット{sh['sort'] + 1}")
+            self._remove_old(pid, sh["video_path"])
+            self.store.update_shot(sh["id"], video_path=vrel)
+        elif sh.get("video_path"):
+            self.store.update_shot(sh["id"], video_path="")
+
+    def image_prompt(self, pid: str, p: dict, sh: dict, note: str = "") -> str:
+        """AI画像のプロンプト。毎回、絵柄・キャラの見た目・場面の説明を同じ言葉で入れて、カットごとのばらつきを減らす。"""
+        style_en = STYLES.get(p["style"], STYLES["anime"])[2]
+        chars = {c["name"]: c for c in self.store.characters(pid)}
+        looks = [f"{n}: {chars[n]['look']}" for n in sh["characters"] if n in chars and chars[n]["look"].strip()]
+        scene = self.store.get_scene(sh["scene_id"]) if sh["scene_id"] else None
+        parts = [style_en + ".", sh["image_prompt"] or sh["action"]]
+        if looks:
+            parts.append("Characters (keep exactly the same design in every shot): " + " / ".join(looks))
+        if scene and scene["description"].strip():
+            parts.append("Background: " + scene["description"])
+        if note:
+            parts.append("Change: " + note)
+        return " ".join(parts)
+
+    def _retry(self, fn):
+        try:
+            return fn()
+        except art.ArtError as e:
+            if "つながりません" not in str(e) and "時間内" not in str(e):
+                raise
+            time.sleep(2)
+            return fn()
+
+    def do_art_shot(self, pid: str, instruction: str) -> None:
+        d = json.loads(instruction or "{}")
+        sh = self.store.get_shot(d.get("shot_id", ""))
+        if not sh or sh["project_id"] != pid:
+            raise ValueError("カットが見つかりません。")
+        p, s = self.store.get_project(pid), self.settings()
+        if s.get("image_engine") == "fal" or s.get("video_engine") == "fal":
+            self._check_budget(s, [sh], s.get("image_engine"), s.get("video_engine"))
+        if sh["image_source"] == "upload":
+            sh["image_source"] = ""  # 「この絵だけ作り直す」は自分の絵より優先する（押した人の意思）
+        try:
+            self._make_shot(pid, p, s, sh, note=str(d.get("note") or "")[:500])
+        except Exception as e:
+            self.store.update_shot(sh["id"], error=str(e)[:500])
+            raise
+        self.store.set_stage(pid, "art", "review" if p["stages"]["art"] != "approved" else "approved", invalidate_after=True)
+        self.store.log(pid, "animator", f"カット{sh['sort'] + 1}の絵だけ作り直しました（ほかのカットはそのまま）。")
+
+    def do_shot_rewrite(self, pid: str, instruction: str) -> None:
+        d = json.loads(instruction or "{}")
+        sh = self.store.get_shot(d.get("shot_id", ""))
+        if not sh or sh["project_id"] != pid:
+            raise ValueError("カットが見つかりません。")
+        s = self.settings()
+        p = self.for_ai(pid, s)
+        new = engine.rewrite_shot(p, s, sh, self.store.characters(pid), self.store.scenes(pid), str(d.get("note") or ""), client=self.ai_client)
+        self.store.update_shot(sh["id"], **{k: new[k] for k in ("seconds", "scene_id", "characters", "camera", "action", "speaker",
+                                                                 "dialogue", "caption", "image_prompt")})
+        st = p["stages"]["storyboard"]
+        self.store.set_stage(pid, "storyboard", st if st in ("review", "approved") else "review", invalidate_after=True)
+        self.store.log(pid, "storyboard", f"カット{sh['sort'] + 1}だけ直しました（ほかのカットはそのまま）。")
 
     def _check_budget(self, s: dict, shots: list[dict], img_engine: str, vid_engine: str) -> None:
         est = 0.0
-        n_img = sum(1 for x in shots if x["image_source"] != "upload")
+        n_img = len(shots)
         if img_engine == "fal":
             est += n_img * float(s.get("fal_image_yen") or 0)
         if vid_engine == "fal":
@@ -257,21 +358,33 @@ class Worker:
             for i, sh in enumerate(shots):
                 if not sh["dialogue"].strip():
                     continue
+                if self.abs(pid, sh["voice_path"]):
+                    continue  # 自分で録った声があるカットは読み上げない
                 self.progress[pid] = f"カット {i + 1}/{len(shots)} の声"
-                voice = (chars.get(sh["speaker"]) or {}).get("voice") or s.get("default_voice") or ""
-                if render.make_voice(sh["dialogue"], voice, vdir / f"{sh['id']}.wav"):
+                ch = chars.get(sh["speaker"]) or {}
+                voice = ch.get("voice") or s.get("default_voice") or ""
+                if render.make_voice(sh["dialogue"], voice, vdir / f"{sh['id']}.wav", rate=int(ch.get("voice_rate") or 0)):
                     n += 1
             msg = f"{n}カットのセリフを読み上げました（Mac の読み上げ）。"
         elif s.get("voice_engine") == "none":
             msg = "声は付けない設定です（字幕だけ）。"
         else:
             msg = "このPCには読み上げ（say）が無いので、声なし・字幕だけで書き出します。"
+        rec = sum(1 for sh in self.store.shots(pid) if self.abs(pid, sh["voice_path"]))
+        if rec:
+            msg += f" 自分で録った声 {rec}カットはそれを使います。"
         msg += " BGM: " + ("あり" if self.abs(pid, p["bgm_path"]) else "なし（入れるなら下からアップロード）")
         self.store.log(pid, "sound", msg)
 
     def voice_files(self, pid: str) -> dict:
+        """カットごとの声。自分で録った声 > 読み上げ。"""
         vdir = self.pdir(pid) / "voice"
-        return {f.stem: f for f in vdir.glob("*.wav")} if vdir.exists() else {}
+        out = {f.stem: f for f in vdir.glob("*.wav")} if vdir.exists() else {}
+        for sh in self.store.shots(pid):
+            rec = self.abs(pid, sh["voice_path"])
+            if rec:
+                out[sh["id"]] = rec
+        return out
 
     def do_render(self, pid: str, instruction: str) -> None:
         p, s = self.store.get_project(pid), self.settings()
