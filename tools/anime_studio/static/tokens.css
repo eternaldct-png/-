@@ -1,15 +1,17 @@
-/* コマドリのトークン（replica/anime/design/tokens.json）。部品の CSS は必ずこの変数を使う（生の色・px を書かない）。 */
+/* ツヅリのトークン（replica/anime/design/tokens.json・配色の理由は replica/anime/brand.md）。部品の CSS は必ずこの変数を使う（生の色・px を書かない）。 */
 :root {
-  --bg: #fbf8f3;
+  --bg: #faf8fb;
   --surface: #ffffff;
-  --surface-2: #f2ede4;
-  --border: #e3dccf;
-  --border-input: #857c6d;
+  --surface-2: #f1edf3;
+  --border: #e2dbe6;
+  --border-input: #7e7686;
   --text: #1e1b18;
-  --text-muted: #5f584e;
-  --accent: #b3471d;
-  --accent-soft: #fbe9df;
+  --text-muted: #5d5866;
+  --accent: #6b3a9e;
+  --accent-soft: #f1eaf8;
   --on-accent: #ffffff;
+  --thread: #b8661c;      /* 綴じ糸の金茶。ロゴだけに使う（文字には使わない） */
+  --thread-soft: #fbeedd;
   --ink: #2a2f45;
   --on-ink: #ffffff;
   --danger: #b0262b;

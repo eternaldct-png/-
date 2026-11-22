@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}キャラ帳 — コマドリ{% endblock %}
+{% block title %}キャラ帳 — ツヅリ{% endblock %}
 {% block main %}
 <div class="between"><h1>キャラ帳</h1></div>
 <p class="muted small">よく出すキャラ（所属ライバーのキャラなど）を保存しておくと、新しい作品にそのまま出演させられます。作品の「キャラ」の段階から「キャラ帳に保存」でも増やせます。</p>
@@ -9,7 +9,7 @@
   <button class="btn primary" type="submit">＋ 追加</button>
 </form>
 {% if not chars %}
-<div class="card empty"><p>まだキャラがいません。</p></div>
+<div class="card empty"><p>まだキャラがいません。よく出すキャラを入れておくと、次の作品にすぐ呼べます。</p></div>
 {% else %}
 <div class="items">
   {% for c in chars %}

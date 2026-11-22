@@ -1,6 +1,6 @@
-// コマドリ共通: API 呼び出し・トースト・確認ダイアログ
+// ツヅリ共通: API 呼び出し・トースト・確認ダイアログ
 window.K = (() => {
-  const HEADER = { 'X-Komadori': '1' };
+  const HEADER = { 'X-Tsuzuri': '1' };
   async function api(method, url, body, isForm) {
     const opt = { method, headers: { ...HEADER } };
     if (body !== undefined) {
@@ -9,7 +9,7 @@ window.K = (() => {
     }
     let r;
     try { r = await fetch(url, opt); }
-    catch (e) { throw new Error('アプリにつながりません。コマドリが起動しているか確認してください。'); }
+    catch (e) { throw new Error('ツヅリにつながりません。起動しているか（ターミナルの画面が開いているか）見てください。'); }
     let data = null;
     try { data = await r.json(); } catch (e) { /* 空 */ }
     if (!r.ok) throw new Error((data && data.error) || `エラーが起きました（${r.status}）`);

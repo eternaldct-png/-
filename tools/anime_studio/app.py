@@ -1,4 +1,4 @@
-"""コマドリ — アイデアからショートアニメを作る自分用の制作ツール。設計の記録は replica/anime/。
+"""ツヅリ — アイデアからショートアニメを作る自分用の制作ツール。設計の記録は replica/anime/。
 
 起動: python3 tools/anime_studio/run.py  →  http://127.0.0.1:5056
 """
@@ -17,11 +17,11 @@ from .store import ASPECTS, CAMERAS, DEFAULT_SETTINGS, KINDS, MAX_DURATION, STAG
 from .worker import Worker, month_start_iso
 
 HERE = Path(__file__).resolve().parent
-HEADER = "X-Komadori"
+HEADER = "X-Tsuzuri"
 
 
 def default_data_dir() -> Path:
-    return Path(os.environ.get("KOMADORI_DIR") or Path.home() / "Komadori")
+    return Path(os.environ.get("TSUZURI_DIR") or Path.home() / "Tsuzuri")
 
 
 def create_app(data_dir: str | Path | None = None, *, ai_client=None, start_worker: bool = True, short_side: int | None = None) -> Flask:
@@ -29,7 +29,7 @@ def create_app(data_dir: str | Path | None = None, *, ai_client=None, start_work
     data_dir.mkdir(parents=True, exist_ok=True)
     app = Flask(__name__, template_folder=str(HERE / "templates"), static_folder=str(HERE / "static"))
     app.config["MAX_CONTENT_LENGTH"] = 110 * 1024 * 1024
-    store = Store(data_dir / "komadori.db")
+    store = Store(data_dir / "tsuzuri.db")
     worker = Worker(store, data_dir, ai_client=ai_client, short_side=short_side)
     app.extensions["k_store"] = store
     app.extensions["k_worker"] = worker
@@ -243,8 +243,9 @@ def create_app(data_dir: str | Path | None = None, *, ai_client=None, start_work
             store.log(p["id"], "director", f"「{prev['title'] or '前の作品'}」の続きです。キャラ・決まりごと・前の回のあらすじを引きつぎます。")
         if similar:
             store.log(p["id"], "system", f"「{similar['title'] or '前の作品'}」とアイデアがよく似ています。似た動画が続くと見る人が飽きるので、切り口を変えるのもおすすめです。")
-        store.log(p["id"], "director", "はじめまして。脚本 → キャラ → 場面 → 絵コンテ → 絵と動き → 音 → 書き出し の順に進めます。"
-                  + ("おまかせなので、最後まで自動で進めます。" if p["auto"] else "各段階で確認してから次へ進みます。"))
+        store.log(p["id"], "director", "よろしくお願いします。脚本 → キャラ → 場面 → 絵コンテ → 絵と動き → 音 → 書き出し の順に、一緒に進めます。"
+                  + ("おまかせなので、書き出しまで通しで進めます。途中で止めて直すこともできます。" if p["auto"]
+                     else "1段ずつ見せるので、気になるところはそのつど直してください。"))
         for cid in d.get("library_ids") or []:
             src = store.get_character(str(cid))
             if src and src["project_id"] is None:
@@ -635,7 +636,7 @@ def create_app(data_dir: str | Path | None = None, *, ai_client=None, start_work
         name = None
         if dl:
             proj = store.get_project(pid)
-            name = f"{(proj or {}).get('title') or 'komadori'}.mp4"
+            name = f"{(proj or {}).get('title') or 'tsuzuri'}.mp4"
         resp = send_file(p, as_attachment=dl, download_name=name, conditional=True)
         resp.headers["Cache-Control"] = "no-cache"
         return resp

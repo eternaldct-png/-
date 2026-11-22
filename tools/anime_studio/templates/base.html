@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block title %}コマドリ{% endblock %}</title>
+<title>{% block title %}ツヅリ{% endblock %}</title>
 <link rel="icon" href="{{ url_for('static', filename='mark.svg') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='tokens.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
 </head>
 <body>
 <nav class="nav" aria-label="メニュー">
-  <a class="brand" href="/" aria-label="コマドリ（作品一覧）"><img src="{{ url_for('static', filename='mark.svg') }}" alt="" width="24" height="24"><span class="brand-text">コマドリ</span></a>
+  <a class="brand" href="/" aria-label="ツヅリ（作品一覧）"><img src="{{ url_for('static', filename='mark.svg') }}" alt="" width="24" height="24"><span class="brand-text">ツヅリ</span></a>
   <a href="/" {% if nav == 'index' %}aria-current="page"{% endif %}>作品</a>
   <a href="/library" {% if nav == 'library' %}aria-current="page"{% endif %}>キャラ帳</a>
   <a href="/settings" {% if nav == 'settings_page' %}aria-current="page"{% endif %}>設定</a>

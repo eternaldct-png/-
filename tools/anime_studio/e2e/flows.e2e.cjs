@@ -1,4 +1,4 @@
-// コマドリの E2E。テスト計画: replica/anime/test-plan.md
+// ツヅリの E2E。テスト計画: replica/anime/test-plan.md
 // 失敗の条件: コンソールのエラー、5xx の応答、期待した表示が出ない
 const { chromium } = require('playwright');
 const path = require('path');

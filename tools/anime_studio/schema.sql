@@ -1,4 +1,4 @@
--- コマドリ（自分用のアニメ制作ツール）のデータベース。設計の記録は replica/anime/architecture.md
+-- ツヅリ（自分用のアニメ制作ツール）のデータベース。設計の記録は replica/anime/architecture.md
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL DEFAULT '',

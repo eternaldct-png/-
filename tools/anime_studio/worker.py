@@ -13,7 +13,7 @@ from pathlib import Path
 from . import art, engine, render
 from .store import STAGE_KEYS, STAGE_LABELS, STYLES, Store, new_id
 
-log = logging.getLogger("komadori.worker")
+log = logging.getLogger("tsuzuri.worker")
 
 JOB_LABELS = {**STAGE_LABELS, "art_shot": "1カットの絵", "shot_rewrite": "1カットの直し"}
 
@@ -61,7 +61,7 @@ class Worker:
         if self._thread and self._thread.is_alive():
             return
         self.store.recover_interrupted()
-        self._thread = threading.Thread(target=self._loop, name="komadori-worker", daemon=True)
+        self._thread = threading.Thread(target=self._loop, name="tsuzuri-worker", daemon=True)
         self._thread.start()
 
     def stop(self) -> None:
@@ -421,5 +421,5 @@ class Worker:
         if old and old.name != Path(name).name:
             old.unlink(missing_ok=True)  # 前の書き出しは消す（ディスクを食わないように）
         total = sum(x["seconds"] for x in shots)
-        self.store.log(pid, "editor", f"できました（{total:.1f}秒）。下のプレーヤーで確認して、ダウンロードしてください。"
+        self.store.log(pid, "editor", f"1本に綴じました（{total:.1f}秒）。プレーヤーで見て、よければダウンロードしてください。"
                        + (" 注意: " + " / ".join(warns) if warns else ""))

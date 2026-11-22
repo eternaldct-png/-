@@ -1,4 +1,4 @@
-"""コマドリ（tools/anime_studio）のテスト。テスト計画は replica/anime/test-plan.md。
+"""ツヅリ（tools/anime_studio）のテスト。テスト計画は replica/anime/test-plan.md。
 
     python3 -m pytest tests/test_anime_studio.py
 """
@@ -20,7 +20,7 @@ from tools.anime_studio.app import create_app  # noqa: E402
 from tools.anime_studio.store import Store  # noqa: E402
 
 BASE = "http://127.0.0.1:5056"
-H = {"X-Komadori": "1"}
+H = {"X-Tsuzuri": "1"}
 IDEA = ("あまりんは歌うのが大好き。でも人前だと緊張してしまう。あまりん「今日こそ、最後まで歌う！」"
         "配信を始めると、みんなのコメントが背中を押してくれた。さな：がんばれ！最後は笑顔で歌いきった。")
 
@@ -185,7 +185,7 @@ def test_files_route_blocks_traversal(client, app, tmp_path):
     pid = make_project(client)
     (tmp_path / "secret.txt").write_text("x")
     assert call(client, "GET", f"/files/{pid}/../../secret.txt").status_code == 404
-    assert call(client, "GET", "/files/library/../komadori.db").status_code == 404
+    assert call(client, "GET", "/files/library/../tsuzuri.db").status_code == 404
 
 
 # ── コアループ（F01） ───────────────────────────────────────

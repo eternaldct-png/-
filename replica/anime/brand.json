@@ -1,0 +1,10 @@
+{
+  "name": "ツヅリ",
+  "name_latin": "Tsuzuri",
+  "avoid": ["OiiOii", "Oii Oii", "オイオイ"],
+  "domains": ["oiioii.ai"],
+  "colors": [],
+  "_colors_note": "元のアプリのブランド色は、この環境から公式サイトを開けず確認できていない。分かったらここに足して sweep をやり直す",
+  "_placeholder_names": ["コマドリ", "Komadori"],
+  "_placeholder_note": "仮の名前。同じ分野（コマ撮りアニメ）に同名のアプリがあったので捨てた。sweep は --avoid で別に確かめる"
+}

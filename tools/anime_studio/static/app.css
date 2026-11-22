@@ -1,4 +1,4 @@
-/* コマドリの部品。値は tokens.css の変数だけを使う。 */
+/* ツヅリの部品。値は tokens.css の変数だけを使う。 */
 *, *::before, *::after { box-sizing: border-box; }
 html, body { margin: 0; }
 body { background: var(--bg); color: var(--text); font: var(--fs-base)/var(--lh-base) var(--font-sans); }

@@ -1,4 +1,4 @@
-// コマドリ: 制作ワークスペース（S03〜S10）。サーバーの状態（/api/projects/<id>）をそのまま描く。
+// ツヅリ: 制作ワークスペース（S03〜S10）。サーバーの状態（/api/projects/<id>）をそのまま描く。
 (() => {
   const PID = window.PID;
   const STAGES = window.STAGE_LIST; // [[key, label], ...]
@@ -51,7 +51,7 @@
   // ── 全体 ──────────────────────────────────────────
   function render() {
     document.getElementById('ptitle').textContent = P.title || '（題名なし）';
-    document.title = `${P.title || '作品'} — コマドリ`;
+    document.title = `${P.title || '作品'} — ツヅリ`;
     document.getElementById('pmeta').textContent = `${P.aspect}・目標${P.duration_sec}秒・${P.auto ? 'おまかせ' : '1段ずつ確認'}`;
     document.getElementById('engine-label').textContent = `文章AI: ${P.engine}`;
     renderStepper();
@@ -101,7 +101,7 @@
     if (generating) banner = `<div class="banner info" role="status">${JOB[P.active_job.kind]}を作っています…${P.progress ? '（' + esc(P.progress) + '）' : ''} 終わるまで編集はお待ちください。</div>`;
     else if (st === 'failed') {
       const job = P.jobs.find(j => j.kind === stage && j.status === 'failed');
-      banner = `<div class="banner danger" role="alert">失敗しました: ${esc(job ? job.error : '')}<br>直してから「やり直す」を押してください。</div>`;
+      banner = `<div class="banner danger" role="alert">うまくいきませんでした: ${esc(job ? job.error : '')}<br>原因を直して「やり直す」を押してください。</div>`;
     } else if (st === 'stale' && stage === 'render') banner = `<div class="banner warning">前の段階が変わりました。「もう一度書き出す」で今の内容にそろえられます。</div>`;
     else if (st === 'stale') banner = `<div class="banner warning">前の段階が変わりました。「作り直す」で合わせるか、このままでよければ「OK・次へ」を押してください。</div>`;
     else if (st === 'todo' && idx > 0 && P.stages[KEYS[idx - 1]] !== 'approved' && !anyBusy) {
@@ -290,7 +290,7 @@
       : `<li><label class="row small"><input type="checkbox" data-check="${it.key}" ${it.ok ? 'checked' : ''}> ${esc(it.label)}</label></li>`).join('')}</ul>
       <p class="xs muted">作った動画は自分のものです（透かしなし）。ただし、BGM・キャラ・声の権利は自分で確かめてください。</p></div>`;
     const next = `<div class="row end" style="margin-top: var(--sp-3)"><a class="btn" href="/new?from=${PID}">＋ 同じキャラで続きを作る</a></div>`;
-    if (!P.render_url) return pre + check + `<div class="card empty"><p>まだ書き出していません。「書き出す」を押すと、全部のカットを1本の動画にします。</p></div>`;
+    if (!P.render_url) return pre + check + `<div class="card empty"><p>まだ書き出していません。「書き出す」で、全部のコマを1本に綴じます。</p></div>`;
     const notReady = P.preflight.some(it => !it.ok);
     return pre + w + check + `<div class="player"><video controls playsinline src="${P.render_url}"></video></div>
       <div class="row end" style="margin-top: var(--sp-3)">${notReady ? '<span class="small muted">確認が残っています（ダウンロードはできます）</span>' : ''}

@@ -47,7 +47,7 @@ def frame_size(aspect: str, short_side: int = 1080) -> tuple[int, int]:
 
 
 def font_path() -> str | None:
-    env = os.environ.get("KOMADORI_FONT")
+    env = os.environ.get("TSUZURI_FONT")
     for p in ([env] if env else []) + FONT_CANDIDATES:
         if p and Path(p).exists():
             return p
@@ -281,7 +281,7 @@ def _fal_request(url: str, payload: dict | None, timeout: float = 60) -> dict:
 
 def fal_run(model: str, payload: dict, timeout: float = 600, poll: float = 3.0) -> dict:
     if not fal_key():
-        raise ArtError("FAL_KEY が設定されていません（~/Komadori/.env に書いて起動し直してください）。")
+        raise ArtError("FAL_KEY が設定されていません（~/Tsuzuri/.env に書いて起動し直してください）。")
     sub = _fal_request(f"{FAL_QUEUE}/{model}", payload)
     status_url, response_url = sub.get("status_url"), sub.get("response_url")
     if not status_url or not response_url:

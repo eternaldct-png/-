@@ -1,10 +1,10 @@
 #!/bin/bash
-# コマドリを起動する（Mac ではこのファイルをダブルクリック）
+# ツヅリを起動する（Mac ではこのファイルをダブルクリック）
 # 初回だけ、必要なものを .venv にインストールする（1〜2分）
 cd "$(dirname "$0")" || exit 1
-DATA="${KOMADORI_DIR:-$HOME/Komadori}"
+DATA="${TSUZURI_DIR:-$HOME/Tsuzuri}"
 mkdir -p "$DATA"
-# APIキー（使うときだけ）は ~/Komadori/.env に置く（リポジトリには入れない）
+# APIキー（使うときだけ）は ~/Tsuzuri/.env に置く（リポジトリには入れない）
 if [ -f "$DATA/.env" ]; then set -a; . "$DATA/.env"; set +a; fi
 if [ ! -x .venv/bin/python ]; then
   echo "初回の準備をしています（1〜2分）…"

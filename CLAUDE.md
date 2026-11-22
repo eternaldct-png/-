@@ -422,10 +422,11 @@ Claude Code のサブエージェント20人（5部署×4人）。共通の前�
 
 ---
 
-## コマドリ — ショートアニメ制作（tools/anime_studio、自分のPCで動かす）
+## ツヅリ — ショートアニメ制作（tools/anime_studio、自分のPCで動かす）
 
 AIアニメ制作サービスのコアループ（アイデア → 脚本 → キャラ → 場面 → 絵コンテ → 絵と動き → 音 → 書き出し）を
-Replica スキル（recon → architect → design → build → test）で自分用に作り直したもの（元のサービス名・調査は `replica/anime/` にだけ書く。アプリ本体・README には出さない）。
+Replica スキル（recon → architect → design → build → test → entrepreneur → brand）で自分用に作り直したもの（元のサービス名・調査は `replica/anime/` にだけ書く。アプリ本体・README には出さない。`replica/anime/brand.json` の sweep で確認）。
+名前は「ツヅリ」（コマを綴って、続きまで）。仮の名前「コマドリ」は同じ分野に同名アプリがあったので捨てた。配色（江戸紫＋ロゴの綴じ糸の金茶）・ロゴの依頼文・言葉づかいは `replica/anime/brand.md`。
 **Render にはデプロイしない**。代表の Mac で `tools/anime_studio/start.command` をダブルクリックして使う（`http://127.0.0.1:5056`）。
 使い方は `tools/anime_studio/README.md`、設計の記録は `replica/anime/`（recon.md / architecture.md / features.csv / design/ / test-plan.md / bugs.md / build-log.md / clone-screens/）。
 
@@ -434,8 +435,8 @@ Replica スキル（recon → architect → design → build → test）で自�
 - **お金がかかるのは明示して選んだときだけ**: Claude API（`ANTHROPIC_API_KEY`）、fal.ai の画像・動画（`FAL_KEY`、月の上限で止める。モデル名・単価は仮なので fal.ai で確かめる）
 - 文章AIの選び方は `engine.resolve_engine`（キキトメと同じ方針で `tools.meeting_notes.local_ai` を共有）。`auto` は Claude を選ばない
 - 段階の状態（todo / generating / review / approved / stale / failed）は `projects.stages`。前の段階を直すと後ろが `stale`
-- 字幕は Pillow で描いた透過PNGを ffmpeg で重ねる（フォント: Mac はヒラギノ、`KOMADORI_FONT` で指定可）
-- データは `~/Komadori/`（SQLite・画像・音・書き出し）。リポジトリには入れない。キーは `~/Komadori/.env`
+- 字幕は Pillow で描いた透過PNGを ffmpeg で重ねる（フォント: Mac はヒラギノ、`TSUZURI_FONT` で指定可）
+- データは `~/Tsuzuri/`（SQLite・画像・音・書き出し）。リポジトリには入れない。キーは `~/Tsuzuri/.env`
 - 元のアプリの口コミ（14件・7出典・星つき0件。利用者の口コミがほぼ無く、記事の短所欄中心・うち6件は競合の記事。検索経由で原文未確認）から
   不満を順位付けし、10項目を直した（`replica/anime/fixes.md`）: 決まりごとを毎回AIに最優先で渡す / 1カットだけ作り直す・AIで直す /
   1カットの失敗で止めない・失敗したカットだけやり直す / AI画像の見た目と種をそろえる・警告 / 有料の生成の前に見積もり /

@@ -64,7 +64,7 @@ STORYBOARD_SCHEMA = _obj({"shots": {"type": "array", "items": _obj({
 def _claude_client():
     import anthropic
     if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")):
-        raise EngineError("ANTHROPIC_API_KEY が設定されていません（~/Komadori/.env に書いて起動し直してください）。")
+        raise EngineError("ANTHROPIC_API_KEY が設定されていません（~/Tsuzuri/.env に書いて起動し直してください）。")
     return anthropic.Anthropic()
 
 
